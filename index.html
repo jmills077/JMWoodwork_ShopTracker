@@ -115,6 +115,13 @@
   input, select, textarea { font: inherit; color: inherit; width: 100%; padding: 7px 9px; border: 1px solid #d8cbb6; border-radius: 7px; background: #fff; }
   input:focus, select:focus, textarea:focus { outline: 2px solid #e3aa9d; outline-offset: 0; border-color: var(--accent); }
   textarea { min-height: 70px; resize: vertical; }
+  .combo { position: relative; }
+  .combo input { padding-right: 28px; text-overflow: ellipsis; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237a6a62' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right 9px center; }
+  .combo ul { position: fixed; z-index: 20; margin: 0; padding: 4px; list-style: none; background: #fff; border: 1px solid #d8cbb6; border-radius: 7px; box-shadow: 0 8px 24px rgba(46, 35, 32, .16); max-height: 264px; overflow-y: auto; }
+  .combo li { padding: 6px 8px; border-radius: 5px; cursor: pointer; }
+  .combo li[aria-selected="true"] { font-weight: 600; }
+  .combo li.active { background: var(--accent); color: var(--accent-ink); }
+  .combo li.none { color: var(--muted); cursor: default; }
   .ph { display: grid; grid-template-columns: 1fr 78px 92px; gap: 8px; align-items: center; padding: 5px 0; }
   .ph input[type=number] { text-align: right; }
   .ph .hint { font-size: 12px; color: var(--muted); }
@@ -829,6 +836,102 @@ function showCalendar(month) {
     </div>`;
 }
 
+// ---------- type-ahead dropdowns ----------
+// Replaces a <select> with a box you can type in to narrow the choices. The select stays in the
+// page, hidden, as the value the form reads, and gets an "input" event when the choice changes.
+// The list floats over the page (so a scrolling table can't clip it) and closes if the page scrolls.
+let comboCount = 0, closeOpenCombo = null;
+window.addEventListener('scroll', e => {
+  if (closeOpenCombo && !(e.target instanceof Element && e.target.closest('.combo ul'))) closeOpenCombo();
+}, true);
+
+function typeAhead(select, minWidth = 0) {
+  const id = `combo${++comboCount}`;
+  const wrap = document.createElement('div');
+  wrap.className = 'combo';
+  wrap.innerHTML = `<input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"><ul id="${id}" role="listbox" hidden></ul>`;
+  wrap.style.minWidth = select.style.minWidth;
+  select.hidden = true;
+  select.before(wrap);
+  const input = wrap.firstChild, list = wrap.lastChild;
+  const options = [...select.options].map(o => ({ value: o.value, label: o.textContent }));
+  const current = () => options.find(o => o.value === select.value) || options[0];
+  let shown = [], active = -1;
+
+  const setActive = i => {
+    active = i;
+    list.querySelectorAll('li[data-i]').forEach((li, n) => li.classList.toggle('active', n === i));
+    const li = list.querySelector(`li[data-i="${i}"]`);
+    if (li) { input.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({ block: 'nearest' }); }
+    else input.removeAttribute('aria-activedescendant');
+  };
+  const open = query => {
+    const q = query.trim().toLowerCase(), words = q.split(/\s+/);
+    // A choice matches if it contains every word typed, in any order ("walnut 8/4").
+    // Choices that start with what was typed come first.
+    const matches = options.filter(o => words.every(word => o.label.toLowerCase().includes(word)));
+    const starts = o => o.label.toLowerCase().startsWith(words[0]);
+    shown = q ? [...matches.filter(starts), ...matches.filter(o => !starts(o))] : options;
+    list.innerHTML = shown.length
+      ? shown.map((o, i) => `<li role="option" id="${id}-${i}" data-i="${i}" aria-selected="${o.value === select.value}">${esc(o.label)}</li>`).join('')
+      : '<li class="none">No matches</li>';
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    // Line the list up under the box, or above it when there's no room below.
+    const box = input.getBoundingClientRect(), width = Math.min(Math.max(box.width, minWidth), window.innerWidth - 16);
+    const below = window.innerHeight - box.bottom, above = box.top;
+    const flip = below < Math.min(list.scrollHeight, 264) + 8 && above > below;
+    Object.assign(list.style, {
+      width: `${width}px`,
+      left: `${Math.max(8, Math.min(box.left, window.innerWidth - width - 8))}px`,
+      top: flip ? '' : `${box.bottom + 3}px`,
+      bottom: flip ? `${window.innerHeight - box.top + 3}px` : '',
+    });
+    closeOpenCombo = close;
+    setActive(q ? (shown.length ? 0 : -1) : shown.indexOf(current()));
+  };
+  const close = () => {
+    if (closeOpenCombo === close) closeOpenCombo = null;
+    list.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  };
+  const pick = option => {
+    input.value = option.label;
+    close();
+    if (option.value === select.value) return;
+    select.value = option.value;
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  input.value = current().label;
+  input.addEventListener('focus', () => { input.select(); open(''); });
+  input.addEventListener('click', () => { if (list.hidden) open(''); });
+  input.addEventListener('input', () => open(input.value));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) open('');
+      else if (shown.length) setActive((active + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!list.hidden && shown[active]) pick(shown[active]);
+    } else if (e.key === 'Tab') {
+      // Tabbing away after typing takes the highlighted match.
+      if (!list.hidden && shown[active] && input.value !== current().label) pick(shown[active]);
+    } else if (e.key === 'Escape') {
+      input.value = current().label;
+      close();
+    }
+  });
+  input.addEventListener('blur', () => { input.value = current().label; close(); });
+  list.addEventListener('mousedown', e => {
+    e.preventDefault();   // keep focus in the box
+    const li = e.target.closest('li[data-i]');
+    if (li) pick(shown[li.dataset.i]);
+  });
+}
+
 // ---------- quote editor / project page ----------
 function blankData() {
   const s = store.settings, [length, width, height] = TYPES.dining_table.ref;
@@ -911,6 +1014,7 @@ function showEditor(project) {
     </div>`;
 
   const form = $('#form');
+  form.querySelectorAll('select').forEach(typeAhead);
   form.addEventListener('submit', e => e.preventDefault());
   form.addEventListener('input', e => {
     const el = e.target;
@@ -1310,7 +1414,7 @@ function showSettings() {
       const linked = feed && sp.source && feed.items.some(item => item.id === sp.source);
       return `<tr>
       <td><input data-i="${i}" data-k="name" value="${esc(sp.name)}" aria-label="Species name" style="min-width:110px"></td>
-      <td><select data-i="${i}" data-k="source" aria-label="Parkerville price list item" style="max-width:340px" ${feed ? '' : 'disabled'}>
+      <td><select data-i="${i}" data-k="source" aria-label="Parkerville price list item" style="min-width:300px" ${feed ? '' : 'disabled'}>
         <option value="">Not linked: I set the price</option>
         ${sp.source && !linked ? `<option value="${esc(sp.source)}" selected>${feed ? 'Linked item is no longer listed' : 'Linked'}</option>` : ''}
         ${feed ? `<optgroup label="Domestic">${itemOptions('domestic', sp.source)}</optgroup><optgroup label="Exotic">${itemOptions('exotic', sp.source)}</optgroup>` : ''}
@@ -1319,6 +1423,7 @@ function showSettings() {
       <td><input data-i="${i}" data-k="labor" type="number" min="0.1" step="0.05" value="${esc(sp.labor)}" aria-label="Labor factor"></td>
       <td><button class="link" data-remove="${i}">remove</button></td></tr>`;
     }).join('');
+    speciesTable.querySelectorAll('select:not(:disabled)').forEach(select => typeAhead(select, 440));
   };
   renderSpecies();
   $('#stateTax').addEventListener('input', e => {
