@@ -1,0 +1,2481 @@
+{
+ "source": "Parkerville Wood Products",
+ "checked": "2026-10-10T04:14:01+00:00",
+ "items": [
+  {
+   "id": "d561",
+   "list": "domestic",
+   "species": "Alder, Red",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.64
+  },
+  {
+   "id": "d562",
+   "list": "domestic",
+   "species": "Alder, Red",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.74
+  },
+  {
+   "id": "d563",
+   "list": "domestic",
+   "species": "Alder, Red",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.94
+  },
+  {
+   "id": "d564",
+   "list": "domestic",
+   "species": "Alder, Red",
+   "size": "8/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.2
+  },
+  {
+   "id": "d1197",
+   "list": "domestic",
+   "species": "Ash, Swamp",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 18.25
+  },
+  {
+   "id": "d565",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.85
+  },
+  {
+   "id": "d566",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.95
+  },
+  {
+   "id": "d567",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.99
+  },
+  {
+   "id": "d568",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "5/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.49
+  },
+  {
+   "id": "d569",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.15
+  },
+  {
+   "id": "d570",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.85
+  },
+  {
+   "id": "d571",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.84
+  },
+  {
+   "id": "d572",
+   "list": "domestic",
+   "species": "Ash",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.39
+  },
+  {
+   "id": "d573",
+   "list": "domestic",
+   "species": "Basswood",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.19
+  },
+  {
+   "id": "d574",
+   "list": "domestic",
+   "species": "Basswood",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.25
+  },
+  {
+   "id": "d575",
+   "list": "domestic",
+   "species": "Basswood",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.89
+  },
+  {
+   "id": "d576",
+   "list": "domestic",
+   "species": "Basswood",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.6
+  },
+  {
+   "id": "d577",
+   "list": "domestic",
+   "species": "Basswood",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.34
+  },
+  {
+   "id": "d578",
+   "list": "domestic",
+   "species": "Birch",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.59
+  },
+  {
+   "id": "d579",
+   "list": "domestic",
+   "species": "Birch",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.93
+  },
+  {
+   "id": "d1198",
+   "list": "domestic",
+   "species": "Birch",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, SAP, R1E, S2S",
+   "price": 7.14
+  },
+  {
+   "id": "d581",
+   "list": "domestic",
+   "species": "Birch",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.45
+  },
+  {
+   "id": "d582",
+   "list": "domestic",
+   "species": "Birch, Red",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.85
+  },
+  {
+   "id": "d583",
+   "list": "domestic",
+   "species": "Cedar, Aromatic",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.9
+  },
+  {
+   "id": "d584",
+   "list": "domestic",
+   "species": "Cedar, Inland Red (Clear)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, E4E, S4S",
+   "price": 7.99
+  },
+  {
+   "id": "d585",
+   "list": "domestic",
+   "species": "Cedar, Inland Red (Knotty)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, E4E, S4S",
+   "price": 3.99
+  },
+  {
+   "id": "d586",
+   "list": "domestic",
+   "species": "Cedar, Western Red (VG)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 21.49
+  },
+  {
+   "id": "d587",
+   "list": "domestic",
+   "species": "Cedar, Western Red (VG)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 20.89
+  },
+  {
+   "id": "d588",
+   "list": "domestic",
+   "species": "Cedar, Western Red (VG)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 20.99
+  },
+  {
+   "id": "d589",
+   "list": "domestic",
+   "species": "Cedar, Western Red (VG)",
+   "size": "8/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD",
+   "price": 21.17
+  },
+  {
+   "id": "d590",
+   "list": "domestic",
+   "species": "Cedar, Western Red (VG)",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 21.89
+  },
+  {
+   "id": "d591",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, R1E, S2S",
+   "price": 6.49
+  },
+  {
+   "id": "d592",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.49
+  },
+  {
+   "id": "d593",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.99
+  },
+  {
+   "id": "d594",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.99
+  },
+  {
+   "id": "d595",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "8/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.99
+  },
+  {
+   "id": "d596",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.99
+  },
+  {
+   "id": "d597",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.99
+  },
+  {
+   "id": "d598",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.85
+  },
+  {
+   "id": "d599",
+   "list": "domestic",
+   "species": "Cherry",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 5.99
+  },
+  {
+   "id": "d600",
+   "list": "domestic",
+   "species": "Cherry (QS)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.99
+  },
+  {
+   "id": "d601",
+   "list": "domestic",
+   "species": "Cherry (QS)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.49
+  },
+  {
+   "id": "d602",
+   "list": "domestic",
+   "species": "Cherry (QS)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.69
+  },
+  {
+   "id": "d603",
+   "list": "domestic",
+   "species": "Cherry (QS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.99
+  },
+  {
+   "id": "d604",
+   "list": "domestic",
+   "species": "Cherry, Curly",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.5
+  },
+  {
+   "id": "d605",
+   "list": "domestic",
+   "species": "Cherry, Curly",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.7
+  },
+  {
+   "id": "d606",
+   "list": "domestic",
+   "species": "Chestnut (Reclaimed)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "",
+   "price": 14.9
+  },
+  {
+   "id": "d607",
+   "list": "domestic",
+   "species": "Chestnut (Reclaimed)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "",
+   "price": 15.6
+  },
+  {
+   "id": "d608",
+   "list": "domestic",
+   "species": "Chestnut (Reclaimed)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "",
+   "price": 15.7
+  },
+  {
+   "id": "d609",
+   "list": "domestic",
+   "species": "Chestnut (Reclaimed)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "",
+   "price": 15.9
+  },
+  {
+   "id": "d610",
+   "list": "domestic",
+   "species": "Chestnut (Reclaimed)",
+   "size": "16/4",
+   "wide": "",
+   "spec": "",
+   "price": 17.9
+  },
+  {
+   "id": "d611",
+   "list": "domestic",
+   "species": "Cypress, Bald",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.19
+  },
+  {
+   "id": "d612",
+   "list": "domestic",
+   "species": "Cypress, Bald",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.49
+  },
+  {
+   "id": "d613",
+   "list": "domestic",
+   "species": "Cypress, Bald (S&B)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 8.98
+  },
+  {
+   "id": "d614",
+   "list": "domestic",
+   "species": "Elm (Carbon-Smart)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 13.41
+  },
+  {
+   "id": "d615",
+   "list": "domestic",
+   "species": "Elm (Carbon-Smart)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 14.9
+  },
+  {
+   "id": "d616",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, S2S",
+   "price": 14.03
+  },
+  {
+   "id": "d617",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG)",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, S2S",
+   "price": 15.25
+  },
+  {
+   "id": "d618",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, S2S",
+   "price": 14.55
+  },
+  {
+   "id": "d619",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG)",
+   "size": "5/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, S2S",
+   "price": 16.5
+  },
+  {
+   "id": "d620",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG, H/M)",
+   "size": "5/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, R1E",
+   "price": 16.0
+  },
+  {
+   "id": "d621",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG, Rough)",
+   "size": "8/4",
+   "wide": "7\"+ Wide",
+   "spec": "KD",
+   "price": 14.99
+  },
+  {
+   "id": "d622",
+   "list": "domestic",
+   "species": "Fir, Douglas (VG, Rough)",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 15.75
+  },
+  {
+   "id": "d623",
+   "list": "domestic",
+   "species": "Hickory",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.54
+  },
+  {
+   "id": "d624",
+   "list": "domestic",
+   "species": "Hickory",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.9
+  },
+  {
+   "id": "d625",
+   "list": "domestic",
+   "species": "Hickory",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.51
+  },
+  {
+   "id": "d626",
+   "list": "domestic",
+   "species": "Hickory",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.26
+  },
+  {
+   "id": "d627",
+   "list": "domestic",
+   "species": "Holly",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 39.78
+  },
+  {
+   "id": "d628",
+   "list": "domestic",
+   "species": "Madrone",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 14.99
+  },
+  {
+   "id": "d629",
+   "list": "domestic",
+   "species": "Maple, Ambrosia",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S,",
+   "price": 7.15
+  },
+  {
+   "id": "d630",
+   "list": "domestic",
+   "species": "Maple, Birdseye",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 13.99
+  },
+  {
+   "id": "d631",
+   "list": "domestic",
+   "species": "Maple, Birdseye",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 17.2
+  },
+  {
+   "id": "d632",
+   "list": "domestic",
+   "species": "Maple, Birdseye (Premium)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.25
+  },
+  {
+   "id": "d633",
+   "list": "domestic",
+   "species": "Maple, Birdseye (Premium)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 26.99
+  },
+  {
+   "id": "d634",
+   "list": "domestic",
+   "species": "Maple, Birdseye (superior)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 25.99
+  },
+  {
+   "id": "d635",
+   "list": "domestic",
+   "species": "Maple, Birdseye (superior)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 28.49
+  },
+  {
+   "id": "d636",
+   "list": "domestic",
+   "species": "Maple, Curly",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 12.49
+  },
+  {
+   "id": "d637",
+   "list": "domestic",
+   "species": "Maple, Curly",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 13.99
+  },
+  {
+   "id": "d638",
+   "list": "domestic",
+   "species": "Maple, Curly",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 17.75
+  },
+  {
+   "id": "d639",
+   "list": "domestic",
+   "species": "Maple, Curly (Premium)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 14.85
+  },
+  {
+   "id": "d640",
+   "list": "domestic",
+   "species": "Maple, Curly (Premium)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 15.99
+  },
+  {
+   "id": "d641",
+   "list": "domestic",
+   "species": "Maple, Curly (Premium)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.9
+  },
+  {
+   "id": "d642",
+   "list": "domestic",
+   "species": "Maple, Curly (Supreme)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 19.49
+  },
+  {
+   "id": "d643",
+   "list": "domestic",
+   "species": "Maple, Curly (Supreme)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 19.25
+  },
+  {
+   "id": "d644",
+   "list": "domestic",
+   "species": "Maple, Curly (Supreme)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 24.38
+  },
+  {
+   "id": "d645",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.99
+  },
+  {
+   "id": "d646",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.59
+  },
+  {
+   "id": "d647",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.69
+  },
+  {
+   "id": "d648",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "5/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.69
+  },
+  {
+   "id": "d649",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.88
+  },
+  {
+   "id": "d650",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.29
+  },
+  {
+   "id": "d651",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "8/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.69
+  },
+  {
+   "id": "d652",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 10.89
+  },
+  {
+   "id": "d653",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.19
+  },
+  {
+   "id": "d654",
+   "list": "domestic",
+   "species": "Maple, Hard",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 12.55
+  },
+  {
+   "id": "d655",
+   "list": "domestic",
+   "species": "Maple, Quilted",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.44
+  },
+  {
+   "id": "d1229",
+   "list": "domestic",
+   "species": "Maple, Quilted (Premium)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 22.99
+  },
+  {
+   "id": "d656",
+   "list": "domestic",
+   "species": "Maple, Soft",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.84
+  },
+  {
+   "id": "d658",
+   "list": "domestic",
+   "species": "Maple, Soft",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.22
+  },
+  {
+   "id": "d659",
+   "list": "domestic",
+   "species": "Maple, Soft",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.39
+  },
+  {
+   "id": "d660",
+   "list": "domestic",
+   "species": "Maple, Soft",
+   "size": "5/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.99
+  },
+  {
+   "id": "d661",
+   "list": "domestic",
+   "species": "Maple, Soft",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.59
+  },
+  {
+   "id": "d662",
+   "list": "domestic",
+   "species": "Maple, Soft",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.99
+  },
+  {
+   "id": "d663",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.45
+  },
+  {
+   "id": "d665",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.99
+  },
+  {
+   "id": "d666",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.59
+  },
+  {
+   "id": "d667",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "5/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.99
+  },
+  {
+   "id": "d668",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "5/4",
+   "wide": "13\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.99
+  },
+  {
+   "id": "d669",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.95
+  },
+  {
+   "id": "d670",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "6/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.98
+  },
+  {
+   "id": "d671",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.79
+  },
+  {
+   "id": "d672",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "8/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.5
+  },
+  {
+   "id": "d673",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "8/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.19
+  },
+  {
+   "id": "d674",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.83
+  },
+  {
+   "id": "d675",
+   "list": "domestic",
+   "species": "Oak, Red",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.69
+  },
+  {
+   "id": "d676",
+   "list": "domestic",
+   "species": "Oak, Red (QS)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 7.29
+  },
+  {
+   "id": "d677",
+   "list": "domestic",
+   "species": "Oak, Red (QS)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.31
+  },
+  {
+   "id": "d678",
+   "list": "domestic",
+   "species": "Oak, Red (QS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 11.22
+  },
+  {
+   "id": "d679",
+   "list": "domestic",
+   "species": "Oak, Red (RS, S&B)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 6.99
+  },
+  {
+   "id": "d680",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 10.99
+  },
+  {
+   "id": "d681",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 13.49
+  },
+  {
+   "id": "d682",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.99
+  },
+  {
+   "id": "d684",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 12.99
+  },
+  {
+   "id": "d686",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.99
+  },
+  {
+   "id": "d687",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "8/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 15.99
+  },
+  {
+   "id": "d688",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 19.99
+  },
+  {
+   "id": "d689",
+   "list": "domestic",
+   "species": "Oak, White (PS)",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 20.99
+  },
+  {
+   "id": "d690",
+   "list": "domestic",
+   "species": "Oak, White (RS, S&B)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, S2S, R1E",
+   "price": 18.99
+  },
+  {
+   "id": "d691",
+   "list": "domestic",
+   "species": "Oak, White (RS, S&B)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, S2S, R1E",
+   "price": 22.99
+  },
+  {
+   "id": "d692",
+   "list": "domestic",
+   "species": "Oak, White, (QS)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 12.99
+  },
+  {
+   "id": "d693",
+   "list": "domestic",
+   "species": "Oak, White, (QS)",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 21.99
+  },
+  {
+   "id": "d694",
+   "list": "domestic",
+   "species": "Oak, White, (QS)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 13.99
+  },
+  {
+   "id": "d695",
+   "list": "domestic",
+   "species": "Oak, White, (QS)",
+   "size": "5/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.49
+  },
+  {
+   "id": "d696",
+   "list": "domestic",
+   "species": "Oak, White, (QS)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.49
+  },
+  {
+   "id": "d697",
+   "list": "domestic",
+   "species": "Oak, White, (QS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 15.99
+  },
+  {
+   "id": "d698",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 6.59
+  },
+  {
+   "id": "d699",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "4/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, R1E, S2S",
+   "price": 8.19
+  },
+  {
+   "id": "d700",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 7.43
+  },
+  {
+   "id": "d701",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 8.19
+  },
+  {
+   "id": "d702",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "8/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, R1E, S2S",
+   "price": 9.53
+  },
+  {
+   "id": "d703",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "8/4",
+   "wide": "15\"+ Wide",
+   "spec": "KD, R1E, S2S",
+   "price": 9.93
+  },
+  {
+   "id": "d704",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 9.76
+  },
+  {
+   "id": "d705",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Clear)",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 9.98
+  },
+  {
+   "id": "d706",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, FG)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, S2S",
+   "price": 3.99
+  },
+  {
+   "id": "d707",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, FG)",
+   "size": "4/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, S2S, R1E",
+   "price": 5.01
+  },
+  {
+   "id": "d708",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, FG)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, S2S",
+   "price": 4.24
+  },
+  {
+   "id": "d709",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, FG)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, S2S",
+   "price": 4.48
+  },
+  {
+   "id": "d710",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, FG)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, S2S",
+   "price": 4.85
+  },
+  {
+   "id": "d711",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, Rough)",
+   "size": "4/4",
+   "wide": "12\"+ Wide",
+   "spec": "KD",
+   "price": 5.25
+  },
+  {
+   "id": "d712",
+   "list": "domestic",
+   "species": "Pine, Eastern White (Knotty, Rough)",
+   "size": "4/4",
+   "wide": "15\"+ Wide",
+   "spec": "KD",
+   "price": 6.99
+  },
+  {
+   "id": "d713",
+   "list": "domestic",
+   "species": "Pine, Southern Yellow",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 4.4
+  },
+  {
+   "id": "d714",
+   "list": "domestic",
+   "species": "Pine, Southern Yellow",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 5.0
+  },
+  {
+   "id": "d715",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 3.39
+  },
+  {
+   "id": "d716",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "4/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.19
+  },
+  {
+   "id": "d717",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "4/4",
+   "wide": "14\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.6
+  },
+  {
+   "id": "d718",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 3.59
+  },
+  {
+   "id": "d719",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "5/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.59
+  },
+  {
+   "id": "d720",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 3.69
+  },
+  {
+   "id": "d721",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "6/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.89
+  },
+  {
+   "id": "d722",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 3.99
+  },
+  {
+   "id": "d723",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "8/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.99
+  },
+  {
+   "id": "d724",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 4.99
+  },
+  {
+   "id": "d725",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.19
+  },
+  {
+   "id": "d726",
+   "list": "domestic",
+   "species": "Poplar",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 5.29
+  },
+  {
+   "id": "d727",
+   "list": "domestic",
+   "species": "Spruce, Sitka (Rough, VG)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 16.47
+  },
+  {
+   "id": "d728",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "4/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.99
+  },
+  {
+   "id": "d729",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.49
+  },
+  {
+   "id": "d730",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.99
+  },
+  {
+   "id": "d731",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 15.49
+  },
+  {
+   "id": "d732",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, 90/90, R1E, S2S",
+   "price": 20.99
+  },
+  {
+   "id": "d733",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "8/4",
+   "wide": "8\"+ Wide",
+   "spec": "KD, 90/90, R1E, S2S",
+   "price": 21.99
+  },
+  {
+   "id": "d734",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 19.99
+  },
+  {
+   "id": "d735",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 22.99
+  },
+  {
+   "id": "d736",
+   "list": "domestic",
+   "species": "Walnut, Black",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 23.99
+  },
+  {
+   "id": "e747",
+   "list": "exotic",
+   "species": "Afrormosia",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.98
+  },
+  {
+   "id": "e1203",
+   "list": "exotic",
+   "species": "Afrormosia",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 19.64
+  },
+  {
+   "id": "e748",
+   "list": "exotic",
+   "species": "Anigre (PS)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.91
+  },
+  {
+   "id": "e801",
+   "list": "exotic",
+   "species": "Anigre (QS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.5
+  },
+  {
+   "id": "e749",
+   "list": "exotic",
+   "species": "Bloodwood",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 17.99
+  },
+  {
+   "id": "e803",
+   "list": "exotic",
+   "species": "Bloodwood",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.99
+  },
+  {
+   "id": "e750",
+   "list": "exotic",
+   "species": "Bocote",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 27.25
+  },
+  {
+   "id": "e751",
+   "list": "exotic",
+   "species": "Bubinga",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.25
+  },
+  {
+   "id": "e805",
+   "list": "exotic",
+   "species": "Bubinga",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.89
+  },
+  {
+   "id": "e752",
+   "list": "exotic",
+   "species": "Canarywood",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.85
+  },
+  {
+   "id": "e806",
+   "list": "exotic",
+   "species": "Canarywood",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 16.37
+  },
+  {
+   "id": "e753",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.7
+  },
+  {
+   "id": "e783",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.99
+  },
+  {
+   "id": "e792",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 12.29
+  },
+  {
+   "id": "e807",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 12.99
+  },
+  {
+   "id": "e808",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "8/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 13.39
+  },
+  {
+   "id": "e830",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, S2S",
+   "price": 13.89
+  },
+  {
+   "id": "e836",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.49
+  },
+  {
+   "id": "e843",
+   "list": "exotic",
+   "species": "Cedar, Spanish",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 14.99
+  },
+  {
+   "id": "e754",
+   "list": "exotic",
+   "species": "Cocobolo",
+   "size": "4/4",
+   "wide": "",
+   "spec": "R1E, S2S",
+   "price": 95.0
+  },
+  {
+   "id": "e809",
+   "list": "exotic",
+   "species": "Cocobolo",
+   "size": "8/4",
+   "wide": "",
+   "spec": "R1E, S2S",
+   "price": 105.0
+  },
+  {
+   "id": "e837",
+   "list": "exotic",
+   "species": "Cocobolo",
+   "size": "12/4",
+   "wide": "",
+   "spec": "R1E, S2S",
+   "price": 115.0
+  },
+  {
+   "id": "e755",
+   "list": "exotic",
+   "species": "Ebony Macassar",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 35.1
+  },
+  {
+   "id": "e756",
+   "list": "exotic",
+   "species": "Ebony, Gaboon (Rough)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 117.5
+  },
+  {
+   "id": "e785",
+   "list": "exotic",
+   "species": "Ebony, Gaboon (Rough)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 121.0
+  },
+  {
+   "id": "e793",
+   "list": "exotic",
+   "species": "Ebony, Gaboon (Rough)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 128.0
+  },
+  {
+   "id": "e810",
+   "list": "exotic",
+   "species": "Ebony, Gaboon (Rough)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 135.0
+  },
+  {
+   "id": "e832",
+   "list": "exotic",
+   "species": "Ebony, Gaboon (Rough)",
+   "size": "10/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 150.0
+  },
+  {
+   "id": "e757",
+   "list": "exotic",
+   "species": "Ebony, Indian (Rough)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 60.0
+  },
+  {
+   "id": "e794",
+   "list": "exotic",
+   "species": "Ebony, Indian (Rough)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 60.0
+  },
+  {
+   "id": "e811",
+   "list": "exotic",
+   "species": "Ebony, Indian (Rough)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 60.0
+  },
+  {
+   "id": "e758",
+   "list": "exotic",
+   "species": "Ebony, Macassar (Rough)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "AD",
+   "price": 150.0
+  },
+  {
+   "id": "e759",
+   "list": "exotic",
+   "species": "European Beech",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.69
+  },
+  {
+   "id": "e812",
+   "list": "exotic",
+   "species": "European Beech",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 6.9
+  },
+  {
+   "id": "e813",
+   "list": "exotic",
+   "species": "European Beech (QS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.17
+  },
+  {
+   "id": "e760",
+   "list": "exotic",
+   "species": "Goncalo Alves",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 14.32
+  },
+  {
+   "id": "e814",
+   "list": "exotic",
+   "species": "Goncalo Alves",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 16.15
+  },
+  {
+   "id": "e815",
+   "list": "exotic",
+   "species": "Ipe",
+   "size": "8/4",
+   "wide": "",
+   "spec": "AD, S2S",
+   "price": 29.99
+  },
+  {
+   "id": "e761",
+   "list": "exotic",
+   "species": "Ipe (S&B)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "AD, S2S",
+   "price": 22.28
+  },
+  {
+   "id": "e795",
+   "list": "exotic",
+   "species": "Ipe (S&B)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "AD, S2S",
+   "price": 16.2
+  },
+  {
+   "id": "e838",
+   "list": "exotic",
+   "species": "Ipe (S&B)",
+   "size": "12/4",
+   "wide": "",
+   "spec": "AD, S2S",
+   "price": 18.0
+  },
+  {
+   "id": "e762",
+   "list": "exotic",
+   "species": "Iroko",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 12.52
+  },
+  {
+   "id": "e1204",
+   "list": "exotic",
+   "species": "Iroko",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 13.12
+  },
+  {
+   "id": "e763",
+   "list": "exotic",
+   "species": "Jatoba",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.7
+  },
+  {
+   "id": "e764",
+   "list": "exotic",
+   "species": "Jatoba",
+   "size": "4/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, R1E, S2S",
+   "price": 12.45
+  },
+  {
+   "id": "e786",
+   "list": "exotic",
+   "species": "Jatoba",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.89
+  },
+  {
+   "id": "e816",
+   "list": "exotic",
+   "species": "Jatoba",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 12.09
+  },
+  {
+   "id": "e766",
+   "list": "exotic",
+   "species": "Katalox (aka Mexican Ebony)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "AD, S1S",
+   "price": 23.89
+  },
+  {
+   "id": "e767",
+   "list": "exotic",
+   "species": "Leopardwood",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 17.91
+  },
+  {
+   "id": "e817",
+   "list": "exotic",
+   "species": "Leopardwood",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.84
+  },
+  {
+   "id": "e802",
+   "list": "exotic",
+   "species": "Limba, Black",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 12.99
+  },
+  {
+   "id": "e768",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.62
+  },
+  {
+   "id": "e787",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.76
+  },
+  {
+   "id": "e796",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.88
+  },
+  {
+   "id": "e818",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.99
+  },
+  {
+   "id": "e833",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.55
+  },
+  {
+   "id": "e839",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.95
+  },
+  {
+   "id": "e844",
+   "list": "exotic",
+   "species": "Mahogany, African",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 10.1
+  },
+  {
+   "id": "e769",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 10.99
+  },
+  {
+   "id": "e788",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 15.59
+  },
+  {
+   "id": "e797",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 15.74
+  },
+  {
+   "id": "e819",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 15.98
+  },
+  {
+   "id": "e834",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 16.45
+  },
+  {
+   "id": "e840",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 16.54
+  },
+  {
+   "id": "e845",
+   "list": "exotic",
+   "species": "Mahogany, South American",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 16.98
+  },
+  {
+   "id": "e781",
+   "list": "exotic",
+   "species": "Osage Orange",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, S4S",
+   "price": 31.95
+  },
+  {
+   "id": "e782",
+   "list": "exotic",
+   "species": "Padauk",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 13.52
+  },
+  {
+   "id": "e829",
+   "list": "exotic",
+   "species": "Padauk",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 14.18
+  },
+  {
+   "id": "e770",
+   "list": "exotic",
+   "species": "Purpleheart",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 15.71
+  },
+  {
+   "id": "e820",
+   "list": "exotic",
+   "species": "Purpleheart",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 16.86
+  },
+  {
+   "id": "e771",
+   "list": "exotic",
+   "species": "Redheart",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 25.11
+  },
+  {
+   "id": "e1230",
+   "list": "exotic",
+   "species": "Rosewood, E. Indian",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 46.99
+  },
+  {
+   "id": "e772",
+   "list": "exotic",
+   "species": "Rosewood, Honduran (Rough)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD",
+   "price": 46.99
+  },
+  {
+   "id": "e773",
+   "list": "exotic",
+   "species": "Rosewood, Santos",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 27.4
+  },
+  {
+   "id": "e798",
+   "list": "exotic",
+   "species": "Rosewood, Santos",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 34.99
+  },
+  {
+   "id": "e841",
+   "list": "exotic",
+   "species": "Rosewood, Santos",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 36.0
+  },
+  {
+   "id": "e774",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.58
+  },
+  {
+   "id": "e775",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "4/4",
+   "wide": "8\"+ wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 8.99
+  },
+  {
+   "id": "e789",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.02
+  },
+  {
+   "id": "e799",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.19
+  },
+  {
+   "id": "e822",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.29
+  },
+  {
+   "id": "e823",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "8/4",
+   "wide": "10\"+ Wide",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 11.4
+  },
+  {
+   "id": "e835",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "10/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.59
+  },
+  {
+   "id": "e846",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "16/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 10.48
+  },
+  {
+   "id": "e842",
+   "list": "exotic",
+   "species": "Sapele",
+   "size": "12/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.69
+  },
+  {
+   "id": "e776",
+   "list": "exotic",
+   "species": "Sapele (QS)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.28
+  },
+  {
+   "id": "e790",
+   "list": "exotic",
+   "species": "Sapele (QS)",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.48
+  },
+  {
+   "id": "e1205",
+   "list": "exotic",
+   "species": "Sapele (QS)",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 9.99
+  },
+  {
+   "id": "e824",
+   "list": "exotic",
+   "species": "Sapele (QS)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, FAS, R1E, S2S",
+   "price": 10.49
+  },
+  {
+   "id": "e777",
+   "list": "exotic",
+   "species": "Teak",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 64.99
+  },
+  {
+   "id": "e791",
+   "list": "exotic",
+   "species": "Teak",
+   "size": "5/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 65.99
+  },
+  {
+   "id": "e800",
+   "list": "exotic",
+   "species": "Teak",
+   "size": "6/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 66.99
+  },
+  {
+   "id": "e825",
+   "list": "exotic",
+   "species": "Teak",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 67.99
+  },
+  {
+   "id": "e778",
+   "list": "exotic",
+   "species": "Wenge (S&B)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 25.2
+  },
+  {
+   "id": "e826",
+   "list": "exotic",
+   "species": "Wenge (S&B)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 27.2
+  },
+  {
+   "id": "e779",
+   "list": "exotic",
+   "species": "Yellowheart (aka Pau Amarillo)",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 18.91
+  },
+  {
+   "id": "e827",
+   "list": "exotic",
+   "species": "Yellowheart (aka Pau Amarillo)",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 19.37
+  },
+  {
+   "id": "e780",
+   "list": "exotic",
+   "species": "Zebrawood",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 25.99
+  },
+  {
+   "id": "e828",
+   "list": "exotic",
+   "species": "Zebrawood",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 28.99
+  },
+  {
+   "id": "e1423",
+   "list": "exotic",
+   "species": "Brazilian Blackheart",
+   "size": "4/4",
+   "wide": "",
+   "spec": "KS, R1E, S2S",
+   "price": 27.99
+  },
+  {
+   "id": "e1424",
+   "list": "exotic",
+   "species": "Brazilian Blackheart",
+   "size": "8/4",
+   "wide": "",
+   "spec": "KD, R1E, S2S",
+   "price": 28.99
+  }
+ ]
+}

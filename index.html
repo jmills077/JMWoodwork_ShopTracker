@@ -261,6 +261,7 @@ const DEFAULT_SETTINGS = {
   },
   business_name: '', business_contact: '',
   quote_terms: '50% deposit to begin work, balance due on completion. Wood is a natural material; grain and color will vary.',
+  prices_checked: '',   // date of the supplier price list last applied to linked species
   hourly_rate: 65, design_retainer: 300, contingency_pct: 10, markup_pct: 20, tax_pct: 0, deposit_pct: 50, waste_pct: 25, shop_speed: 1, quote_valid_days: 30,
   // price is $ per board foot; labor is how much slower (or faster) the species is to work than cherry or walnut
   species: [
@@ -466,6 +467,53 @@ async function syncTodoist(p) {
   persist();
 }
 
+// ---------- supplier lumber prices ----------
+// A weekly job in the site's repository reads Parkerville Wood Products' price lists into this file.
+// A species linked to one of its items in Settings takes that item's price per board foot.
+const PRICE_FEED = 'https://raw.githubusercontent.com/jmills077/JMWoodwork_ShopTracker/main/lumber-prices.json';
+const AUTO_LINK = {
+  'Pine': 'Pine, Eastern White (Clear)', 'Poplar': 'Poplar', 'Red oak': 'Oak, Red', 'White oak': 'Oak, White (PS)', 'Ash': 'Ash',
+  'Cherry': 'Cherry', 'Hard maple': 'Maple, Hard', 'Walnut': 'Walnut, Black', 'Hickory': 'Hickory', 'Teak': 'Teak',
+};
+let feed = null;
+
+async function loadPrices() {
+  try {
+    const res = await fetch(PRICE_FEED, { cache: 'no-cache' });
+    const data = res.ok ? await res.json() : null;
+    if (!data || !Array.isArray(data.items)) return;
+    feed = data;
+  } catch { return; }
+  if (applyPrices() && !(ed && !ed.project)) route();
+}
+
+// The standard pick for a species: 4/4, regular width, top grade where one is listed.
+function defaultItem(species) {
+  const items = feed.items.filter(i => i.species === species);
+  const regular = items.filter(i => i.size === '4/4' && !i.wide);
+  return regular.find(i => i.spec.includes('FAS')) || regular[0] || items[0];
+}
+
+// Returns true if any setting changed. Prices only move forward to a newer list, so a device
+// still holding last week's list can't undo an update another device has already synced.
+function applyPrices() {
+  if (!feed) return false;
+  const settings = store.settings, fresh = feed.checked > (settings.prices_checked || '');
+  let changed = false;
+  for (const sp of settings.species) {
+    let linkedNow = false;
+    if (sp.source === undefined) {   // first time: link the species that have an obvious match
+      sp.source = (AUTO_LINK[sp.name] && defaultItem(AUTO_LINK[sp.name])?.id) || '';
+      linkedNow = changed = true;
+    }
+    const item = feed.items.find(i => i.id === sp.source);
+    if (item && (fresh || linkedNow) && sp.price !== item.price) { sp.price = item.price; changed = true; }
+  }
+  if (fresh) { settings.prices_checked = feed.checked; changed = true; }
+  if (changed) settingsChanged();
+  return changed;
+}
+
 // ---------- sync between devices (a data file in a private GitHub repository) ----------
 const SYNC_FILE = 'shop-tracker-data.json';
 const syncOn = () => !!(store.sync.repo && store.sync.token);
@@ -568,6 +616,7 @@ async function sync() {
         mergeRemote(remote.data);
         store.sync.sha = remote.sha;
         saveLocal();
+        applyPrices();
         // Redraw from the merged data, unless a not-yet-saved quote is being written.
         if (!(ed && !ed.project)) route();
       }
@@ -1194,7 +1243,8 @@ function showSettings() {
       </details>
     </div>
     <div class="card"><h2>Wood species</h2>
-      <table class="list" id="species"></table>
+      <p class="muted" style="margin-top:0" id="feedInfo"></p>
+      <div style="overflow-x:auto"><table class="list" id="species"></table></div>
       <p><button class="link" id="addSpecies">+ Add species</button></p>
       <p class="muted" style="margin-bottom:0">Labor factor: 1.0 is cherry or walnut. Harder, tear-out-prone woods are above 1, softwoods below.</p>
     </div>
@@ -1234,12 +1284,26 @@ function showSettings() {
   });
 
   const speciesTable = $('#species');
+  const itemLabel = i => `${i.species} \u00b7 ${i.size}${i.wide ? ` \u00b7 ${i.wide}` : ''}${i.spec ? ` \u00b7 ${i.spec}` : ''} \u2013 $${i.price.toFixed(2)}`;
+  const itemOptions = (list, selected) => feed.items.filter(i => i.list === list)
+    .map(i => `<option value="${esc(i.id)}" ${i.id === selected ? 'selected' : ''}>${esc(itemLabel(i))}</option>`).join('');
   const renderSpecies = () => {
-    speciesTable.innerHTML = `<tr><th>Name</th><th>$ / board foot</th><th>Labor factor</th><th></th></tr>` + s.species.map((sp, i) => `<tr>
-      <td><input data-i="${i}" data-k="name" value="${esc(sp.name)}" aria-label="Species name"></td>
-      <td><input data-i="${i}" data-k="price" type="number" min="0" step="any" value="${esc(sp.price)}" aria-label="Price per board foot"></td>
+    $('#feedInfo').textContent = feed
+      ? `Species linked to a Parkerville Wood Products item take its price per board foot. Their price lists are checked weekly; last checked ${fmtDate(feed.checked)}.`
+      : 'The Parkerville Wood Products price list could not be loaded just now, so prices are as last saved.';
+    speciesTable.innerHTML = `<tr><th>Name</th><th>Parkerville price list item</th><th>$ / board foot</th><th>Labor factor</th><th></th></tr>` + s.species.map((sp, i) => {
+      const linked = feed && sp.source && feed.items.some(item => item.id === sp.source);
+      return `<tr>
+      <td><input data-i="${i}" data-k="name" value="${esc(sp.name)}" aria-label="Species name" style="min-width:110px"></td>
+      <td><select data-i="${i}" data-k="source" aria-label="Parkerville price list item" style="max-width:340px" ${feed ? '' : 'disabled'}>
+        <option value="">Not linked: I set the price</option>
+        ${sp.source && !linked ? `<option value="${esc(sp.source)}" selected>${feed ? 'Linked item is no longer listed' : 'Linked'}</option>` : ''}
+        ${feed ? `<optgroup label="Domestic">${itemOptions('domestic', sp.source)}</optgroup><optgroup label="Exotic">${itemOptions('exotic', sp.source)}</optgroup>` : ''}
+      </select></td>
+      <td><input data-i="${i}" data-k="price" type="number" min="0" step="any" value="${esc(sp.price)}" aria-label="Price per board foot" style="min-width:80px" ${linked ? 'disabled title="Set by the linked price list item"' : ''}></td>
       <td><input data-i="${i}" data-k="labor" type="number" min="0.1" step="0.05" value="${esc(sp.labor)}" aria-label="Labor factor"></td>
-      <td><button class="link" data-remove="${i}">remove</button></td></tr>`).join('');
+      <td><button class="link" data-remove="${i}">remove</button></td></tr>`;
+    }).join('');
   };
   renderSpecies();
   $('#stateTax').addEventListener('input', e => {
@@ -1250,7 +1314,12 @@ function showSettings() {
     const { i, k } = e.target.dataset;
     if (i === undefined) return;
     s.species[i][k] = inputValue(e.target);
+    if (k === 'source') {
+      const item = feed?.items.find(x => x.id === e.target.value);
+      if (item) s.species[i].price = item.price;
+    }
     settingsChanged();
+    if (k === 'source') renderSpecies();
   });
   speciesTable.addEventListener('click', e => {
     if (e.target.dataset.remove === undefined) return;
@@ -1259,7 +1328,7 @@ function showSettings() {
     renderSpecies();
   });
   $('#addSpecies').addEventListener('click', () => {
-    s.species.push({ name: '', price: 0, labor: 1 });
+    s.species.push({ name: '', price: 0, labor: 1, source: '' });
     settingsChanged();
     renderSpecies();
     speciesTable.querySelector('tr:last-child input').focus();
@@ -1354,6 +1423,7 @@ function showSettings() {
 
 route();
 if (syncOn()) sync();
+loadPrices();
 // Pick up other devices' changes when coming back to this tab, and push pending ones when leaving it.
 document.addEventListener('visibilitychange', sync);
 window.addEventListener('online', sync);

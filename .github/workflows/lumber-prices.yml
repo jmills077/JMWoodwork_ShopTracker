@@ -1,0 +1,29 @@
+name: Update lumber prices
+
+# Reads Parkerville Wood Products' public price lists once a week and saves them
+# to lumber-prices.json, which Shop Tracker loads to price linked wood species.
+on:
+  schedule:
+    - cron: "17 9 * * 1"   # Mondays, about 5 am Eastern
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read price lists
+        run: python scripts/update_prices.py
+      - name: Save prices
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lumber-prices.json
+          git commit -m "Update lumber prices" || echo "No changes"
+          git push
