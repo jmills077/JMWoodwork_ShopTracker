@@ -333,7 +333,9 @@ function price(data) {
   const laborHours = data.phases.reduce((sum, p) => sum + pos(p.hours), 0);
   const contingencyHours = cents(laborHours * pos(r.contingency_pct) / 100);
   const laborCost = (laborHours + contingencyHours) * pos(r.hourly_rate);
-  const materialsEst = est.boardFeet * pos(findSpecies(data.spec.species).price);
+  // Lumber is bought as whole boards, so the cost is for what has to be purchased, not just what is used.
+  const lumber = lumberNeeds(data, est.boardFeet);
+  const materialsEst = lumber.buyBf * pos(findSpecies(data.spec.species).price);
   const materialsBase = data.materials_override === '' || data.materials_override == null ? materialsEst : pos(data.materials_override);
   const otherCosts = pos(data.other_costs);
   const subtotal = laborCost + materialsBase * (1 + pos(r.markup_pct) / 100) + otherCosts;
@@ -342,7 +344,7 @@ function price(data) {
   const retainer = Math.min(pos(data.retainer), total);
   const balance = total - retainer;
   return {
-    board_feet: est.boardFeet, labor_hours: cents(laborHours), contingency_hours: contingencyHours, labor_cost: cents(laborCost),
+    board_feet: est.boardFeet, lumber, labor_hours: cents(laborHours), contingency_hours: contingencyHours, labor_cost: cents(laborCost),
     materials_est: cents(materialsEst), materials_cost: cents(materialsBase * (1 + pos(r.markup_pct) / 100)), other_costs: cents(otherCosts),
     subtotal: cents(subtotal), tax: cents(tax), total: cents(total),
     retainer: cents(retainer), balance: cents(balance), deposit: cents(balance * pos(r.deposit_pct) / 100),
@@ -434,7 +436,7 @@ function todoistPlan(p) {
   const { data, calc } = p;
   const tasks = [
     { content: `Collect deposit (${money(calc.deposit)})`, description: `Quote ${p.quote_number}, total ${money(calc.total)}` },
-    { content: 'Order lumber & hardware', description: `About ${calc.board_feet} board feet of ${data.spec.species || 'lumber'}` },
+    { content: 'Order lumber & hardware', description: `About ${calc.lumber?.feet ? lumberSummary(data, calc.lumber) : `${calc.board_feet} board feet of ${data.spec.species || 'lumber'}`}` },
   ];
   for (const phase of data.phases) {
     if (pos(phase.hours) > 0 && phase.name) tasks.push({ content: phase.name, description: `Estimated ${hrs(phase.hours)}` });
@@ -964,6 +966,7 @@ function projectHeader(p, tab, side) {
 function showEditor(project) {
   ed = { project, data: project ? project.data : blankData(), dirty: false };
   const d = ed.data;
+  d.lumber ??= { bf: '', quarters: '', width: '' };
   const inp = (label, path, type = 'text', cls = '', attrs = '') =>
     `<label class="f ${cls}"><span>${label}</span><input data-path="${path}" type="${type}" value="${esc(getPath(d, path) ?? '')}" ${attrs}></label>`;
   const numInp = (label, path, step = 'any', cls = '', attrs = '') => inp(label, path, 'number', cls, `min="0" step="${step}" ${attrs}`);
@@ -1008,6 +1011,17 @@ function showEditor(project) {
       </form>
       <aside>
         <div class="card" id="panel"></div>
+        <div class="card" id="lumberCard">
+          <h2>Lumber pickup</h2>
+          <div class="grid">
+            <label class="f"><span>Board feet needed</span><input type="number" min="0" step="any" data-lumber="bf" value="${esc(d.lumber.bf)}"></label>
+            <label class="f"><span>Board thickness</span><select data-lumber="quarters">
+              ${[4, 5, 6, 8, 10, 12, 16].map(q => `<option value="${q}" ${q === lumberNeeds(d, 0).quarters ? 'selected' : ''}>${q}/4 (${q / 4}")</option>`).join('')}</select></label>
+            <label class="f"><span>Board width (in)</span><input type="number" min="0" step="any" data-lumber="width" value="${esc(d.lumber.width)}"></label>
+          </div>
+          <p id="lumberOut" style="margin:12px 0 0"></p>
+          ${project ? '<div class="actions" style="margin-top:12px"><button type="button" class="btn" id="lumberSend">Send to Todoist</button><span class="muted" id="lumberSent" style="font-size:13px"></span></div>' : ''}
+        </div>
         ${project ? '<div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>' : ''}
         ${project ? '<p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this project</button></p>' : ''}
       </aside>
@@ -1063,6 +1077,17 @@ function showEditor(project) {
     if (el.dataset.act === 'add') $(`[data-fid="n${d.phases.length - 1}"]`, panel)?.focus();
   });
 
+  $('#lumberCard').addEventListener('input', e => {
+    if (!e.target.dataset.lumber) return;
+    d.lumber[e.target.dataset.lumber] = inputValue(e.target);
+    changed();
+  });
+  $('#lumberSend')?.addEventListener('click', async e => {
+    e.target.disabled = true;
+    await sendLumberTask(project);
+    e.target.disabled = false;
+  });
+
   if (project) {
     $('#delete').addEventListener('click', () => {
       const synced = project.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
@@ -1108,7 +1133,7 @@ function renderPanel() {
     <div class="tot"><span>Labor</span><span>${hrs(calc.labor_hours)}</span></div>
     <div class="tot"><span>Contingency <small>${+pos(d.rates.contingency_pct)}%</small></span><span>+ ${hrs(calc.contingency_hours)}</span></div>
     <div class="tot"><span>Labor cost <small>${hrs(calc.labor_hours + calc.contingency_hours)} @ ${money(pos(d.rates.hourly_rate))}/h</small></span><b>${money(calc.labor_cost)}</b></div>
-    <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `~${calc.board_feet} bf ${esc(d.spec.species)}`} + ${+pos(d.rates.markup_pct)}% markup</small></span><b>${money(calc.materials_cost)}</b></div>
+    <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `${calc.lumber.feet ? `${calc.lumber.boards} \u00d7 ${BOARD_LENGTH_FT} ft boards, ` : '~'}${+calc.lumber.buyBf} bf ${esc(d.spec.species)}`} + ${+pos(d.rates.markup_pct)}% markup</small></span><b>${money(calc.materials_cost)}</b></div>
     ${calc.other_costs ? `<div class="tot"><span>Hardware & other</span><b>${money(calc.other_costs)}</b></div>` : ''}
     ${calc.tax ? `<div class="tot"><span>Sales tax <small>${d.client_state ? `${esc(d.client_state)} ` : ''}${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
     <div class="tot grand"><span>Quote total</span><span>${money(calc.total)}</span></div>
@@ -1116,6 +1141,71 @@ function renderPanel() {
     <div class="tot"><b>Balance due</b><b>${money(calc.balance)}</b></div>` : ''}
     <div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''}</small></span><span class="muted">${money(calc.deposit)}</span></div>
     ${ed.project ? '' : '<hr class="rule"><button type="button" class="btn primary" data-act="create" style="width:100%">Save quote</button>'}`;
+  renderLumber(calc);
+}
+
+// ---------- lumber pickup: board feet to linear feet ----------
+// A board foot is 1" thick x 12" wide x 1 ft long, so linear feet = board feet x 12 / (thickness x width).
+// The yard sells whole boards, so linear feet are rounded up to full board lengths.
+const BOARD_LENGTH_FT = 10;
+
+function lumberNeeds(data, estimatedBf) {
+  const l = data.lumber || {};
+  const bf = l.bf === '' || l.bf == null ? estimatedBf : pos(l.bf);
+  // Until a thickness is chosen, assume the one the species' linked supplier item is sold in.
+  const linked = feed?.items.find(i => i.id === findSpecies(data.spec.species).source);
+  const quarters = pos(l.quarters) || parseInt(linked?.size) || 4;
+  const width = pos(l.width);
+  if (!width) return { bf, quarters, width, feet: 0, boards: 0, buyBf: bf };
+  const exactFeet = bf * 12 / (quarters / 4 * width);
+  const boards = Math.ceil(exactFeet / BOARD_LENGTH_FT - 1e-9), feet = boards * BOARD_LENGTH_FT;
+  return { bf, quarters, width, exactFeet, feet, boards, buyBf: Math.round(feet * (quarters / 4) * width / 12 * 10) / 10 };
+}
+
+const lumberSummary = (data, n) =>
+  `${n.feet} linear ft of ${n.quarters}/4 ${data.spec.species || 'lumber'}, ${+n.width}" wide (${n.boards} \u00d7 ${BOARD_LENGTH_FT} ft board${n.boards === 1 ? '' : 's'})`;
+
+function renderLumber(calc) {
+  const d = ed.data, n = calc.lumber;
+  $('[data-lumber="bf"]').placeholder = `Estimate: ${calc.board_feet}`;
+  $('[data-lumber="quarters"]').value = n.quarters;
+  $('#lumberOut').innerHTML = n.feet
+    ? `<b>About ${esc(lumberSummary(d, n))}</b><br><span class="muted" style="font-size:13px">${+n.bf} board feet &times; 12 &divide; (${n.quarters / 4}" &times; ${+n.width}") = ${+n.exactFeet.toFixed(1)} ft,
+        rounded up to full ${BOARD_LENGTH_FT} ft boards. That is ${+n.buyBf} board feet to buy, which the materials cost above is based on.</span>`
+    : `<span class="muted">Enter the width of the boards available to see how many linear feet to buy, in full ${BOARD_LENGTH_FT} ft boards.</span>`;
+  if ($('#lumberSent')) $('#lumberSent').textContent = d.lumber.sent ? `Last sent: ${d.lumber.sent}` : '';
+}
+
+// Creates a pickup task in Todoist, or updates the one sent earlier if it is still open.
+async function sendLumberTask(p) {
+  const n = p.calc.lumber, lumber = p.data.lumber;
+  if (!n.feet) return toast('Enter the board width first.');
+  if (!store.todoistToken) return toast('Add a Todoist token in Settings first.');
+  const summary = lumberSummary(p.data, n);
+  const body = {
+    content: `Pick up about ${summary}`,
+    description: `${+n.bf} board feet for ${projectName(p)} (${p.quote_number}).`,
+  };
+  try {
+    let task = null, updated = false;
+    if (lumber.task_id) {
+      try { task = await todoist('POST', `/tasks/${lumber.task_id}`, body); } catch { task = null; }
+      updated = !!task?.id && !task.checked && !task.is_deleted;
+    }
+    if (!updated) {
+      const home = p.todoist.project_id ? { project_id: p.todoist.project_id } : {};   // the job's own list, else the Inbox
+      try { task = await todoist('POST', '/tasks', { ...body, ...home }); }
+      catch (e) { if (!home.project_id) throw e; task = await todoist('POST', '/tasks', body); }
+    }
+    lumber.task_id = String(task.id);
+    lumber.sent = summary;
+    p.updated_at = new Date().toISOString();
+    persist();
+    toast(updated ? 'Todoist task updated.' : 'Pickup task sent to Todoist.');
+  } catch (e) {
+    toast(`Todoist: ${e.message}`);
+  }
+  if (ed?.project === p) renderLumber(p.calc);
 }
 
 function createProject() {
@@ -1320,6 +1410,7 @@ function showQuote(p) {
         <tr><td><b>Balance due</b></td><td><b>${money(calc.balance)}</b></td></tr>` : ''}
         ${calc.deposit ? `<tr><td class="muted">Deposit to begin (${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''})</td><td>${money(calc.deposit)}</td></tr>` : ''}
       </table>
+      <p class="muted">Material costs are contingent upon lumber availability and may vary.</p>
       <p class="muted pre">${esc(s.quote_terms)}</p>
     </article>`;
 }
