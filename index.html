@@ -267,7 +267,7 @@ const DEFAULT_SETTINGS = {
   species: [
     { name: 'Pine', price: 4, labor: 0.9 }, { name: 'Poplar', price: 5, labor: 0.9 }, { name: 'Red oak', price: 7, labor: 1 },
     { name: 'White oak', price: 10, labor: 1.1 }, { name: 'Ash', price: 7, labor: 1.05 }, { name: 'Cherry', price: 9, labor: 1 },
-    { name: 'Hard maple', price: 8, labor: 1.15 }, { name: 'Walnut', price: 14, labor: 1 }, { name: 'Mahogany', price: 13, labor: 1 },
+    { name: 'Hard maple', price: 8, labor: 1.15 }, { name: 'Walnut', price: 14, labor: 1 }, { name: 'African mahogany', price: 8.62, labor: 1 }, { name: 'South American mahogany', price: 10.99, labor: 1 },
     { name: 'Hickory', price: 7, labor: 1.25 }, { name: 'Teak', price: 35, labor: 1.2 },
   ],
 };
@@ -474,6 +474,7 @@ const PRICE_FEED = 'https://raw.githubusercontent.com/jmills077/JMWoodwork_ShopT
 const AUTO_LINK = {
   'Pine': 'Pine, Eastern White (Clear)', 'Poplar': 'Poplar', 'Red oak': 'Oak, Red', 'White oak': 'Oak, White (PS)', 'Ash': 'Ash',
   'Cherry': 'Cherry', 'Hard maple': 'Maple, Hard', 'Walnut': 'Walnut, Black', 'Hickory': 'Hickory', 'Teak': 'Teak',
+  'African mahogany': 'Mahogany, African', 'South American mahogany': 'Mahogany, South American',
 };
 let feed = null;
 
@@ -500,6 +501,20 @@ function applyPrices() {
   if (!feed) return false;
   const settings = store.settings, fresh = feed.checked > (settings.prices_checked || '');
   let changed = false;
+  if (!(settings.species_rev >= 1)) {
+    // One-time change to species lists saved earlier: the generic "Mahogany" becomes African and South American.
+    const old = settings.species.findIndex(sp => sp.name === 'Mahogany');
+    const added = [['African mahogany', 8.62], ['South American mahogany', 10.99]]
+      .filter(([name]) => !settings.species.some(sp => sp.name === name)).map(([name, price]) => ({ name, price, labor: 1 }));
+    settings.species.splice(old < 0 ? settings.species.length : old, old < 0 ? 0 : 1, ...added);
+    // Quotes that used the generic entry move to South American, the closer of the two in price.
+    for (const p of store.projects.filter(p => old >= 0 && p.data.spec.species === 'Mahogany')) {
+      p.data.spec.species = 'South American mahogany';
+      p.updated_at = new Date().toISOString();
+    }
+    settings.species_rev = 1;
+    changed = true;
+  }
   for (const sp of settings.species) {
     let linkedNow = false;
     if (sp.source === undefined) {   // first time: link the species that have an obvious match
