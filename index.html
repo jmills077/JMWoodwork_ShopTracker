@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop Tracker</title>
+<style>
+  :root {
+    --bg: #f5efe6; --card: #fffdf9; --ink: #2b2420; --muted: #7b6f66; --line: #e3d9cb;
+    --accent: #7a4a2b; --accent-ink: #fff; --good: #2f6b4a; --bad: #a43a2e; --warn: #9a6a12;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--accent); }
+  h1 { font-size: 24px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  header.top { background: #3a2a20; color: #f5efe6; display: flex; align-items: center; gap: 24px; padding: 12px 24px; flex-wrap: wrap; }
+  header.top .brand { font-weight: 700; font-size: 17px; color: inherit; text-decoration: none; }
+  header.top nav { display: flex; gap: 4px; flex: 1; }
+  header.top nav a { color: #e6d9c8; text-decoration: none; padding: 6px 12px; border-radius: 6px; }
+  header.top nav a.on, header.top nav a:hover { background: #55402f; color: #fff; }
+  #syncState { color: #cdbfae; font-size: 13px; text-decoration: none; }
+  #syncState.error { color: #ffb4a8; }
+  main { max-width: 1240px; margin: 0 auto; padding: 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .card + .card { margin-top: 16px; }
+  .btn { display: inline-block; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 8px 14px; border-radius: 8px; text-decoration: none; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.danger { color: var(--bad); }
+  .btn.small { padding: 4px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .muted { color: var(--muted); }
+  .pagehead { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .pagehead .spacer { flex: 1; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #e9dfd0; color: #5a4a3c; white-space: nowrap; }
+  .pill.sent { background: #dfe8f3; color: #2c4f7a; }
+  .pill.accepted, .pill.in_progress { background: #dcebdf; color: var(--good); }
+  .pill.complete, .pill.delivered { background: #2f6b4a; color: #fff; }
+  .pill.declined { background: #f1dcd8; color: var(--bad); }
+
+  /* board */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stats .card { margin-top: 0; }
+  .stat b { display: block; font-size: 22px; }
+  .board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+  .col { background: #ece3d5; border-radius: var(--radius); padding: 10px; min-height: 120px; }
+  .col h2 { margin: 4px 4px 10px; display: flex; justify-content: space-between; }
+  .job { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: inherit; }
+  .job:hover { border-color: var(--accent); }
+  .job[draggable] { cursor: grab; }
+  .job.dragging { opacity: .4; }
+  .col.over { outline: 2px dashed var(--accent); outline-offset: -2px; background: #e4d6c1; }
+  .job b { display: block; }
+  .job .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+  .job .amt { color: var(--ink); font-weight: 600; }
+  .empty { text-align: center; padding: 56px 20px; }
+  table.list { width: 100%; border-collapse: collapse; }
+  table.list td, table.list th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+  /* editor */
+  .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .board { grid-template-columns: repeat(5, 240px); } }
+  fieldset { border: 0; padding: 0; margin: 0 0 22px; }
+  fieldset:last-child { margin-bottom: 0; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .f { display: block; grid-column: span 2; }
+  .f.w3 { grid-column: span 3; } .f.w6 { grid-column: span 6; }
+  .f > span { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea { font: inherit; color: inherit; width: 100%; padding: 7px 9px; border: 1px solid #d5c9b8; border-radius: 7px; background: #fff; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #c79f7f; outline-offset: 0; border-color: var(--accent); }
+  textarea { min-height: 70px; resize: vertical; }
+  .ph { display: grid; grid-template-columns: 1fr 78px 92px; gap: 8px; align-items: center; padding: 5px 0; }
+  .ph input[type=number] { text-align: right; }
+  .ph .hint { font-size: 12px; color: var(--muted); }
+  .tot { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+  .tot small { color: var(--muted); }
+  .tot.grand { font-size: 20px; font-weight: 700; border-top: 2px solid var(--ink); margin-top: 8px; padding-top: 10px; }
+  .rule { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .history { list-style: none; margin: 12px 0 0; padding: 0; font-size: 13px; color: var(--muted); }
+  .history li { display: flex; justify-content: space-between; padding: 2px 0; }
+  .note { font-size: 13px; padding: 8px 10px; border-radius: 7px; background: #f3ead9; margin: 0 0 10px; }
+  .note.err { background: #f6e1dd; color: var(--bad); }
+  .note.ok { background: #dcebdf; color: var(--good); }
+
+  /* quote */
+  .quote { max-width: 780px; margin: 0 auto; padding: 44px; }
+  .quote .qhead { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+  .quote .qhead h1 { font-size: 28px; }
+  .quote .pre { white-space: pre-line; }
+  .quote table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+  .quote td { padding: 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .quote td:last-child { text-align: right; white-space: nowrap; }
+  .quote tr.grand td { font-size: 19px; font-weight: 700; border-bottom: 0; border-top: 2px solid var(--ink); }
+  .quote dl { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; margin: 0; }
+  .quote dt { color: var(--muted); } .quote dd { margin: 0; }
+
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2b2420; color: #fff; padding: 10px 18px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
+  #toast.show { opacity: 1; }
+
+  @media print {
+    header.top, .noprint, #toast { display: none !important; }
+    body { background: #fff; } main { padding: 0; }
+    .quote { border: 0; padding: 0; max-width: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">Shop Tracker</a>
+  <nav>
+    <a href="#/" data-nav="board">Projects</a>
+    <a href="#/new" data-nav="new">New quote</a>
+    <a href="#/settings" data-nav="settings">Settings</a>
+  </nav>
+  <a id="syncState" href="#/settings"></a>
+</header>
+<main id="view"></main>
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+
+// ---------- estimating model ----------
+// Baseline hours per phase at a reference size (inches, L x W x H). Hours are
+// scaled by the piece's size, species, joinery complexity and finish. Tune
+// these to how long things take in your shop, or use "Shop speed" in Settings
+// to scale everything at once. "solid" is the share of the bounding box that
+// is actual lumber, used for the board-foot estimate.
+const TYPES = {
+  dining_table: { name: 'Dining table', ref: [72, 38, 30], design: 2, milling: 5, joinery: 8, sanding: 4, finishing: 5, solid: 0.085 },
+  coffee_table: { name: 'Coffee table', ref: [48, 24, 18], design: 1.5, milling: 3, joinery: 5, sanding: 2.5, finishing: 3, solid: 0.12 },
+  end_table: { name: 'End table / nightstand', ref: [22, 22, 24], design: 1, milling: 2, joinery: 4, sanding: 1.5, finishing: 2, solid: 0.12 },
+  desk: { name: 'Desk', ref: [60, 30, 30], design: 2, milling: 4.5, joinery: 8, sanding: 3.5, finishing: 4, solid: 0.10 },
+  bookshelf: { name: 'Bookshelf', ref: [36, 12, 72], design: 1.5, milling: 4, joinery: 6, sanding: 3.5, finishing: 4, solid: 0.15 },
+  cabinet: { name: 'Cabinet / sideboard', ref: [36, 20, 34], design: 2, milling: 4, joinery: 8, sanding: 3, finishing: 4, solid: 0.22 },
+  dresser: { name: 'Dresser', ref: [60, 20, 34], design: 2.5, milling: 6, joinery: 10, sanding: 4, finishing: 5, solid: 0.22 },
+  bed_frame: { name: 'Bed frame', ref: [82, 62, 40], design: 2, milling: 5, joinery: 8, sanding: 4, finishing: 5, solid: 0.035 },
+  bench: { name: 'Bench', ref: [48, 14, 18], design: 1, milling: 2.5, joinery: 4, sanding: 2, finishing: 2.5, solid: 0.20 },
+  chair: { name: 'Chair', ref: [18, 18, 36], design: 2, milling: 3, joinery: 9, sanding: 3, finishing: 2.5, solid: 0.12 },
+  cutting_board: { name: 'Cutting board', ref: [18, 12, 1.5], design: 0.25, milling: 1, joinery: 1, sanding: 1, finishing: 0.75, solid: 1.1 },
+  custom: { name: 'Other / custom', ref: [48, 24, 30], design: 2, milling: 4, joinery: 6, sanding: 3, finishing: 3.5, solid: 0.12 },
+};
+const COMPLEXITY = {
+  simple: { name: 'Simple (pocket screws, dominos, straight lines)', factor: 0.8 },
+  standard: { name: 'Standard (mortise & tenon, dados)', factor: 1.0 },
+  complex: { name: 'Complex (dovetails, curves, tapers)', factor: 1.35 },
+  heirloom: { name: 'Heirloom (hand-cut joinery, inlay, carving)', factor: 1.75 },
+};
+const FINISHES = {
+  none: { name: 'Unfinished', factor: 0 },
+  oil: { name: 'Oil', factor: 0.7 },
+  hardwax: { name: 'Hardwax oil', factor: 0.8 },
+  poly: { name: 'Polyurethane', factor: 1.0 },
+  lacquer: { name: 'Sprayed lacquer', factor: 1.1 },
+  stain_topcoat: { name: 'Stain + topcoat', factor: 1.3 },
+  paint: { name: 'Paint', factor: 1.3 },
+};
+const HOURS_PER_DRAWER = 2.5, HOURS_PER_DOOR = 2.0, HOURS_PER_SHELF = 0.4;
+const PHASES = [
+  ['design', 'Design & shop drawings'],
+  ['milling', 'Milling & stock prep'],
+  ['joinery', 'Joinery & assembly'],
+  ['fitted', 'Drawers, doors & shelves'],
+  ['sanding', 'Sanding & surface prep'],
+  ['finishing', 'Finishing'],
+  ['delivery', 'Delivery & install'],
+];
+const STATUSES = [
+  ['draft', 'Draft'], ['sent', 'Quote sent'], ['accepted', 'Accepted'], ['in_progress', 'In progress'],
+  ['complete', 'Complete'], ['delivered', 'Delivered & paid'], ['declined', 'Declined'],
+];
+const STATUS_NAME = Object.fromEntries(STATUSES);
+const NEXT_STEP = {
+  draft: ['sent', 'Mark quote as sent'], sent: ['accepted', 'Quote accepted'], accepted: ['in_progress', 'Start work'],
+  in_progress: ['complete', 'Mark complete'], complete: ['delivered', 'Delivered & paid'],
+};
+const DEFAULT_SETTINGS = {
+  business_name: '', business_contact: '',
+  quote_terms: '50% deposit to begin work, balance due on completion. Wood is a natural material; grain and color will vary.',
+  hourly_rate: 65, contingency_pct: 10, markup_pct: 20, tax_pct: 0, deposit_pct: 50, waste_pct: 25, shop_speed: 1, quote_valid_days: 30,
+  // price is $ per board foot; labor is how much slower (or faster) the species is to work than cherry or walnut
+  species: [
+    { name: 'Pine', price: 4, labor: 0.9 }, { name: 'Poplar', price: 5, labor: 0.9 }, { name: 'Red oak', price: 7, labor: 1 },
+    { name: 'White oak', price: 10, labor: 1.1 }, { name: 'Ash', price: 7, labor: 1.05 }, { name: 'Cherry', price: 9, labor: 1 },
+    { name: 'Hard maple', price: 8, labor: 1.15 }, { name: 'Walnut', price: 14, labor: 1 }, { name: 'Mahogany', price: 13, labor: 1 },
+    { name: 'Hickory', price: 7, labor: 1.25 }, { name: 'Teak', price: 35, labor: 1.2 },
+  ],
+};
+
+const num = (v, d = 0) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+const pos = v => Math.max(num(v), 0);
+const quarter = h => Math.round(Math.max(h, 0) * 4) / 4;
+const cents = n => Math.round(n * 100) / 100;
+const findSpecies = name => store.settings.species.find(s => s.name === name) || { name: name || '', price: 0, labor: 1 };
+
+function estimate(spec) {
+  const t = TYPES[spec.type] || TYPES.custom;
+  const [rl, rw, rh] = t.ref;
+  const l = pos(spec.length) || rl, w = pos(spec.width) || rw, h = pos(spec.height) || rh;
+  // Work grows with surface area, but not linearly: setup time is fixed.
+  const size = Math.min(Math.max(((l * w + l * h + w * h) / (rl * rw + rl * rh + rw * rh)) ** 0.6, 0.4), 3.5);
+  const sp = num(findSpecies(spec.species).labor, 1) || 1;
+  const cx = (COMPLEXITY[spec.complexity] || COMPLEXITY.standard).factor;
+  const fin = (FINISHES[spec.finish] || FINISHES.oil).factor;
+  const speed = num(store.settings.shop_speed, 1) || 1;
+  const fitted = pos(spec.drawers) * HOURS_PER_DRAWER * (1 + (cx - 1) * 0.5)
+    + pos(spec.doors) * HOURS_PER_DOOR * (1 + (cx - 1) * 0.5)
+    + pos(spec.shelves) * HOURS_PER_SHELF;
+  const hours = {
+    design: t.design * cx * (0.7 + 0.3 * size) * speed,
+    milling: t.milling * size * sp * (1 + (cx - 1) * 0.3) * speed,
+    joinery: t.joinery * Math.sqrt(size) * cx * sp * speed,
+    fitted: fitted * sp * speed,
+    sanding: t.sanding * size * (1 + (sp - 1) * 0.5) * speed,
+    finishing: t.finishing * size * fin * speed,
+    delivery: pos(spec.delivery_hours),
+  };
+  const waste = 1 + pos(store.settings.waste_pct) / 100;
+  return {
+    phases: PHASES.map(([key, name]) => ({ key, name, est_hours: quarter(hours[key]) })),
+    boardFeet: Math.round(l * w * h / 144 * t.solid * waste * 10) / 10,
+  };
+}
+
+// Refresh estimated phases while keeping hand-edited hours and custom tasks.
+function mergePhases(existing = [], estimated) {
+  const merged = [];
+  for (const est of estimated) {
+    const old = existing.find(p => p.key === est.key);
+    if (old && old.manual) merged.push({ ...est, hours: pos(old.hours), manual: true });
+    else if (est.est_hours > 0) merged.push({ ...est, hours: est.est_hours });
+  }
+  return merged.concat(existing.filter(p => p.custom));
+}
+
+// Re-estimates data.phases in place and returns the priced totals.
+function price(data) {
+  const est = estimate(data.spec);
+  data.phases = mergePhases(data.phases, est.phases);
+  const r = data.rates;
+  const laborHours = data.phases.reduce((sum, p) => sum + pos(p.hours), 0);
+  const contingencyHours = cents(laborHours * pos(r.contingency_pct) / 100);
+  const laborCost = (laborHours + contingencyHours) * pos(r.hourly_rate);
+  const materialsEst = est.boardFeet * pos(findSpecies(data.spec.species).price);
+  const materialsBase = data.materials_override === '' || data.materials_override == null ? materialsEst : pos(data.materials_override);
+  const otherCosts = pos(data.other_costs);
+  const subtotal = laborCost + materialsBase * (1 + pos(r.markup_pct) / 100) + otherCosts;
+  const tax = subtotal * pos(r.tax_pct) / 100;
+  const total = subtotal + tax;
+  return {
+    board_feet: est.boardFeet, labor_hours: cents(laborHours), contingency_hours: contingencyHours, labor_cost: cents(laborCost),
+    materials_est: cents(materialsEst), materials_cost: cents(materialsBase * (1 + pos(r.markup_pct) / 100)), other_costs: cents(otherCosts),
+    subtotal: cents(subtotal), tax: cents(tax), total: cents(total), deposit: cents(total * pos(r.deposit_pct) / 100),
+  };
+}
+
+// ---------- storage (this browser's localStorage) ----------
+const STORE_KEY = 'shopTracker.v1';
+let store = loadStore();
+
+function loadStore() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { /* start fresh */ }
+  // A sync interrupted by closing the page must be retryable.
+  for (const p of saved.projects || []) delete p.todoist?.busy;
+  return {
+    settings: { ...structuredClone(DEFAULT_SETTINGS), ...(saved.settings || {}) },
+    projects: Array.isArray(saved.projects) ? saved.projects : [],
+    nextId: saved.nextId || 1,
+    todoistToken: saved.todoistToken || '',
+    settingsUpdatedAt: saved.settingsUpdatedAt || '',
+    deleted: Array.isArray(saved.deleted) ? saved.deleted : [],   // identities of deleted projects, so sync doesn't bring them back
+    sync: { repo: '', token: '', sha: '', dirty: false, lastSyncedAt: '', ...(saved.sync || {}) },
+  };
+}
+function saveLocal() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
+  catch { toast('Could not save. Browser storage is full or blocked.'); }
+}
+// Save a change to the shop's data, and queue it for syncing to other devices.
+let changeSeq = 0;
+function persist() {
+  changeSeq++;
+  if (syncOn()) { store.sync.dirty = true; scheduleSync(); }
+  saveLocal();
+}
+function settingsChanged() {
+  store.settingsUpdatedAt = new Date().toISOString();
+  persist();
+}
+
+// ---------- helpers ----------
+const $ = (sel, el = document) => el.querySelector(sel);
+const view = $('#view');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
+const hrs = n => `${+num(n).toFixed(2)} h`;
+const fmtDate = iso => iso ? new Date(iso.length === 10 ? iso + 'T00:00' : iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+const getPath = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj);
+function setPath(obj, path, value) {
+  const keys = path.split('.'), last = keys.pop();
+  keys.reduce((o, k) => o[k], obj)[last] = value;
+}
+const inputValue = el => el.type === 'number' ? (el.value === '' ? '' : num(el.value)) : el.value;
+const projectName = p => p.data.title || TYPES[p.data.spec.type].name;
+const quoteNumber = (id, createdAt) => `Q-${createdAt.slice(0, 4)}-${String(id).padStart(3, '0')}`;
+const projectIdent = p => `${p.id}:${p.created_at}`;
+
+let toastTimer;
+function toast(message) {
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// ---------- Todoist ----------
+const TODOIST_API = 'https://api.todoist.com/api/v1';
+
+async function todoist(method, path, body) {
+  let res;
+  try {
+    res = await fetch(TODOIST_API + path, {
+      method,
+      headers: { Authorization: `Bearer ${store.todoistToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error('Could not reach Todoist. Check your internet connection.');
+  }
+  if (res.status === 401 || res.status === 403) throw new Error('Todoist rejected the API token. Check it in Settings.');
+  if (!res.ok) throw new Error(`Todoist returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.status === 204 ? {} : res.json();
+}
+
+// The task list created in Todoist when a quote is accepted.
+function todoistPlan(p) {
+  const { data, calc } = p;
+  const tasks = [
+    { content: `Collect deposit (${money(calc.deposit)})`, description: `Quote ${p.quote_number}, total ${money(calc.total)}` },
+    { content: 'Order lumber & hardware', description: `About ${calc.board_feet} board feet of ${data.spec.species || 'lumber'}` },
+  ];
+  for (const phase of data.phases) {
+    if (pos(phase.hours) > 0 && phase.name) tasks.push({ content: phase.name, description: `Estimated ${hrs(phase.hours)}` });
+  }
+  tasks.push({ content: `Collect final payment (${money(calc.total - calc.deposit)})`, description: '' });
+  const name = projectName(p) + (data.client_name ? ` - ${data.client_name}` : '');
+  return { name: name.slice(0, 120), tasks };
+}
+
+// Creates the Todoist project and its tasks. Picks up where it left off if a previous attempt failed part-way.
+async function syncTodoist(p) {
+  const state = p.todoist;
+  if (state.synced || state.busy) return;
+  if (!store.todoistToken) { state.error = 'No Todoist API token is set. Add one in Settings, then retry.'; persist(); return; }
+  if (!state.plan) { state.plan = todoistPlan(p); state.created = 0; }
+  state.busy = true;
+  try {
+    if (!state.project_id) {
+      const created = await todoist('POST', '/projects', { name: state.plan.name });
+      if (!created.id) throw new Error('Unexpected response from Todoist.');
+      state.project_id = String(created.id);
+      state.url = `https://app.todoist.com/app/project/${state.project_id}`;
+      persist();
+    }
+    while (state.created < state.plan.tasks.length) {
+      await todoist('POST', '/tasks', { ...state.plan.tasks[state.created], project_id: state.project_id });
+      state.created++;
+      persist();
+    }
+    state.synced = true;
+    state.error = null;
+  } catch (e) {
+    state.error = e.message;
+  }
+  delete state.busy;
+  p.updated_at = new Date().toISOString();
+  persist();
+}
+
+// ---------- sync between devices (a data file in a private GitHub repository) ----------
+const SYNC_FILE = 'shop-tracker-data.json';
+const syncOn = () => !!(store.sync.repo && store.sync.token);
+let syncTimer, syncing = false, syncAgain = false, syncMessage = '';
+
+function scheduleSync(ms = 2500) {
+  clearTimeout(syncTimer);
+  if (syncOn()) syncTimer = setTimeout(sync, ms);
+}
+
+function setSyncState(state, message = '') {
+  syncMessage = message;
+  const el = $('#syncState');
+  el.className = state;
+  el.title = message;
+  el.textContent = !syncOn() ? '' : { busy: 'Syncing\u2026', ok: 'Synced', offline: 'Offline \u00b7 saved on this device', error: 'Sync problem' }[state];
+  if ($('#syncInfo')) renderSyncInfo();
+}
+
+async function github(path, method = 'GET', body, raw) {
+  let res;
+  try {
+    res = await fetch(`https://api.github.com/repos/${store.sync.repo}${path}`, {
+      method, cache: 'no-store',
+      headers: { Authorization: `Bearer ${store.sync.token}`, Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw Object.assign(new Error('Could not reach GitHub.'), { offline: true });
+  }
+  if (res.status === 401) throw new Error('GitHub rejected the access token. It may have expired.');
+  if (res.status === 403) throw new Error('GitHub refused the request. The token needs "Contents: Read and write" on the data repository.');
+  return res;
+}
+
+const toBase64 = text => btoa(Array.from(new TextEncoder().encode(text), b => String.fromCharCode(b)).join(''));
+const fromBase64 = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
+
+// What is shared between devices. Access tokens never leave the device they were entered on.
+const syncSnapshot = () => JSON.stringify({
+  app: 'shop-tracker', version: 1,
+  settings: store.settings, settingsUpdatedAt: store.settingsUpdatedAt,
+  projects: store.projects, nextId: store.nextId, deleted: store.deleted,
+}, (key, value) => key === 'busy' ? undefined : value, 1);
+
+async function readRemote() {
+  const path = `/contents/${SYNC_FILE}`;
+  const res = await github(path);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub returned ${res.status}.`);
+  const meta = await res.json();
+  // Files over 1 MB come back without their content and need a second request.
+  const text = meta.encoding === 'base64' && meta.content ? fromBase64(meta.content) : await (await github(path, 'GET', null, true)).text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = null; }
+  if (!data || !Array.isArray(data.projects) || !data.settings) throw new Error(`${SYNC_FILE} in the repository is not valid Shop Tracker data.`);
+  return { sha: meta.sha, text, data };
+}
+
+// Combine another device's changes with this one's: per project, the most recently edited copy wins.
+function mergeRemote(remote) {
+  const deleted = [...new Set([...store.deleted, ...(remote.deleted || [])])];
+  const merged = new Map();
+  for (const p of [...remote.projects, ...store.projects]) {
+    const key = projectIdent(p), other = merged.get(key);
+    if (!deleted.includes(key) && (!other || p.updated_at > other.updated_at)) merged.set(key, p);
+  }
+  const projects = [...merged.values()];
+  // Two devices can hand out the same number while offline. The synced copy keeps it; the local one is renumbered.
+  const remoteKeys = new Set(remote.projects.map(projectIdent));
+  const used = new Set(projects.filter(p => remoteKeys.has(projectIdent(p))).map(p => p.id));
+  let nextId = Math.max(store.nextId, num(remote.nextId, 1), ...projects.map(p => p.id + 1));
+  for (const p of projects.filter(p => !remoteKeys.has(projectIdent(p)))) {
+    if (used.has(p.id)) {
+      p.id = nextId++;
+      p.quote_number = quoteNumber(p.id, p.created_at);
+      p.updated_at = new Date().toISOString();
+    }
+    used.add(p.id);
+  }
+  if ((remote.settingsUpdatedAt || '') >= store.settingsUpdatedAt) {
+    store.settings = { ...structuredClone(DEFAULT_SETTINGS), ...remote.settings };
+    store.settingsUpdatedAt = remote.settingsUpdatedAt || '';
+  }
+  Object.assign(store, { projects, nextId, deleted });
+}
+
+async function sync() {
+  if (!syncOn()) return;
+  if (syncing) { syncAgain = true; return; }
+  // Wait for a Todoist project that is mid-creation, so its progress isn't replaced underneath it.
+  if (store.projects.some(p => p.todoist.busy)) return scheduleSync();
+  clearTimeout(syncTimer);
+  syncing = true;
+  setSyncState('busy');
+  try {
+    for (let attempt = 0; ; attempt++) {
+      const remote = await readRemote();
+      if (remote && remote.sha !== store.sync.sha) {
+        mergeRemote(remote.data);
+        store.sync.sha = remote.sha;
+        saveLocal();
+        // Redraw from the merged data, unless a not-yet-saved quote is being written.
+        if (!(ed && !ed.project)) route();
+      }
+      const seq = changeSeq, text = syncSnapshot();
+      if (!remote || text !== remote.text) {
+        const res = await github(`/contents/${SYNC_FILE}`, 'PUT', { message: 'Update shop data', content: toBase64(text), ...(remote ? { sha: remote.sha } : {}) });
+        if ((res.status === 409 || res.status === 422) && attempt < 2) continue;   // another device saved in between: merge again
+        if (res.status === 404) throw new Error('Repository not found, or the token has no access to it.');
+        if (!res.ok) throw new Error(`GitHub returned ${res.status} while saving.`);
+        store.sync.sha = (await res.json()).content.sha;
+      }
+      if (seq === changeSeq) store.sync.dirty = false; else syncAgain = true;
+      break;
+    }
+    store.sync.lastSyncedAt = new Date().toISOString();
+    saveLocal();
+    setSyncState('ok');
+  } catch (e) {
+    setSyncState(e.offline ? 'offline' : 'error', e.message);
+  }
+  syncing = false;
+  if (syncAgain) { syncAgain = false; scheduleSync(500); }
+}
+
+// ---------- routing ----------
+let ed = null;          // editor state: { project (null while new), data, dirty }
+let currentHash = '';
+
+function route() {
+  currentHash = location.hash || '#/';
+  ed = null;
+  const parts = currentHash.replace(/^#\/?/, '').split('/');
+  const project = parts[0] === 'p' ? store.projects.find(p => p.id === Number(parts[1])) : null;
+  let nav = 'board';
+  if (parts[0] === 'new') { nav = 'new'; showEditor(null); }
+  else if (parts[0] === 'settings') { nav = 'settings'; showSettings(); }
+  else if (project && parts[2] === 'quote') showQuote(project);
+  else if (project) showEditor(project);
+  else showBoard();
+  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav));
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', () => {
+  if (ed && !ed.project && ed.dirty && !confirm('Discard this unsaved quote?')) {
+    history.replaceState(null, '', currentHash);
+    return;
+  }
+  route();
+});
+
+// ---------- projects board ----------
+function showBoard() {
+  const by = status => store.projects.filter(p => p.status === status).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const sum = (list, f) => list.reduce((total, p) => total + f(p), 0);
+  if (!store.projects.length) {
+    view.innerHTML = `<div class="card empty"><h1>No projects yet</h1>
+      <p class="muted">Start by pricing a piece for a prospective client.</p>
+      <p><a class="btn primary" href="#/new">New quote</a></p></div>`;
+    return;
+  }
+  const open = by('sent'), booked = [...by('accepted'), ...by('in_progress')], done = [...by('complete'), ...by('delivered')];
+  const jobCard = p => `<a class="job" href="#/p/${p.id}" draggable="true" data-id="${p.id}">
+      <b>${esc(projectName(p))}</b>
+      <div class="row"><span>${esc(p.data.client_name || 'No client yet')}</span><span class="amt">${money(p.calc.total)}</span></div>
+      <div class="row"><span>${esc(p.quote_number)}</span><span>${hrs(p.calc.labor_hours + p.calc.contingency_hours)}</span></div>
+      ${p.data.due_date ? `<div class="row"><span>Due ${esc(fmtDate(p.data.due_date))}</span></div>` : ''}
+    </a>`;
+  const archive = [...by('delivered'), ...by('declined')];
+  view.innerHTML = `
+    <div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn primary" href="#/new">New quote</a></div>
+    <div class="stats">
+      <div class="card stat"><span class="muted">Quotes awaiting answer</span><b>${money(sum(open, p => p.calc.total))}</b><span class="muted">${open.length} sent</span></div>
+      <div class="card stat"><span class="muted">Booked work</span><b>${money(sum(booked, p => p.calc.total))}</b><span class="muted">${booked.length} active</span></div>
+      <div class="card stat"><span class="muted">Shop hours booked</span><b>${hrs(sum(booked, p => p.calc.labor_hours + p.calc.contingency_hours))}</b><span class="muted">accepted + in progress</span></div>
+      <div class="card stat"><span class="muted">Completed</span><b>${money(sum(done, p => p.calc.total))}</b><span class="muted">${done.length} finished</span></div>
+    </div>
+    <div class="board">
+      ${['draft', 'sent', 'accepted', 'in_progress', 'complete'].map(s => `<section class="col" data-status="${s}">
+        <h2><span>${STATUS_NAME[s]}</span><span>${by(s).length}</span></h2>${by(s).map(jobCard).join('')}</section>`).join('')}
+    </div>
+    ${archive.length ? `<div class="card" style="margin-top:20px"><h2>Archive</h2><table class="list">
+      <tr><th>Project</th><th>Client</th><th>Quote</th><th>Total</th><th>Status</th></tr>
+      ${archive.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a></td><td>${esc(p.data.client_name)}</td>
+        <td>${esc(p.quote_number)}</td><td>${money(p.calc.total)}</td><td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></td></tr>`).join('')}
+      </table></div>` : ''}`;
+
+  // Drag a card to another column to change its status.
+  const board = $('.board');
+  let dragged = null;
+  const clearOver = () => board.querySelectorAll('.col.over').forEach(c => c.classList.remove('over'));
+  board.addEventListener('dragstart', e => {
+    const card = e.target.closest('.job');
+    if (!card) return;
+    dragged = store.projects.find(p => p.id === Number(card.dataset.id));
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', projectName(dragged));
+    card.classList.add('dragging');
+  });
+  board.addEventListener('dragend', e => {
+    e.target.closest('.job')?.classList.remove('dragging');
+    clearOver();
+    dragged = null;
+  });
+  board.addEventListener('dragover', e => {
+    const col = e.target.closest('.col');
+    if (!dragged || !col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!col.classList.contains('over')) { clearOver(); col.classList.add('over'); }
+  });
+  board.addEventListener('drop', e => {
+    const col = e.target.closest('.col');
+    if (!dragged || !col) return;
+    e.preventDefault();
+    setStatus(dragged, col.dataset.status);
+  });
+}
+
+// ---------- quote editor / project page ----------
+function blankData() {
+  const s = store.settings, [length, width, height] = TYPES.dining_table.ref;
+  return {
+    title: '', client_name: '', client_email: '', client_phone: '', due_date: '', notes: '',
+    spec: { type: 'dining_table', description: '', species: (s.species.find(x => x.name === 'Walnut') || s.species[0] || {}).name || '',
+      length, width, height, complexity: 'standard', finish: 'hardwax', drawers: 0, doors: 0, shelves: 0, delivery_hours: 0 },
+    rates: { hourly_rate: s.hourly_rate, contingency_pct: s.contingency_pct, markup_pct: s.markup_pct, tax_pct: s.tax_pct, deposit_pct: s.deposit_pct },
+    phases: [], materials_override: '', other_costs: 0,
+  };
+}
+
+function showEditor(project) {
+  ed = { project, data: project ? project.data : blankData(), dirty: false };
+  const d = ed.data;
+  const inp = (label, path, type = 'text', cls = '', attrs = '') =>
+    `<label class="f ${cls}"><span>${label}</span><input data-path="${path}" type="${type}" value="${esc(getPath(d, path) ?? '')}" ${attrs}></label>`;
+  const numInp = (label, path, step = 'any', cls = '', attrs = '') => inp(label, path, 'number', cls, `min="0" step="${step}" ${attrs}`);
+  const sel = (label, path, options, cls = '') =>
+    `<label class="f ${cls}"><span>${label}</span><select data-path="${path}">${options.map(([v, n]) =>
+      `<option value="${esc(v)}" ${getPath(d, path) === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
+  const speciesNames = store.settings.species.map(s => s.name);
+  if (d.spec.species && !speciesNames.includes(d.spec.species)) speciesNames.push(d.spec.species);
+
+  view.innerHTML = `
+    <div class="pagehead">
+      <a href="#/" class="btn small">&larr; Projects</a>
+      <h1>${project ? esc(project.quote_number) : 'New quote'}</h1>
+      ${project ? `<span class="pill ${project.status}" id="statusPill">${STATUS_NAME[project.status]}</span>` : ''}
+      <span class="spacer"></span>
+      ${project ? `<span class="muted" id="saved">All changes saved</span><a class="btn" href="#/p/${project.id}/quote">View client quote</a>` : ''}
+    </div>
+    <div class="cols">
+      <form class="card" id="form" autocomplete="off">
+        <fieldset><h2>Client</h2><div class="grid">
+          ${inp('Name', 'client_name')}${inp('Email', 'client_email', 'email')}${inp('Phone', 'client_phone', 'tel')}
+        </div></fieldset>
+        <fieldset><h2>What's being built</h2><div class="grid">
+          ${inp('Project name', 'title', 'text', 'w6', 'placeholder="e.g. Live-edge dining table"')}
+          ${sel('Furniture type', 'spec.type', Object.entries(TYPES).map(([k, t]) => [k, t.name]), 'w3')}
+          ${sel('Wood species', 'spec.species', speciesNames.map(n => [n, n]), 'w3')}
+          ${numInp('Length (in)', 'spec.length')}${numInp('Width / depth (in)', 'spec.width')}${numInp('Height (in)', 'spec.height')}
+          <label class="f w6"><span>Description (shown on the quote)</span><textarea data-path="spec.description">${esc(d.spec.description)}</textarea></label>
+        </div></fieldset>
+        <fieldset><h2>Build details</h2><div class="grid">
+          ${sel('Joinery & complexity', 'spec.complexity', Object.entries(COMPLEXITY).map(([k, c]) => [k, c.name]), 'w3')}
+          ${sel('Finish', 'spec.finish', Object.entries(FINISHES).map(([k, f]) => [k, f.name]), 'w3')}
+          ${numInp('Drawers', 'spec.drawers', 1)}${numInp('Doors', 'spec.doors', 1)}${numInp('Shelves', 'spec.shelves', 1)}
+          ${numInp('Delivery & install (hours)', 'spec.delivery_hours', 0.25, 'w3')}
+        </div></fieldset>
+        <fieldset><h2>Pricing</h2><div class="grid">
+          ${numInp('Hourly rate ($)', 'rates.hourly_rate')}${numInp('Contingency (%)', 'rates.contingency_pct')}${numInp('Materials markup (%)', 'rates.markup_pct')}
+          ${numInp('Sales tax (%)', 'rates.tax_pct')}${numInp('Deposit (%)', 'rates.deposit_pct')}${numInp('Hardware & other costs ($)', 'other_costs')}
+          ${numInp('Lumber cost override ($)', 'materials_override', 'any', 'w3', 'id="override"')}
+        </div></fieldset>
+        <fieldset><h2>Schedule & notes</h2><div class="grid">
+          ${inp('Target completion', 'due_date', 'date', 'w3')}
+          <label class="f w6"><span>Internal notes (not shown on the quote)</span><textarea data-path="notes">${esc(d.notes)}</textarea></label>
+        </div></fieldset>
+      </form>
+      <aside>
+        <div class="card" id="panel"></div>
+        ${project ? '<div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>' : ''}
+        ${project ? '<p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this project</button></p>' : ''}
+      </aside>
+    </div>`;
+
+  const form = $('#form');
+  form.addEventListener('submit', e => e.preventDefault());
+  form.addEventListener('input', e => {
+    const el = e.target;
+    if (!el.dataset.path) return;
+    if (el.dataset.path === 'spec.type') {
+      // Swap in the new type's typical size unless the dimensions were customised.
+      const oldRef = TYPES[d.spec.type].ref, newRef = TYPES[el.value].ref;
+      if (['length', 'width', 'height'].every((k, i) => num(d.spec[k]) === oldRef[i])) {
+        ['length', 'width', 'height'].forEach((k, i) => { d.spec[k] = newRef[i]; $(`[data-path="spec.${k}"]`, form).value = newRef[i]; });
+      }
+    }
+    setPath(d, el.dataset.path, inputValue(el));
+    changed();
+  });
+
+  const panel = $('#panel');
+  panel.addEventListener('change', e => {
+    const el = e.target, phase = d.phases[el.dataset.i];
+    if (!phase) return;
+    if (el.dataset.k === 'name') phase.name = el.value;
+    else {
+      phase.hours = pos(el.value);
+      if (!phase.custom) phase.manual = phase.hours !== phase.est_hours;
+    }
+    // Re-render after focus has moved, then put focus back where the user went.
+    setTimeout(() => {
+      const focusId = document.activeElement?.dataset?.fid;
+      changed();
+      if (focusId) $(`[data-fid="${focusId}"]`, panel)?.focus();
+    });
+  });
+  panel.addEventListener('click', e => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    const i = Number(el.dataset.i);
+    if (el.dataset.act === 'reset') d.phases[i].manual = false;
+    else if (el.dataset.act === 'remove') d.phases.splice(i, 1);
+    else if (el.dataset.act === 'add') d.phases.push({ key: `custom-${Date.now()}`, name: '', hours: 1, custom: true });
+    else if (el.dataset.act === 'create') return createProject();
+    changed();
+    if (el.dataset.act === 'add') $(`[data-fid="n${d.phases.length - 1}"]`, panel)?.focus();
+  });
+
+  if (project) {
+    $('#delete').addEventListener('click', () => {
+      const synced = project.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
+      if (!confirm(`Delete ${project.quote_number} (${projectName(project)})? This cannot be undone.${synced}`)) return;
+      store.projects = store.projects.filter(p => p !== project);
+      store.deleted.push(projectIdent(project));
+      persist();
+      location.hash = '#/';
+    });
+    renderStatusCard();
+    renderTodoistCard();
+  }
+  renderPanel();
+}
+
+function changed() {
+  ed.dirty = true;
+  renderPanel();
+  if (ed.project) {
+    ed.project.updated_at = new Date().toISOString();
+    persist();
+  }
+}
+
+function renderPanel() {
+  const d = ed.data, calc = price(d);
+  if (ed.project) ed.project.calc = calc;
+  const override = $('#override');
+  if (override) override.placeholder = `Estimate: ${money(calc.materials_est)}`;
+  const overridden = !(d.materials_override === '' || d.materials_override == null);
+  $('#panel').innerHTML = `
+    <h2>Labor estimate</h2>
+    ${d.phases.map((p, i) => `<div class="ph">
+      ${p.custom ? `<input data-i="${i}" data-k="name" data-fid="n${i}" value="${esc(p.name)}" placeholder="Task name" aria-label="Task name">` : `<span>${esc(p.name)}</span>`}
+      <input type="number" min="0" step="0.25" data-i="${i}" data-k="hours" data-fid="h${i}" value="${p.hours}" aria-label="${esc(p.name || 'Task')} hours">
+      <span class="hint">${p.custom ? `<button type="button" class="link" data-act="remove" data-i="${i}">remove</button>`
+        : p.manual ? `est. ${p.est_hours} &middot; <button type="button" class="link" data-act="reset" data-i="${i}">reset</button>` : 'estimated'}</span>
+    </div>`).join('')}
+    <button type="button" class="link" data-act="add">+ Add a task</button>
+    <hr class="rule">
+    <div class="tot"><span>Labor</span><span>${hrs(calc.labor_hours)}</span></div>
+    <div class="tot"><span>Contingency <small>${+pos(d.rates.contingency_pct)}%</small></span><span>+ ${hrs(calc.contingency_hours)}</span></div>
+    <div class="tot"><span>Labor cost <small>${hrs(calc.labor_hours + calc.contingency_hours)} @ ${money(pos(d.rates.hourly_rate))}/h</small></span><b>${money(calc.labor_cost)}</b></div>
+    <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `~${calc.board_feet} bf ${esc(d.spec.species)}`} + ${+pos(d.rates.markup_pct)}% markup</small></span><b>${money(calc.materials_cost)}</b></div>
+    ${calc.other_costs ? `<div class="tot"><span>Hardware & other</span><b>${money(calc.other_costs)}</b></div>` : ''}
+    ${calc.tax ? `<div class="tot"><span>Sales tax <small>${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
+    <div class="tot grand"><span>Quote total</span><span>${money(calc.total)}</span></div>
+    <div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%</small></span><span class="muted">${money(calc.deposit)}</span></div>
+    ${ed.project ? '' : '<hr class="rule"><button type="button" class="btn primary" data-act="create" style="width:100%">Save quote</button>'}`;
+}
+
+function createProject() {
+  const stamp = new Date().toISOString(), id = store.nextId++;
+  const project = {
+    id, quote_number: quoteNumber(id, stamp), status: 'draft',
+    data: ed.data, calc: price(ed.data), todoist: {}, history: [{ status: 'draft', at: stamp }], created_at: stamp, updated_at: stamp,
+  };
+  store.projects.push(project);
+  persist();
+  ed.dirty = false;
+  toast(`Saved as ${project.quote_number}`);
+  location.hash = `#/p/${id}`;
+}
+
+function renderStatusCard() {
+  const p = ed.project, next = NEXT_STEP[p.status];
+  $('#statusPill').className = `pill ${p.status}`;
+  $('#statusPill').textContent = STATUS_NAME[p.status];
+  const card = $('#statusCard');
+  card.innerHTML = `
+    <h2>Status</h2>
+    <div class="actions">
+      ${next ? `<button class="btn primary" data-status="${next[0]}">${next[1]}</button>` : ''}
+      ${p.status === 'sent' ? '<button class="btn danger" data-status="declined">Declined</button>' : ''}
+      <select id="statusSelect" style="width:auto" aria-label="Change status">
+        ${STATUSES.map(([k, n]) => `<option value="${k}" ${k === p.status ? 'selected' : ''}>${n}</option>`).join('')}
+      </select>
+    </div>
+    <ul class="history">${p.history.map(h => `<li><span>${STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
+  card.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', () => setStatus(p, b.dataset.status)));
+  $('#statusSelect').addEventListener('change', e => setStatus(p, e.target.value));
+}
+
+async function setStatus(p, status) {
+  if (status === p.status) return;
+  p.status = status;
+  p.updated_at = new Date().toISOString();
+  p.history.push({ status, at: p.updated_at });
+  persist();
+  if (ed?.project === p) { renderStatusCard(); renderTodoistCard(); }
+  else showBoard();
+  // Accepting a quote opens the job in Todoist.
+  if (status === 'accepted' && !p.todoist.synced) {
+    if (store.todoistToken) await runTodoistSync(p);
+    else toast('Quote accepted. Add a Todoist token in Settings to create its task list.');
+  }
+}
+
+async function runTodoistSync(p) {
+  const pending = syncTodoist(p);
+  if (ed?.project === p) renderTodoistCard();
+  await pending;
+  toast(p.todoist.synced ? 'Todoist project created.' : `Todoist: ${p.todoist.error}`);
+  if (ed?.project === p) renderTodoistCard();
+}
+
+function renderTodoistCard() {
+  const p = ed.project, t = p.todoist, card = $('#todoistCard');
+  const wanted = ['accepted', 'in_progress', 'complete'].includes(p.status);
+  let body;
+  if (t.busy) body = '<p class="note">Creating the project and tasks in Todoist&hellip;</p>';
+  else if (t.synced) body = `<p class="note ok">Task list created (${t.plan.tasks.length} tasks).</p>
+    <a class="btn" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Todoist</a>`;
+  else if (t.error) body = `<p class="note err">${esc(t.error)}</p>
+    ${t.created ? `<p class="muted">${t.created} of ${t.plan.tasks.length} tasks were created. Retrying continues from there.</p>` : ''}
+    <div class="actions"><button class="btn primary" id="sync">Retry</button><a href="#/settings">Todoist settings</a></div>`;
+  else if (!store.todoistToken) body = `<p class="muted">Connect Todoist in <a href="#/settings">Settings</a> and a project with a task list will be created when a quote is accepted.</p>`;
+  else if (wanted) body = '<button class="btn primary" id="sync">Create Todoist project</button>';
+  else body = '<p class="muted">A Todoist project with one task per build phase will be created when this quote is accepted.</p>';
+  card.innerHTML = `<h2>Todoist</h2>${body}`;
+  $('#sync', card)?.addEventListener('click', () => runTodoistSync(p));
+}
+
+// ---------- client-facing quote ----------
+function showQuote(p) {
+  const { data: d, calc } = p, s = store.settings, spec = d.spec;
+  const validUntil = new Date(p.created_at);
+  validUntil.setDate(validUntil.getDate() + pos(s.quote_valid_days));
+  const dims = [spec.length, spec.width, spec.height].map(v => +pos(v));
+  const extras = [['drawers', 'drawer'], ['doors', 'door'], ['shelves', 'shelf', 'shelves']]
+    .filter(([k]) => pos(spec[k]) > 0).map(([k, one, many]) => `${spec[k]} ${spec[k] === 1 ? one : many || one + 's'}`).join(', ');
+  view.innerHTML = `
+    <div class="pagehead noprint">
+      <a href="#/p/${p.id}" class="btn small">&larr; Back to project</a><span class="spacer"></span>
+      <button class="btn primary" onclick="window.print()">Print / save as PDF</button>
+    </div>
+    <article class="card quote">
+      <div class="qhead">
+        <div><h1>${esc(s.business_name || 'Quote')}</h1><div class="muted pre">${esc(s.business_contact)}</div></div>
+        <div style="text-align:right"><b>Quote ${esc(p.quote_number)}</b><br>${esc(fmtDate(p.created_at))}<br>
+          <span class="muted">Valid until ${esc(fmtDate(validUntil.toISOString()))}</span></div>
+      </div>
+      <dl>
+        <dt>Prepared for</dt><dd>${esc(d.client_name || '-')}${d.client_email ? `<br>${esc(d.client_email)}` : ''}${d.client_phone ? `<br>${esc(d.client_phone)}` : ''}</dd>
+        <dt>Project</dt><dd><b>${esc(projectName(p))}</b></dd>
+        <dt>Wood</dt><dd>${esc(spec.species || '-')}</dd>
+        <dt>Dimensions</dt><dd>${dims[0]}" L &times; ${dims[1]}" W &times; ${dims[2]}" H</dd>
+        <dt>Finish</dt><dd>${esc(FINISHES[spec.finish].name)}</dd>
+        ${extras ? `<dt>Includes</dt><dd>${esc(extras)}</dd>` : ''}
+        ${d.due_date ? `<dt>Est. completion</dt><dd>${esc(fmtDate(d.due_date))}</dd>` : ''}
+      </dl>
+      ${spec.description ? `<p class="pre">${esc(spec.description)}</p>` : ''}
+      <table>
+        <tr><td>Labor<br><span class="muted">Approx. ${hrs(calc.labor_hours + calc.contingency_hours)} of shop time</span></td><td>${money(calc.labor_cost)}</td></tr>
+        <tr><td>Materials<br><span class="muted">${esc(spec.species)} lumber and supplies</span></td><td>${money(calc.materials_cost)}</td></tr>
+        ${calc.other_costs ? `<tr><td>Hardware & other</td><td>${money(calc.other_costs)}</td></tr>` : ''}
+        ${calc.tax ? `<tr><td>Sales tax (${+pos(d.rates.tax_pct)}%)</td><td>${money(calc.tax)}</td></tr>` : ''}
+        <tr class="grand"><td>Total</td><td>${money(calc.total)}</td></tr>
+        ${calc.deposit ? `<tr><td class="muted">Deposit to begin (${+pos(d.rates.deposit_pct)}%)</td><td>${money(calc.deposit)}</td></tr>` : ''}
+      </table>
+      <p class="muted pre">${esc(s.quote_terms)}</p>
+    </article>`;
+}
+
+// ---------- settings ----------
+function renderSyncInfo() {
+  const { repo, lastSyncedAt, dirty } = store.sync;
+  $('#syncInfo').innerHTML = !syncOn()
+    ? '<span class="pill">Off</span> Connect a private GitHub repository to use the same data on every device.'
+    : syncMessage ? `<span class="pill declined">Not syncing</span> ${esc(syncMessage)} Changes are saved on this device and will sync when this is resolved.`
+    : `<span class="pill accepted">On</span> Syncing with ${esc(repo)}. ${lastSyncedAt ? `Last synced ${esc(new Date(lastSyncedAt).toLocaleString())}.` : ''}${dirty ? ' Changes waiting to sync.' : ''}`;
+}
+
+function showSettings() {
+  const s = store.settings;
+  const inp = (label, key, type = 'text', cls = '') =>
+    `<label class="f ${cls}"><span>${label}</span><input data-path="${key}" type="${type}" ${type === 'number' ? 'min="0" step="any"' : ''} value="${esc(s[key])}"></label>`;
+  view.innerHTML = `
+    <div class="pagehead"><h1>Settings</h1><span class="spacer"></span><span class="muted">Changes save automatically</span></div>
+    <div class="card" id="general">
+      <fieldset><h2>Your business (shown on quotes)</h2><div class="grid">
+        ${inp('Business name', 'business_name', 'text', 'w3')}
+        <label class="f w3"><span>Contact details</span><textarea data-path="business_contact" placeholder="Address, phone, email">${esc(s.business_contact)}</textarea></label>
+        <label class="f w6"><span>Quote terms</span><textarea data-path="quote_terms">${esc(s.quote_terms)}</textarea></label>
+      </div></fieldset>
+      <fieldset><h2>Defaults for new quotes</h2><div class="grid">
+        ${inp('Hourly rate ($)', 'hourly_rate', 'number')}${inp('Contingency (%)', 'contingency_pct', 'number')}${inp('Materials markup (%)', 'markup_pct', 'number')}
+        ${inp('Sales tax (%)', 'tax_pct', 'number')}${inp('Deposit (%)', 'deposit_pct', 'number')}${inp('Quote valid for (days)', 'quote_valid_days', 'number')}
+      </div></fieldset>
+      <fieldset><h2>Estimating</h2><div class="grid">
+        ${inp('Shop speed multiplier', 'shop_speed', 'number', 'w3')}${inp('Lumber waste allowance (%)', 'waste_pct', 'number', 'w3')}
+      </div><p class="muted" style="margin-bottom:0">Shop speed scales every estimated hour: if jobs take you about 20% longer than estimated, set it to 1.2.</p></fieldset>
+    </div>
+    <div class="card"><h2>Wood species</h2>
+      <table class="list" id="species"></table>
+      <p><button class="link" id="addSpecies">+ Add species</button></p>
+      <p class="muted" style="margin-bottom:0">Labor factor: 1.0 is cherry or walnut. Harder, tear-out-prone woods are above 1, softwoods below.</p>
+    </div>
+    <div class="card"><h2>Todoist</h2>
+      <p id="todoistState"></p>
+      <div class="actions">
+        <input id="token" type="password" autocomplete="off" placeholder="Paste your Todoist API token" style="max-width:340px" aria-label="Todoist API token">
+        <button class="btn primary" id="saveToken">Save token</button>
+        <button class="btn" id="testToken">Test connection</button>
+        <button class="btn danger" id="clearToken">Remove</button>
+      </div>
+      <p class="muted" style="margin-bottom:0">Find your token in Todoist under Settings &rarr; Integrations &rarr; Developer. It is stored only in this browser and sent only to todoist.com.</p>
+    </div>
+    <div class="card"><h2>Sync between devices</h2>
+      <p id="syncInfo"></p>
+      <div class="grid" style="max-width:720px">
+        <label class="f w3"><span>Private GitHub repository</span><input id="syncRepo" placeholder="yourname/shop-tracker-data" value="${esc(store.sync.repo)}" autocomplete="off"></label>
+        <label class="f w3"><span>GitHub access token</span><input id="syncToken" type="password" autocomplete="off" placeholder="${store.sync.token ? 'Saved. Paste to replace' : 'Paste a fine-grained token'}"></label>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn primary" id="syncConnect">Connect</button>
+        <button class="btn" id="syncNow">Sync now</button>
+        <button class="btn danger" id="syncOff">Disconnect</button>
+      </div>
+      <p class="muted" style="margin-bottom:0">Projects and settings are kept in a file in that repository and shared with every device you connect. Use a fine-grained token limited to that one repository, with "Contents: Read and write". Tokens stay on this device, so the Todoist token is entered separately on each one.</p>
+    </div>
+    <div class="card"><h2>Backup</h2>
+      <p class="muted">Without sync, everything is stored only in this browser on this computer. Export a backup regularly, and before clearing browser data or moving this file.</p>
+      <div class="actions"><button class="btn" id="export">Export backup</button>
+        <button class="btn" id="import">Import backup&hellip;</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
+    </div>`;
+
+  $('#general').addEventListener('input', e => {
+    if (!e.target.dataset.path) return;
+    s[e.target.dataset.path] = inputValue(e.target);
+    settingsChanged();
+  });
+
+  const speciesTable = $('#species');
+  const renderSpecies = () => {
+    speciesTable.innerHTML = `<tr><th>Name</th><th>$ / board foot</th><th>Labor factor</th><th></th></tr>` + s.species.map((sp, i) => `<tr>
+      <td><input data-i="${i}" data-k="name" value="${esc(sp.name)}" aria-label="Species name"></td>
+      <td><input data-i="${i}" data-k="price" type="number" min="0" step="any" value="${esc(sp.price)}" aria-label="Price per board foot"></td>
+      <td><input data-i="${i}" data-k="labor" type="number" min="0.1" step="0.05" value="${esc(sp.labor)}" aria-label="Labor factor"></td>
+      <td><button class="link" data-remove="${i}">remove</button></td></tr>`).join('');
+  };
+  renderSpecies();
+  speciesTable.addEventListener('input', e => {
+    const { i, k } = e.target.dataset;
+    if (i === undefined) return;
+    s.species[i][k] = inputValue(e.target);
+    settingsChanged();
+  });
+  speciesTable.addEventListener('click', e => {
+    if (e.target.dataset.remove === undefined) return;
+    s.species.splice(Number(e.target.dataset.remove), 1);
+    settingsChanged();
+    renderSpecies();
+  });
+  $('#addSpecies').addEventListener('click', () => {
+    s.species.push({ name: '', price: 0, labor: 1 });
+    settingsChanged();
+    renderSpecies();
+    speciesTable.querySelector('tr:last-child input').focus();
+  });
+
+  const renderTodoistState = () => {
+    $('#todoistState').innerHTML = store.todoistToken
+      ? '<span class="pill accepted">Connected</span> A token is saved. Accepted quotes will create a Todoist project.'
+      : '<span class="pill">Not connected</span> Add a token to create a Todoist project when a quote is accepted.';
+  };
+  renderTodoistState();
+  $('#saveToken').addEventListener('click', () => {
+    const value = $('#token').value.trim();
+    if (!value) return toast('Paste a token first.');
+    store.todoistToken = value;
+    saveLocal();
+    $('#token').value = '';
+    renderTodoistState();
+    toast('Token saved.');
+  });
+  $('#clearToken').addEventListener('click', () => {
+    store.todoistToken = '';
+    saveLocal();
+    renderTodoistState();
+  });
+  $('#testToken').addEventListener('click', async () => {
+    if (!store.todoistToken) return toast('Save a token first.');
+    try { await todoist('GET', '/projects?limit=1'); toast('Connected to Todoist.'); }
+    catch (e) { toast(e.message); }
+  });
+
+  renderSyncInfo();
+  $('#syncConnect').addEventListener('click', async () => {
+    const repo = $('#syncRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$|\/$/g, '');
+    const token = $('#syncToken').value.trim() || store.sync.token;
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast('Enter the repository as owner/name, for example yourname/shop-tracker-data.');
+    if (!token) return toast('Paste a GitHub access token.');
+    const previous = store.sync;
+    store.sync = { repo, token, sha: '', dirty: true, lastSyncedAt: '' };
+    try {
+      const res = await github('');
+      if (res.status === 404) throw new Error('Repository not found, or the token has no access to it.');
+      if (!res.ok) throw new Error(`GitHub returned ${res.status}.`);
+      if (!(await res.json()).private) throw new Error('That repository is public. Use a private one so client details stay private.');
+    } catch (e) {
+      store.sync = previous;
+      return toast(e.message);
+    }
+    saveLocal();
+    $('#syncToken').value = '';
+    await sync();
+    toast(syncMessage || 'Sync is on.');
+  });
+  $('#syncNow').addEventListener('click', async () => {
+    if (!syncOn()) return toast('Connect a repository first.');
+    await sync();
+    toast(syncMessage || 'Synced.');
+  });
+  $('#syncOff').addEventListener('click', () => {
+    if (!syncOn() || !confirm('Stop syncing on this device? Your data stays here and in the repository.')) return;
+    clearTimeout(syncTimer);
+    store.sync = { repo: '', token: '', sha: '', dirty: false, lastSyncedAt: '' };
+    saveLocal();
+    setSyncState('');
+    route();
+  });
+
+  $('#export').addEventListener('click', () => {
+    const { todoistToken, sync, ...backup } = store;   // access tokens stay out of backup files
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+    a.download = `shop-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $('#import').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    let backup;
+    try { backup = JSON.parse(await file.text()); } catch { backup = null; }
+    if (!backup || !Array.isArray(backup.projects) || !backup.settings) return toast('That file is not a Shop Tracker backup.');
+    if (!confirm(`Replace the ${store.projects.length} project(s) here with the ${backup.projects.length} in this backup?`)) return;
+    localStorage.setItem(STORE_KEY, JSON.stringify({ ...backup, todoistToken: store.todoistToken, sync: store.sync }));
+    store = loadStore();
+    settingsChanged();
+    route();
+    toast('Backup imported.');
+  });
+}
+
+route();
+if (syncOn()) sync();
+// Pick up other devices' changes when coming back to this tab, and push pending ones when leaving it.
+document.addEventListener('visibilitychange', sync);
+window.addEventListener('online', sync);
+</script>
+</body>
+</html>
