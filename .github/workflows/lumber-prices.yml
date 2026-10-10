@@ -14,12 +14,9 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: actions/checkout@v5
       - name: Read price lists
-        run: python scripts/update_prices.py
+        run: python3 scripts/update_prices.py
       - name: Save prices
         run: |
           git config user.name "github-actions[bot]"
