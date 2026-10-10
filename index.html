@@ -35,6 +35,21 @@
   .muted { color: var(--muted); }
   .pagehead { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
   .pagehead .spacer { flex: 1; }
+  .back { display: inline-block; font-size: 13px; margin-bottom: 10px; }
+  .projhead { margin-bottom: 14px; }
+  .projhead .name { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .projhead .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; flex-wrap: wrap; }
+  .tabs a { padding: 8px 14px; margin-bottom: -1px; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent; }
+  .tabs a:hover { color: var(--ink); }
+  .tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }
+  .tabs .spacer { flex: 1; }
+  .tabs .side { font-size: 13px; padding-bottom: 6px; }
+  .stages { display: flex; gap: 4px; margin-bottom: 18px; flex-wrap: wrap; }
+  .stages button { flex: 1 1 120px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; }
+  .stages button:hover { border-color: var(--accent); }
+  .stages button.done { background: #ece3d5; color: var(--ink); }
+  .stages button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #e9dfd0; color: #5a4a3c; white-space: nowrap; }
   .pill.sent { background: #dfe8f3; color: #2c4f7a; }
   .pill.accepted, .pill.in_progress { background: #dcebdf; color: var(--good); }
@@ -61,6 +76,26 @@
   table.list td, table.list th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
   table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
 
+  /* calendar */
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .cal .dow { padding: 6px 8px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .cal .day { min-height: 92px; padding-bottom: 6px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .cal .day:nth-child(7n + 1) { border-left: 0; }
+  .cal .day.other { background: #f8f3ec; }
+  .cal .day.other .num { opacity: .45; }
+  .cal .num { display: inline-block; margin: 5px 6px 3px; font-size: 13px; min-width: 22px; text-align: center; border-radius: 99px; padding: 1px 4px; }
+  .cal .today .num { background: var(--accent); color: #fff; font-weight: 700; }
+  .cal .bar { display: block; height: 20px; line-height: 20px; margin: 0 -1px 3px 0; padding: 0 6px; font-size: 12px; font-weight: 600; color: #fff; text-decoration: none; white-space: nowrap; }
+  .cal .bar.label { position: relative; z-index: 1; }
+  .cal .bar.s { border-radius: 5px 0 0 5px; margin-left: 4px; }
+  .cal .bar.e { border-radius: 0 5px 5px 0; margin-right: 4px; }
+  .cal .bar.s.e { border-radius: 5px; }
+  .cal .bar.gap { visibility: hidden; }
+  .st-ideation { background: #2f7d4f; } .st-design { background: #2c5f9e; } .st-build { background: #c2610c; } .st-finishing { background: #b3261e; } .st-ready { background: #6f42a3; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+  .late { color: var(--bad); font-weight: 600; }
+
   /* editor */
   .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
   @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .board { grid-template-columns: repeat(5, 240px); } }
@@ -86,6 +121,18 @@
   .note { font-size: 13px; padding: 8px 10px; border-radius: 7px; background: #f3ead9; margin: 0 0 10px; }
   .note.err { background: #f6e1dd; color: var(--bad); }
   .note.ok { background: #dcebdf; color: var(--good); }
+
+  /* design notes */
+  .design { max-width: 860px; }
+  .design textarea { field-sizing: content; min-height: 84px; }
+  .design .brief { min-height: 140px; }
+  .entry { border-top: 1px solid var(--line); padding: 14px 0; }
+  .entry:last-child { padding-bottom: 0; }
+  .entry .actions { margin-bottom: 8px; }
+  .entry .actions input, .entry .actions select { width: auto; }
+  .entry .spacer { flex: 1; }
+  .links { font-size: 13px; overflow-wrap: anywhere; }
+  .links a { display: block; margin-top: 6px; }
 
   /* quote */
   .quote { max-width: 780px; margin: 0 auto; padding: 44px; }
@@ -114,6 +161,7 @@
   <a class="brand" href="#/">Shop Tracker</a>
   <nav>
     <a href="#/" data-nav="board">Projects</a>
+    <a href="#/calendar" data-nav="calendar">Calendar</a>
     <a href="#/new" data-nav="new">New quote</a>
     <a href="#/settings" data-nav="settings">Settings</a>
   </nav>
@@ -175,14 +223,36 @@ const STATUSES = [
   ['complete', 'Complete'], ['delivered', 'Delivered & paid'], ['declined', 'Declined'],
 ];
 const STATUS_NAME = Object.fromEntries(STATUSES);
+// The phase of the work itself, tracked separately from the quote/job status above.
+const STAGES = [['ideation', 'Ideation'], ['design', 'Design'], ['build', 'Build'], ['finishing', 'Finishing'], ['ready', 'Ready for delivery']];
+const STAGE_NAME = Object.fromEntries(STAGES);
+const stageOf = p => STAGE_NAME[p.stage] ? p.stage : 'ideation';
 const NEXT_STEP = {
   draft: ['sent', 'Mark quote as sent'], sent: ['accepted', 'Quote accepted'], accepted: ['in_progress', 'Start work'],
   in_progress: ['complete', 'Mark complete'], complete: ['delivered', 'Delivered & paid'],
 };
+const STATES = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'],
+  ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'],
+  ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'],
+  ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'],
+  ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'],
+  ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'],
+  ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'],
+  ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+];
+const STATE_NAME = Object.fromEntries(STATES);
 const DEFAULT_SETTINGS = {
+  // Statewide sales tax rates (%), without city or county add-ons. Starting values only: edit them in Settings.
+  state_tax: {
+    AL: 4, AK: 0, AZ: 5.6, AR: 6.5, CA: 7.25, CO: 2.9, CT: 6.35, DE: 0, DC: 6, FL: 6, GA: 4, HI: 4, ID: 6, IL: 6.25, IN: 7, IA: 6, KS: 6.5,
+    KY: 6, LA: 5, ME: 5.5, MD: 6, MA: 6.25, MI: 6, MN: 6.875, MS: 7, MO: 4.225, MT: 0, NE: 5.5, NV: 6.85, NH: 0, NJ: 6.625, NM: 4.875,
+    NY: 4, NC: 4.75, ND: 5, OH: 5.75, OK: 4.5, OR: 0, PA: 6, RI: 7, SC: 6, SD: 4.2, TN: 7, TX: 6.25, UT: 6.1, VT: 6, VA: 5.3, WA: 6.5,
+    WV: 6, WI: 5, WY: 4,
+  },
   business_name: '', business_contact: '',
   quote_terms: '50% deposit to begin work, balance due on completion. Wood is a natural material; grain and color will vary.',
-  hourly_rate: 65, contingency_pct: 10, markup_pct: 20, tax_pct: 0, deposit_pct: 50, waste_pct: 25, shop_speed: 1, quote_valid_days: 30,
+  hourly_rate: 65, design_retainer: 300, contingency_pct: 10, markup_pct: 20, tax_pct: 0, deposit_pct: 50, waste_pct: 25, shop_speed: 1, quote_valid_days: 30,
   // price is $ per board foot; labor is how much slower (or faster) the species is to work than cherry or walnut
   species: [
     { name: 'Pine', price: 4, labor: 0.9 }, { name: 'Poplar', price: 5, labor: 0.9 }, { name: 'Red oak', price: 7, labor: 1 },
@@ -252,10 +322,13 @@ function price(data) {
   const subtotal = laborCost + materialsBase * (1 + pos(r.markup_pct) / 100) + otherCosts;
   const tax = subtotal * pos(r.tax_pct) / 100;
   const total = subtotal + tax;
+  const retainer = Math.min(pos(data.retainer), total);
+  const balance = total - retainer;
   return {
     board_feet: est.boardFeet, labor_hours: cents(laborHours), contingency_hours: contingencyHours, labor_cost: cents(laborCost),
     materials_est: cents(materialsEst), materials_cost: cents(materialsBase * (1 + pos(r.markup_pct) / 100)), other_costs: cents(otherCosts),
-    subtotal: cents(subtotal), tax: cents(tax), total: cents(total), deposit: cents(total * pos(r.deposit_pct) / 100),
+    subtotal: cents(subtotal), tax: cents(tax), total: cents(total),
+    retainer: cents(retainer), balance: cents(balance), deposit: cents(balance * pos(r.deposit_pct) / 100),
   };
 }
 
@@ -349,7 +422,7 @@ function todoistPlan(p) {
   for (const phase of data.phases) {
     if (pos(phase.hours) > 0 && phase.name) tasks.push({ content: phase.name, description: `Estimated ${hrs(phase.hours)}` });
   }
-  tasks.push({ content: `Collect final payment (${money(calc.total - calc.deposit)})`, description: '' });
+  tasks.push({ content: `Collect final payment (${money((calc.balance ?? calc.total) - calc.deposit)})`, description: '' });
   const name = projectName(p) + (data.client_name ? ` - ${data.client_name}` : '');
   return { name: name.slice(0, 120), tasks };
 }
@@ -522,7 +595,9 @@ function route() {
   let nav = 'board';
   if (parts[0] === 'new') { nav = 'new'; showEditor(null); }
   else if (parts[0] === 'settings') { nav = 'settings'; showSettings(); }
+  else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
   else if (project && parts[2] === 'quote') showQuote(project);
+  else if (project && parts[2] === 'design') showDesign(project);
   else if (project) showEditor(project);
   else showBoard();
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav));
@@ -551,9 +626,11 @@ function showBoard() {
       <b>${esc(projectName(p))}</b>
       <div class="row"><span>${esc(p.data.client_name || 'No client yet')}</span><span class="amt">${money(p.calc.total)}</span></div>
       <div class="row"><span>${esc(p.quote_number)}</span><span>${hrs(p.calc.labor_hours + p.calc.contingency_hours)}</span></div>
-      ${p.data.due_date ? `<div class="row"><span>Due ${esc(fmtDate(p.data.due_date))}</span></div>` : ''}
+      <div class="row" style="margin-top:6px"><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>${p.data.due_date ? `<span>Due ${esc(fmtDate(p.data.due_date))}</span>` : ''}</div>
     </a>`;
   const archive = [...by('delivered'), ...by('declined')];
+  // Delivered and declined projects leave the board for the archive.
+  const inStage = key => store.projects.filter(p => !archive.includes(p) && stageOf(p) === key).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   view.innerHTML = `
     <div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn primary" href="#/new">New quote</a></div>
     <div class="stats">
@@ -563,8 +640,8 @@ function showBoard() {
       <div class="card stat"><span class="muted">Completed</span><b>${money(sum(done, p => p.calc.total))}</b><span class="muted">${done.length} finished</span></div>
     </div>
     <div class="board">
-      ${['draft', 'sent', 'accepted', 'in_progress', 'complete'].map(s => `<section class="col" data-status="${s}">
-        <h2><span>${STATUS_NAME[s]}</span><span>${by(s).length}</span></h2>${by(s).map(jobCard).join('')}</section>`).join('')}
+      ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
+        <h2><span>${name}</span><span>${inStage(key).length}</span></h2>${inStage(key).map(jobCard).join('')}</section>`).join('')}
     </div>
     ${archive.length ? `<div class="card" style="margin-top:20px"><h2>Archive</h2><table class="list">
       <tr><th>Project</th><th>Client</th><th>Quote</th><th>Total</th><th>Status</th></tr>
@@ -572,7 +649,7 @@ function showBoard() {
         <td>${esc(p.quote_number)}</td><td>${money(p.calc.total)}</td><td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></td></tr>`).join('')}
       </table></div>` : ''}`;
 
-  // Drag a card to another column to change its status.
+  // Drag a card to another column to change its phase.
   const board = $('.board');
   let dragged = null;
   const clearOver = () => board.querySelectorAll('.col.over').forEach(c => c.classList.remove('over'));
@@ -600,20 +677,98 @@ function showBoard() {
     const col = e.target.closest('.col');
     if (!dragged || !col) return;
     e.preventDefault();
-    setStatus(dragged, col.dataset.status);
+    setStage(dragged, col.dataset.stage);
+    showBoard();
   });
+}
+
+// ---------- calendar of accepted projects ----------
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function showCalendar(month) {
+  const today = ymd(new Date());
+  const [year, mon] = (/^\d{4}-\d{2}$/.test(month || '') ? month : today.slice(0, 7)).split('-').map(Number);
+  const monthLink = offset => `#/calendar/${ymd(new Date(year, mon - 1 + offset, 1)).slice(0, 7)}`;
+
+  // A job goes on the calendar once its quote is accepted, and runs from that day to its target
+  // completion date. It comes off when it is delivered. Bars are colored by the job's current phase.
+  const jobs = store.projects.filter(p => ['accepted', 'in_progress', 'complete'].includes(p.status)).map(p => {
+    const began = p.history.findLast(h => h.status === 'accepted') || p.history.findLast(h => h.status === 'in_progress');
+    const start = ymd(new Date(began?.at || p.updated_at));
+    const due = p.data.due_date || '';
+    return { p, start, due, end: due > start ? due : start, color: `st-${stageOf(p)}`, stage: STAGE_NAME[stageOf(p)] };
+  }).sort((a, b) => a.start.localeCompare(b.start));
+
+  let cells = '';
+  const day = new Date(year, mon - 1, 1);
+  day.setDate(1 - day.getDay());   // back up to the Sunday that starts the first week
+  do {
+    const week = Array.from({ length: 7 }, (_, i) => new Date(day.getFullYear(), day.getMonth(), day.getDate() + i));
+    // Jobs keep the same row all week so their bars line up from day to day.
+    const active = jobs.filter(j => j.start <= ymd(week[6]) && j.end >= ymd(week[0]));
+    for (const d of week) {
+      const key = ymd(d);
+      cells += `<div class="day ${d.getMonth() === mon - 1 ? '' : 'other'} ${key === today ? 'today' : ''}"><span class="num">${d.getDate()}</span>${active.map(j => {
+        if (key < j.start || key > j.end) return '<span class="bar gap"></span>';
+        const named = key === j.start || d.getDay() === 0;
+        const text = named ? `${projectName(j.p)} \u00b7 ${j.stage}${key === j.due ? ' (due)' : ''}` : key === j.due ? 'Due' : '';
+        return `<a class="bar ${j.color} ${named ? 'label' : ''} ${key === j.start ? 's' : ''} ${key === j.end ? 'e' : ''}" href="#/p/${j.p.id}"
+          title="${esc(projectName(j.p))}${j.p.data.client_name ? ` \u2013 ${esc(j.p.data.client_name)}` : ''}">${esc(text)}</a>`;
+      }).join('')}</div>`;
+    }
+    day.setDate(day.getDate() + 7);
+  } while (day.getMonth() === mon - 1 && day.getFullYear() === year);
+
+  const daysLeft = due => Math.round((new Date(due + 'T00:00') - new Date(today + 'T00:00')) / 86400000);
+  const dueText = j => {
+    if (!j.due) return `<a href="#/p/${j.p.id}">Set a target date</a>`;
+    const n = daysLeft(j.due);
+    return `${esc(fmtDate(j.due))} <span class="${n < 0 ? 'late' : 'muted'}">(${n < 0 ? `${-n} day${n === -1 ? '' : 's'} overdue` : n === 0 ? 'today' : `${n} day${n === 1 ? '' : 's'} left`})</span>`;
+  };
+  view.innerHTML = `
+    <div class="pagehead">
+      <h1>${new Date(year, mon - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h1><span class="spacer"></span>
+      <a class="btn" href="${monthLink(-1)}" aria-label="Previous month">&larr;</a>
+      <a class="btn" href="#/calendar">Today</a>
+      <a class="btn" href="${monthLink(1)}" aria-label="Next month">&rarr;</a>
+    </div>
+    <div class="cal">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(n => `<div class="dow">${n}</div>`).join('')}${cells}</div>
+    <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}</div>
+    <div class="card" style="margin-top:16px"><h2>Accepted projects</h2>
+      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client</th><th>Phase</th><th>Started</th><th>Target completion</th></tr>
+        ${jobs.map(j => `<tr><td><span class="swatch ${j.color}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
+          <td>${esc(j.p.data.client_name)}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${esc(fmtDate(j.start))}</td><td>${dueText(j)}</td></tr>`).join('')}</table>`
+        : '<p class="muted" style="margin:0">Nothing is scheduled. A project appears here once its quote is marked accepted, from that day to its target completion date.</p>'}
+    </div>`;
 }
 
 // ---------- quote editor / project page ----------
 function blankData() {
   const s = store.settings, [length, width, height] = TYPES.dining_table.ref;
   return {
-    title: '', client_name: '', client_email: '', client_phone: '', due_date: '', notes: '',
+    title: '', client_name: '', client_email: '', client_phone: '', client_state: '', due_date: '', notes: '',
     spec: { type: 'dining_table', description: '', species: (s.species.find(x => x.name === 'Walnut') || s.species[0] || {}).name || '',
       length, width, height, complexity: 'standard', finish: 'hardwax', drawers: 0, doors: 0, shelves: 0, delivery_hours: 0 },
     rates: { hourly_rate: s.hourly_rate, contingency_pct: s.contingency_pct, markup_pct: s.markup_pct, tax_pct: s.tax_pct, deposit_pct: s.deposit_pct },
-    phases: [], materials_override: '', other_costs: 0,
+    phases: [], materials_override: '', other_costs: 0, retainer: s.design_retainer,
   };
+}
+
+// Heading and tabs shared by a project's Details and Client quote views.
+function projectHeader(p, tab, side) {
+  return `<div class="noprint">
+    <a href="#/" class="back">&larr; Projects</a>
+    <div class="projhead">
+      <div class="name"><h1 id="projTitle">${esc(projectName(p))}</h1><span class="pill ${p.status}" id="statusPill">${STATUS_NAME[p.status]}</span></div>
+      <div class="sub">${esc(p.quote_number)}</div>
+    </div>
+    <nav class="tabs">
+      <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
+      <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
+      <a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>
+      <span class="spacer"></span><span class="side">${side}</span>
+    </nav>
+  </div>`;
 }
 
 function showEditor(project) {
@@ -629,17 +784,14 @@ function showEditor(project) {
   if (d.spec.species && !speciesNames.includes(d.spec.species)) speciesNames.push(d.spec.species);
 
   view.innerHTML = `
-    <div class="pagehead">
-      <a href="#/" class="btn small">&larr; Projects</a>
-      <h1>${project ? esc(project.quote_number) : 'New quote'}</h1>
-      ${project ? `<span class="pill ${project.status}" id="statusPill">${STATUS_NAME[project.status]}</span>` : ''}
-      <span class="spacer"></span>
-      ${project ? `<span class="muted" id="saved">All changes saved</span><a class="btn" href="#/p/${project.id}/quote">View client quote</a>` : ''}
-    </div>
+    ${project ? projectHeader(project, 'details', '<span class="muted">Changes save automatically</span>')
+      : '<a href="#/" class="back">&larr; Projects</a><div class="pagehead"><h1>New quote</h1></div>'}
+    ${project ? '<div class="stages" id="stages" role="group" aria-label="Project phase"></div>' : ''}
     <div class="cols">
       <form class="card" id="form" autocomplete="off">
         <fieldset><h2>Client</h2><div class="grid">
           ${inp('Name', 'client_name')}${inp('Email', 'client_email', 'email')}${inp('Phone', 'client_phone', 'tel')}
+          ${sel('State (sets the sales tax)', 'client_state', [['', 'Not set'], ...STATES], 'w3')}
         </div></fieldset>
         <fieldset><h2>What's being built</h2><div class="grid">
           ${inp('Project name', 'title', 'text', 'w6', 'placeholder="e.g. Live-edge dining table"')}
@@ -657,6 +809,7 @@ function showEditor(project) {
         <fieldset><h2>Pricing</h2><div class="grid">
           ${numInp('Hourly rate ($)', 'rates.hourly_rate')}${numInp('Contingency (%)', 'rates.contingency_pct')}${numInp('Materials markup (%)', 'rates.markup_pct')}
           ${numInp('Sales tax (%)', 'rates.tax_pct')}${numInp('Deposit (%)', 'rates.deposit_pct')}${numInp('Hardware & other costs ($)', 'other_costs')}
+          ${numInp('Design retainer ($)', 'retainer', 'any', 'w3')}
           ${numInp('Lumber cost override ($)', 'materials_override', 'any', 'w3', 'id="override"')}
         </div></fieldset>
         <fieldset><h2>Schedule & notes</h2><div class="grid">
@@ -676,6 +829,11 @@ function showEditor(project) {
   form.addEventListener('input', e => {
     const el = e.target;
     if (!el.dataset.path) return;
+    if (el.dataset.path === 'client_state') {
+      // Choosing the client's state applies that state's sales tax; the rate can still be adjusted below.
+      d.rates.tax_pct = pos(el.value ? store.settings.state_tax[el.value] : store.settings.tax_pct);
+      $('[data-path="rates.tax_pct"]', form).value = d.rates.tax_pct;
+    }
     if (el.dataset.path === 'spec.type') {
       // Swap in the new type's typical size unless the dimensions were customised.
       const oldRef = TYPES[d.spec.type].ref, newRef = TYPES[el.value].ref;
@@ -724,6 +882,7 @@ function showEditor(project) {
       persist();
       location.hash = '#/';
     });
+    renderStages();
     renderStatusCard();
     renderTodoistCard();
   }
@@ -734,6 +893,7 @@ function changed() {
   ed.dirty = true;
   renderPanel();
   if (ed.project) {
+    $('#projTitle').textContent = projectName(ed.project);
     ed.project.updated_at = new Date().toISOString();
     persist();
   }
@@ -760,9 +920,11 @@ function renderPanel() {
     <div class="tot"><span>Labor cost <small>${hrs(calc.labor_hours + calc.contingency_hours)} @ ${money(pos(d.rates.hourly_rate))}/h</small></span><b>${money(calc.labor_cost)}</b></div>
     <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `~${calc.board_feet} bf ${esc(d.spec.species)}`} + ${+pos(d.rates.markup_pct)}% markup</small></span><b>${money(calc.materials_cost)}</b></div>
     ${calc.other_costs ? `<div class="tot"><span>Hardware & other</span><b>${money(calc.other_costs)}</b></div>` : ''}
-    ${calc.tax ? `<div class="tot"><span>Sales tax <small>${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
+    ${calc.tax ? `<div class="tot"><span>Sales tax <small>${d.client_state ? `${esc(d.client_state)} ` : ''}${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
     <div class="tot grand"><span>Quote total</span><span>${money(calc.total)}</span></div>
-    <div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%</small></span><span class="muted">${money(calc.deposit)}</span></div>
+    ${calc.retainer ? `<div class="tot"><span>Design retainer <small>already paid</small></span><span>&minus; ${money(calc.retainer)}</span></div>
+    <div class="tot"><b>Balance due</b><b>${money(calc.balance)}</b></div>` : ''}
+    <div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''}</small></span><span class="muted">${money(calc.deposit)}</span></div>
     ${ed.project ? '' : '<hr class="rule"><button type="button" class="btn primary" data-act="create" style="width:100%">Save quote</button>'}`;
 }
 
@@ -770,7 +932,7 @@ function createProject() {
   const stamp = new Date().toISOString(), id = store.nextId++;
   const project = {
     id, quote_number: quoteNumber(id, stamp), status: 'draft',
-    data: ed.data, calc: price(ed.data), todoist: {}, history: [{ status: 'draft', at: stamp }], created_at: stamp, updated_at: stamp,
+    stage: 'ideation', data: ed.data, calc: price(ed.data), todoist: {}, history: [{ status: 'draft', at: stamp }], created_at: stamp, updated_at: stamp,
   };
   store.projects.push(project);
   persist();
@@ -793,9 +955,29 @@ function renderStatusCard() {
         ${STATUSES.map(([k, n]) => `<option value="${k}" ${k === p.status ? 'selected' : ''}>${n}</option>`).join('')}
       </select>
     </div>
-    <ul class="history">${p.history.map(h => `<li><span>${STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
+    <ul class="history">${p.history.map(h => `<li><span>${h.stage ? `Phase: ${STAGE_NAME[h.stage]}` : STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
   card.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', () => setStatus(p, b.dataset.status)));
   $('#statusSelect').addEventListener('change', e => setStatus(p, e.target.value));
+}
+
+function renderStages() {
+  const p = ed.project, current = STAGES.findIndex(([key]) => key === stageOf(p));
+  const el = $('#stages');
+  el.innerHTML = STAGES.map(([key, name], i) =>
+    `<button type="button" data-stage="${key}" class="${i < current ? 'done' : i === current ? 'on' : ''}" ${i === current ? 'aria-current="step"' : ''}>${i < current ? '&#10003; ' : ''}${name}</button>`).join('');
+  el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    setStage(p, b.dataset.stage);
+    renderStages();
+    renderStatusCard();
+  }));
+}
+
+function setStage(p, stage) {
+  if (stage === stageOf(p)) return;
+  p.stage = stage;
+  p.updated_at = new Date().toISOString();
+  p.history.push({ stage, at: p.updated_at });
+  persist();
 }
 
 async function setStatus(p, status) {
@@ -838,6 +1020,69 @@ function renderTodoistCard() {
   $('#sync', card)?.addEventListener('click', () => runTodoistSync(p));
 }
 
+// ---------- design notes (internal; never shown on the client quote) ----------
+const NOTE_KINDS = ['Client call', 'Site visit', 'Email or message', 'Research', 'Other'];
+
+// Web addresses typed into a note, as links that open in a new tab.
+const linksHtml = text => (String(text).match(/https?:\/\/[^\s<>"]+/g) || [])
+  .map(url => url.replace(/[.,;:!?)\]]+$/, ''))
+  .map(url => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`).join('');
+
+function showDesign(p) {
+  const design = p.data.design ??= { brief: '', notes: [] };
+  const touch = () => { p.updated_at = new Date().toISOString(); persist(); };
+  const render = () => {
+    // Newest first; entries added on the same day keep the latest on top.
+    const order = design.notes.map((_, i) => i).sort((a, b) => design.notes[b].date.localeCompare(design.notes[a].date) || b - a);
+    view.innerHTML = `
+      ${projectHeader(p, 'design', '<span class="muted">Changes save automatically</span>')}
+      <div class="design">
+        <div class="card"><h2>Design brief</h2>
+          <textarea class="brief" id="brief" placeholder="The current picture of what the client wants: how the piece will be used, style and references, the space it's going into, must-haves, budget and timing.">${esc(design.brief)}</textarea>
+          <div class="links" id="briefLinks">${linksHtml(design.brief)}</div>
+        </div>
+        <div class="card" id="entries">
+          <div class="actions"><h2 style="margin:0">Calls &amp; due diligence</h2><span class="spacer" style="flex:1"></span>
+            <button class="btn primary small" data-act="add">+ Add note</button></div>
+          ${order.length ? '' : '<p class="muted" style="margin:12px 0 0">No notes yet. Add one after each client call, site visit or piece of research.</p>'}
+          <div style="margin-top:12px">${order.map(i => `<div class="entry">
+            <div class="actions">
+              <input type="date" data-i="${i}" data-k="date" value="${esc(design.notes[i].date)}" aria-label="Date">
+              <select data-i="${i}" data-k="kind" aria-label="Type of note">${[...new Set([...NOTE_KINDS, design.notes[i].kind])].map(k =>
+                `<option ${k === design.notes[i].kind ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select>
+              <span class="spacer"></span><button class="link" data-act="remove" data-i="${i}">remove</button>
+            </div>
+            <textarea data-i="${i}" data-k="text" placeholder="What was discussed, decided or found. Paste links to photos or files and they become clickable below." aria-label="Note">${esc(design.notes[i].text)}</textarea>
+            <div class="links" data-links="${i}">${linksHtml(design.notes[i].text)}</div>
+          </div>`).join('')}</div>
+        </div>
+      </div>`;
+    $('#brief').addEventListener('input', e => { design.brief = e.target.value; $('#briefLinks').innerHTML = linksHtml(design.brief); touch(); });
+    const entries = $('#entries');
+    entries.addEventListener('input', e => {
+      const { i, k } = e.target.dataset;
+      if (i === undefined) return;
+      design.notes[i][k] = e.target.value;
+      if (k === 'text') $(`[data-links="${i}"]`).innerHTML = linksHtml(e.target.value);
+      touch();
+    });
+    entries.addEventListener('click', e => {
+      const act = e.target.dataset.act;
+      if (act === 'add') {
+        design.notes.push({ date: ymd(new Date()), kind: NOTE_KINDS[0], text: '' });
+      } else if (act === 'remove') {
+        const note = design.notes[e.target.dataset.i];
+        if (note.text.trim() && !confirm('Remove this note?')) return;
+        design.notes.splice(e.target.dataset.i, 1);
+      } else return;
+      touch();
+      render();
+      if (act === 'add') $(`textarea[data-i="${design.notes.length - 1}"]`).focus();
+    });
+  };
+  render();
+}
+
 // ---------- client-facing quote ----------
 function showQuote(p) {
   const { data: d, calc } = p, s = store.settings, spec = d.spec;
@@ -847,10 +1092,7 @@ function showQuote(p) {
   const extras = [['drawers', 'drawer'], ['doors', 'door'], ['shelves', 'shelf', 'shelves']]
     .filter(([k]) => pos(spec[k]) > 0).map(([k, one, many]) => `${spec[k]} ${spec[k] === 1 ? one : many || one + 's'}`).join(', ');
   view.innerHTML = `
-    <div class="pagehead noprint">
-      <a href="#/p/${p.id}" class="btn small">&larr; Back to project</a><span class="spacer"></span>
-      <button class="btn primary" onclick="window.print()">Print / save as PDF</button>
-    </div>
+    ${projectHeader(p, 'quote', '<button class="btn primary small" onclick="window.print()">Print / save as PDF</button>')}
     <article class="card quote">
       <div class="qhead">
         <div><h1>${esc(s.business_name || 'Quote')}</h1><div class="muted pre">${esc(s.business_contact)}</div></div>
@@ -868,12 +1110,12 @@ function showQuote(p) {
       </dl>
       ${spec.description ? `<p class="pre">${esc(spec.description)}</p>` : ''}
       <table>
-        <tr><td>Labor<br><span class="muted">Approx. ${hrs(calc.labor_hours + calc.contingency_hours)} of shop time</span></td><td>${money(calc.labor_cost)}</td></tr>
-        <tr><td>Materials<br><span class="muted">${esc(spec.species)} lumber and supplies</span></td><td>${money(calc.materials_cost)}</td></tr>
-        ${calc.other_costs ? `<tr><td>Hardware & other</td><td>${money(calc.other_costs)}</td></tr>` : ''}
-        ${calc.tax ? `<tr><td>Sales tax (${+pos(d.rates.tax_pct)}%)</td><td>${money(calc.tax)}</td></tr>` : ''}
+        <tr><td>${esc(projectName(p))}<br><span class="muted">Design, materials and craftsmanship</span></td><td>${money(calc.subtotal)}</td></tr>
+        ${calc.tax ? `<tr><td>${esc(STATE_NAME[d.client_state] || '')} sales tax (${+pos(d.rates.tax_pct)}%)</td><td>${money(calc.tax)}</td></tr>` : ''}
         <tr class="grand"><td>Total</td><td>${money(calc.total)}</td></tr>
-        ${calc.deposit ? `<tr><td class="muted">Deposit to begin (${+pos(d.rates.deposit_pct)}%)</td><td>${money(calc.deposit)}</td></tr>` : ''}
+        ${calc.retainer ? `<tr><td>Less design retainer paid</td><td>&minus; ${money(calc.retainer)}</td></tr>
+        <tr><td><b>Balance due</b></td><td><b>${money(calc.balance)}</b></td></tr>` : ''}
+        ${calc.deposit ? `<tr><td class="muted">Deposit to begin (${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''})</td><td>${money(calc.deposit)}</td></tr>` : ''}
       </table>
       <p class="muted pre">${esc(s.quote_terms)}</p>
     </article>`;
@@ -901,12 +1143,20 @@ function showSettings() {
         <label class="f w6"><span>Quote terms</span><textarea data-path="quote_terms">${esc(s.quote_terms)}</textarea></label>
       </div></fieldset>
       <fieldset><h2>Defaults for new quotes</h2><div class="grid">
-        ${inp('Hourly rate ($)', 'hourly_rate', 'number')}${inp('Contingency (%)', 'contingency_pct', 'number')}${inp('Materials markup (%)', 'markup_pct', 'number')}
-        ${inp('Sales tax (%)', 'tax_pct', 'number')}${inp('Deposit (%)', 'deposit_pct', 'number')}${inp('Quote valid for (days)', 'quote_valid_days', 'number')}
+        ${inp('Hourly rate ($)', 'hourly_rate', 'number')}${inp('Design retainer ($)', 'design_retainer', 'number')}${inp('Contingency (%)', 'contingency_pct', 'number')}${inp('Materials markup (%)', 'markup_pct', 'number')}
+        ${inp('Sales tax when no state is set (%)', 'tax_pct', 'number')}${inp('Deposit (%)', 'deposit_pct', 'number')}${inp('Quote valid for (days)', 'quote_valid_days', 'number')}
       </div></fieldset>
       <fieldset><h2>Estimating</h2><div class="grid">
         ${inp('Shop speed multiplier', 'shop_speed', 'number', 'w3')}${inp('Lumber waste allowance (%)', 'waste_pct', 'number', 'w3')}
       </div><p class="muted" style="margin-bottom:0">Shop speed scales every estimated hour: if jobs take you about 20% longer than estimated, set it to 1.2.</p></fieldset>
+    </div>
+    <div class="card"><h2>Sales tax by state</h2>
+      <p class="muted" style="margin-top:0">Choosing a client's state on a quote applies the rate below. These are statewide rates only, without city or county taxes, so check them against current rates before relying on them.</p>
+      <details><summary class="link" style="display:inline-block">Show and edit state rates</summary>
+        <div class="grid" id="stateTax" style="grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); margin-top:12px">
+          ${STATES.map(([code, name]) => `<label class="f" style="grid-column:auto"><span>${name}</span><input type="number" min="0" step="any" data-state="${code}" value="${esc(s.state_tax[code] ?? 0)}"></label>`).join('')}
+        </div>
+      </details>
     </div>
     <div class="card"><h2>Wood species</h2>
       <table class="list" id="species"></table>
@@ -957,6 +1207,10 @@ function showSettings() {
       <td><button class="link" data-remove="${i}">remove</button></td></tr>`).join('');
   };
   renderSpecies();
+  $('#stateTax').addEventListener('input', e => {
+    s.state_tax[e.target.dataset.state] = inputValue(e.target);
+    settingsChanged();
+  });
   speciesTable.addEventListener('input', e => {
     const { i, k } = e.target.dataset;
     if (i === undefined) return;
