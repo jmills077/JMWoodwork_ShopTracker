@@ -6,8 +6,8 @@
 <title>Shop Tracker</title>
 <style>
   :root {
-    --bg: #f5efe6; --card: #fffdf9; --ink: #2b2420; --muted: #7b6f66; --line: #e3d9cb;
-    --accent: #7a4a2b; --accent-ink: #fff; --good: #2f6b4a; --bad: #a43a2e; --warn: #9a6a12;
+    --bg: #faf5ec; --card: #fffdf8; --ink: #2e2320; --muted: #7a6a62; --line: #eadfce;
+    --accent: #a63a2b; --accent-ink: #fffaf0; --good: #2f7a4f; --bad: #b42318;
     --radius: 10px;
   }
   * { box-sizing: border-box; }
@@ -15,17 +15,17 @@
   a { color: var(--accent); }
   h1 { font-size: 24px; margin: 0; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
-  header.top { background: #3a2a20; color: #f5efe6; display: flex; align-items: center; gap: 24px; padding: 12px 24px; flex-wrap: wrap; }
+  header.top { background: #a63a2b; color: #fdf6e9; display: flex; align-items: center; gap: 24px; padding: 12px 24px; flex-wrap: wrap; }
   header.top .brand { font-weight: 700; font-size: 17px; color: inherit; text-decoration: none; }
   header.top nav { display: flex; gap: 4px; flex: 1; }
-  header.top nav a { color: #e6d9c8; text-decoration: none; padding: 6px 12px; border-radius: 6px; }
-  header.top nav a.on, header.top nav a:hover { background: #55402f; color: #fff; }
-  #syncState { color: #cdbfae; font-size: 13px; text-decoration: none; }
-  #syncState.error { color: #ffb4a8; }
+  header.top nav a { color: #f8e1d8; text-decoration: none; padding: 6px 12px; border-radius: 6px; }
+  header.top nav a.on, header.top nav a:hover { background: #8a2e21; color: #fff; }
+  #syncState { color: #f3cfc4; font-size: 13px; text-decoration: none; }
+  #syncState.error { color: #fff; font-weight: 700; text-decoration: underline; }
   main { max-width: 1240px; margin: 0 auto; padding: 24px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
   .card + .card { margin-top: 16px; }
-  .btn { display: inline-block; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 8px 14px; border-radius: 8px; text-decoration: none; }
+  .btn { display: inline-block; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid #dccfbb; background: #fffdf8; color: var(--ink); padding: 8px 14px; border-radius: 8px; text-decoration: none; }
   .btn:hover { border-color: var(--accent); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .btn.danger { color: var(--bad); }
@@ -45,31 +45,37 @@
   .tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }
   .tabs .spacer { flex: 1; }
   .tabs .side { font-size: 13px; padding-bottom: 6px; }
-  .stages { display: flex; gap: 4px; margin-bottom: 18px; flex-wrap: wrap; }
-  .stages button { flex: 1 1 120px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; }
+  .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin-bottom: 18px; }
+  .stages .due { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 12px; color: var(--muted); }
+  .stages .due input { padding: 4px 6px; font-size: 13px; }
+  .stages .due.late { color: var(--bad); font-weight: 600; }
+  .stages .due.late input { border-color: var(--bad); }
+  .stages button { width: 100%; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; }
   .stages button:hover { border-color: var(--accent); }
-  .stages button.done { background: #ece3d5; color: var(--ink); }
+  .stages button.done { background: #f3e2d4; color: var(--ink); }
   .stages button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #e9dfd0; color: #5a4a3c; white-space: nowrap; }
-  .pill.sent { background: #dfe8f3; color: #2c4f7a; }
-  .pill.accepted, .pill.in_progress { background: #dcebdf; color: var(--good); }
-  .pill.complete, .pill.delivered { background: #2f6b4a; color: #fff; }
-  .pill.declined { background: #f1dcd8; color: var(--bad); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #efe6d6; color: #5c4d43; white-space: nowrap; }
+  .pill.sent { background: #dde8f5; color: #2b5a94; }
+  .pill.accepted, .pill.in_progress { background: #dcefe0; color: var(--good); }
+  .pill.complete, .pill.delivered { background: #2f7a4f; color: #fff; }
+  .pill.declined { background: #f8dcd7; color: var(--bad); }
 
   /* board */
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
   .stats .card { margin-top: 0; }
   .stat b { display: block; font-size: 22px; }
   .board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
-  .col { background: #ece3d5; border-radius: var(--radius); padding: 10px; min-height: 120px; }
+  .col { background: #f1e7d6; border-radius: var(--radius); padding: 10px; min-height: 120px; }
   .col h2 { margin: 4px 4px 10px; display: flex; justify-content: space-between; }
   .job { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: inherit; }
   .job:hover { border-color: var(--accent); }
   .job[draggable] { cursor: grab; }
   .job.dragging { opacity: .4; }
-  .col.over { outline: 2px dashed var(--accent); outline-offset: -2px; background: #e4d6c1; }
+  .col.over { outline: 2px dashed var(--accent); outline-offset: -2px; background: #ecd5c4; }
   .job b { display: block; }
   .job .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+  .job .foot { margin-top: 6px; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+  .job .foot span { white-space: nowrap; }
   .job .amt { color: var(--ink); font-weight: 600; }
   .empty { text-align: center; padding: 56px 20px; }
   table.list { width: 100%; border-collapse: collapse; }
@@ -81,7 +87,7 @@
   .cal .dow { padding: 6px 8px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); }
   .cal .day { min-height: 92px; padding-bottom: 6px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
   .cal .day:nth-child(7n + 1) { border-left: 0; }
-  .cal .day.other { background: #f8f3ec; }
+  .cal .day.other { background: #f8f1e4; }
   .cal .day.other .num { opacity: .45; }
   .cal .num { display: inline-block; margin: 5px 6px 3px; font-size: 13px; min-width: 22px; text-align: center; border-radius: 99px; padding: 1px 4px; }
   .cal .today .num { background: var(--accent); color: #fff; font-weight: 700; }
@@ -91,6 +97,7 @@
   .cal .bar.e { border-radius: 0 5px 5px 0; margin-right: 4px; }
   .cal .bar.s.e { border-radius: 5px; }
   .cal .bar.gap { visibility: hidden; }
+  .cal .bar.past { opacity: .45; }
   .st-ideation { background: #2f7d4f; } .st-design { background: #2c5f9e; } .st-build { background: #c2610c; } .st-finishing { background: #b3261e; } .st-ready { background: #6f42a3; }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
   .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
@@ -105,8 +112,8 @@
   .f { display: block; grid-column: span 2; }
   .f.w3 { grid-column: span 3; } .f.w6 { grid-column: span 6; }
   .f > span { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-  input, select, textarea { font: inherit; color: inherit; width: 100%; padding: 7px 9px; border: 1px solid #d5c9b8; border-radius: 7px; background: #fff; }
-  input:focus, select:focus, textarea:focus { outline: 2px solid #c79f7f; outline-offset: 0; border-color: var(--accent); }
+  input, select, textarea { font: inherit; color: inherit; width: 100%; padding: 7px 9px; border: 1px solid #d8cbb6; border-radius: 7px; background: #fff; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #e3aa9d; outline-offset: 0; border-color: var(--accent); }
   textarea { min-height: 70px; resize: vertical; }
   .ph { display: grid; grid-template-columns: 1fr 78px 92px; gap: 8px; align-items: center; padding: 5px 0; }
   .ph input[type=number] { text-align: right; }
@@ -118,9 +125,9 @@
   .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .history { list-style: none; margin: 12px 0 0; padding: 0; font-size: 13px; color: var(--muted); }
   .history li { display: flex; justify-content: space-between; padding: 2px 0; }
-  .note { font-size: 13px; padding: 8px 10px; border-radius: 7px; background: #f3ead9; margin: 0 0 10px; }
-  .note.err { background: #f6e1dd; color: var(--bad); }
-  .note.ok { background: #dcebdf; color: var(--good); }
+  .note { font-size: 13px; padding: 8px 10px; border-radius: 7px; background: #f6eedf; margin: 0 0 10px; }
+  .note.err { background: #f8dcd7; color: var(--bad); }
+  .note.ok { background: #dcefe0; color: var(--good); }
 
   /* design notes */
   .design { max-width: 860px; }
@@ -146,7 +153,7 @@
   .quote dl { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; margin: 0; }
   .quote dt { color: var(--muted); } .quote dd { margin: 0; }
 
-  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2b2420; color: #fff; padding: 10px 18px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2e2320; color: #fffaf0; padding: 10px 18px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
   #toast.show { opacity: 1; }
 
   @media print {
@@ -224,9 +231,11 @@ const STATUSES = [
 ];
 const STATUS_NAME = Object.fromEntries(STATUSES);
 // The phase of the work itself, tracked separately from the quote/job status above.
-const STAGES = [['ideation', 'Ideation'], ['design', 'Design'], ['build', 'Build'], ['finishing', 'Finishing'], ['ready', 'Ready for delivery']];
+const STAGES = [['ideation', 'Ideation'], ['design', 'Design'], ['build', 'Build'], ['finishing', 'Finishing'], ['ready', 'Delivery']];
 const STAGE_NAME = Object.fromEntries(STAGES);
 const stageOf = p => STAGE_NAME[p.stage] ? p.stage : 'ideation';
+// Each phase after ideation has its own due date. The last phase's is the project's target completion date.
+const stageDue = (p, key) => (key === 'ready' ? p.data.due_date : key === 'ideation' ? '' : p.data.stage_due?.[key]) || '';
 const NEXT_STEP = {
   draft: ['sent', 'Mark quote as sent'], sent: ['accepted', 'Quote accepted'], accepted: ['in_progress', 'Start work'],
   in_progress: ['complete', 'Mark complete'], complete: ['delivered', 'Delivered & paid'],
@@ -626,7 +635,7 @@ function showBoard() {
       <b>${esc(projectName(p))}</b>
       <div class="row"><span>${esc(p.data.client_name || 'No client yet')}</span><span class="amt">${money(p.calc.total)}</span></div>
       <div class="row"><span>${esc(p.quote_number)}</span><span>${hrs(p.calc.labor_hours + p.calc.contingency_hours)}</span></div>
-      <div class="row" style="margin-top:6px"><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>${p.data.due_date ? `<span>Due ${esc(fmtDate(p.data.due_date))}</span>` : ''}</div>
+      <div class="row foot"><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>${stageDue(p, stageOf(p)) ? `<span>Phase due ${esc(fmtDate(stageDue(p, stageOf(p))))}</span>` : ''}</div>
     </a>`;
   const archive = [...by('delivered'), ...by('declined')];
   // Delivered and declined projects leave the board for the archive.
@@ -690,13 +699,26 @@ function showCalendar(month) {
   const [year, mon] = (/^\d{4}-\d{2}$/.test(month || '') ? month : today.slice(0, 7)).split('-').map(Number);
   const monthLink = offset => `#/calendar/${ymd(new Date(year, mon - 1 + offset, 1)).slice(0, 7)}`;
 
-  // A job goes on the calendar once its quote is accepted, and runs from that day to its target
-  // completion date. It comes off when it is delivered. Bars are colored by the job's current phase.
+  // A job goes on the calendar once its quote is accepted and comes off when it is delivered.
+  // Its bar is split at each phase's due date, one colored stretch per phase; phases already
+  // finished are faded. With no phase dates it is one bar in the color of the current phase.
+  const nextDay = date => { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + 1); return ymd(d); };
   const jobs = store.projects.filter(p => ['accepted', 'in_progress', 'complete'].includes(p.status)).map(p => {
     const began = p.history.findLast(h => h.status === 'accepted') || p.history.findLast(h => h.status === 'in_progress');
     const start = ymd(new Date(began?.at || p.updated_at));
-    const due = p.data.due_date || '';
-    return { p, start, due, end: due > start ? due : start, color: `st-${stageOf(p)}`, stage: STAGE_NAME[stageOf(p)] };
+    const current = STAGES.findIndex(([key]) => key === stageOf(p));
+    const dated = STAGES.map(([key], i) => ({ key, i, due: stageDue(p, key) })).filter(x => x.due);
+    let segs = [];
+    if (dated.some(x => x.key !== 'ready')) {
+      let from = start;
+      for (const x of dated) {
+        if (x.due < from) continue;   // already past when the job started, or dated out of order
+        segs.push({ key: x.key, from, to: x.due, past: x.i < current });
+        from = nextDay(x.due);
+      }
+    }
+    if (!segs.length) segs = [{ key: stageOf(p), from: start, to: p.data.due_date > start ? p.data.due_date : start, past: false }];
+    return { p, segs, start, end: segs.at(-1).to };
   }).sort((a, b) => a.start.localeCompare(b.start));
 
   let cells = '';
@@ -710,9 +732,10 @@ function showCalendar(month) {
       const key = ymd(d);
       cells += `<div class="day ${d.getMonth() === mon - 1 ? '' : 'other'} ${key === today ? 'today' : ''}"><span class="num">${d.getDate()}</span>${active.map(j => {
         if (key < j.start || key > j.end) return '<span class="bar gap"></span>';
-        const named = key === j.start || d.getDay() === 0;
-        const text = named ? `${projectName(j.p)} \u00b7 ${j.stage}${key === j.due ? ' (due)' : ''}` : key === j.due ? 'Due' : '';
-        return `<a class="bar ${j.color} ${named ? 'label' : ''} ${key === j.start ? 's' : ''} ${key === j.end ? 'e' : ''}" href="#/p/${j.p.id}"
+        const seg = j.segs.find(x => key >= x.from && key <= x.to);
+        const named = key === seg.from || d.getDay() === 0, due = key === stageDue(j.p, seg.key) || key === j.p.data.due_date;
+        const text = named ? `${projectName(j.p)} \u00b7 ${STAGE_NAME[seg.key]}${due ? ' (due)' : ''}` : due ? 'Due' : '';
+        return `<a class="bar st-${seg.key} ${seg.past ? 'past' : ''} ${named ? 'label' : ''} ${key === j.start ? 's' : ''} ${key === j.end ? 'e' : ''}" href="#/p/${j.p.id}"
           title="${esc(projectName(j.p))}${j.p.data.client_name ? ` \u2013 ${esc(j.p.data.client_name)}` : ''}">${esc(text)}</a>`;
       }).join('')}</div>`;
     }
@@ -720,10 +743,10 @@ function showCalendar(month) {
   } while (day.getMonth() === mon - 1 && day.getFullYear() === year);
 
   const daysLeft = due => Math.round((new Date(due + 'T00:00') - new Date(today + 'T00:00')) / 86400000);
-  const dueText = j => {
-    if (!j.due) return `<a href="#/p/${j.p.id}">Set a target date</a>`;
-    const n = daysLeft(j.due);
-    return `${esc(fmtDate(j.due))} <span class="${n < 0 ? 'late' : 'muted'}">(${n < 0 ? `${-n} day${n === -1 ? '' : 's'} overdue` : n === 0 ? 'today' : `${n} day${n === 1 ? '' : 's'} left`})</span>`;
+  const dueText = (j, due) => {
+    if (!due) return `<a href="#/p/${j.p.id}">Set a date</a>`;
+    const n = daysLeft(due);
+    return `${esc(fmtDate(due))} <span class="${n < 0 ? 'late' : 'muted'}">(${n < 0 ? `${-n} day${n === -1 ? '' : 's'} overdue` : n === 0 ? 'today' : `${n} day${n === 1 ? '' : 's'} left`})</span>`;
   };
   view.innerHTML = `
     <div class="pagehead">
@@ -735,9 +758,9 @@ function showCalendar(month) {
     <div class="cal">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(n => `<div class="dow">${n}</div>`).join('')}${cells}</div>
     <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}</div>
     <div class="card" style="margin-top:16px"><h2>Accepted projects</h2>
-      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client</th><th>Phase</th><th>Started</th><th>Target completion</th></tr>
-        ${jobs.map(j => `<tr><td><span class="swatch ${j.color}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
-          <td>${esc(j.p.data.client_name)}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${esc(fmtDate(j.start))}</td><td>${dueText(j)}</td></tr>`).join('')}</table>`
+      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client</th><th>Phase</th><th>Phase due</th><th>Target completion</th></tr>
+        ${jobs.map(j => `<tr><td><span class="swatch st-${stageOf(j.p)}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
+          <td>${esc(j.p.data.client_name)}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${dueText(j, stageDue(j.p, stageOf(j.p)))}</td><td>${dueText(j, j.p.data.due_date)}</td></tr>`).join('')}</table>`
         : '<p class="muted" style="margin:0">Nothing is scheduled. A project appears here once its quote is marked accepted, from that day to its target completion date.</p>'}
     </div>`;
 }
@@ -812,8 +835,7 @@ function showEditor(project) {
           ${numInp('Design retainer ($)', 'retainer', 'any', 'w3')}
           ${numInp('Lumber cost override ($)', 'materials_override', 'any', 'w3', 'id="override"')}
         </div></fieldset>
-        <fieldset><h2>Schedule & notes</h2><div class="grid">
-          ${inp('Target completion', 'due_date', 'date', 'w3')}
+        <fieldset><h2>Notes</h2><div class="grid">
           <label class="f w6"><span>Internal notes (not shown on the quote)</span><textarea data-path="notes">${esc(d.notes)}</textarea></label>
         </div></fieldset>
       </form>
@@ -961,14 +983,27 @@ function renderStatusCard() {
 }
 
 function renderStages() {
-  const p = ed.project, current = STAGES.findIndex(([key]) => key === stageOf(p));
+  const p = ed.project, current = STAGES.findIndex(([key]) => key === stageOf(p)), today = ymd(new Date());
   const el = $('#stages');
-  el.innerHTML = STAGES.map(([key, name], i) =>
-    `<button type="button" data-stage="${key}" class="${i < current ? 'done' : i === current ? 'on' : ''}" ${i === current ? 'aria-current="step"' : ''}>${i < current ? '&#10003; ' : ''}${name}</button>`).join('');
+  el.innerHTML = STAGES.map(([key, name], i) => {
+    const due = stageDue(p, key);
+    return `<div>
+      <button type="button" data-stage="${key}" class="${i < current ? 'done' : i === current ? 'on' : ''}" ${i === current ? 'aria-current="step"' : ''}>${i < current ? '&#10003; ' : ''}${name}</button>
+      ${key === 'ideation' ? '' : `<label class="due ${i === current && due && due < today ? 'late' : ''}"><span>${i === current && due && due < today ? 'Overdue' : 'Due'}</span>
+        <input type="date" data-due="${key}" value="${esc(due)}" aria-label="${name} due date"></label>`}
+    </div>`;
+  }).join('');
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     setStage(p, b.dataset.stage);
     renderStages();
     renderStatusCard();
+  }));
+  el.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
+    if (input.dataset.due === 'ready') p.data.due_date = input.value;
+    else (p.data.stage_due ??= {})[input.dataset.due] = input.value;
+    p.updated_at = new Date().toISOString();
+    persist();
+    renderStages();
   }));
 }
 
