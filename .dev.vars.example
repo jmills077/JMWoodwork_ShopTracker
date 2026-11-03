@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+APP_PASSWORD=shop
+# Todoist API token (Todoist -> Settings -> Integrations -> Developer). Leave empty to run without Todoist.
+TODOIST_TOKEN=

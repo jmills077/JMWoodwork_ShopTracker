@@ -1,191 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shop Tracker</title>
-<style>
-  :root {
-    --bg: #faf5ec; --card: #fffdf8; --ink: #2e2320; --muted: #7a6a62; --line: #eadfce;
-    --accent: #a63a2b; --accent-ink: #fffaf0; --good: #2f7a4f; --bad: #b42318;
-    --radius: 10px;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  a { color: var(--accent); }
-  h1 { font-size: 24px; margin: 0; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
-  header.top { background: #a63a2b; color: #fdf6e9; display: flex; align-items: center; gap: 24px; padding: 12px 24px; flex-wrap: wrap; }
-  header.top .brand { font-weight: 700; font-size: 17px; color: inherit; text-decoration: none; }
-  header.top nav { display: flex; gap: 4px; flex: 1; }
-  header.top nav a { color: #f8e1d8; text-decoration: none; padding: 6px 12px; border-radius: 6px; }
-  header.top nav a.on, header.top nav a:hover { background: #8a2e21; color: #fff; }
-  #syncState { color: #f3cfc4; font-size: 13px; text-decoration: none; }
-  #syncState.error { color: #fff; font-weight: 700; text-decoration: underline; }
-  main { max-width: 1240px; margin: 0 auto; padding: 24px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
-  .card + .card { margin-top: 16px; }
-  .btn { display: inline-block; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid #dccfbb; background: #fffdf8; color: var(--ink); padding: 8px 14px; border-radius: 8px; text-decoration: none; }
-  .btn:hover { border-color: var(--accent); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .btn.danger { color: var(--bad); }
-  .btn.small { padding: 4px 10px; font-size: 13px; }
-  .btn:disabled { opacity: .5; cursor: default; }
-  .link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
-  .muted { color: var(--muted); }
-  .pagehead { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-  .pagehead .spacer { flex: 1; }
-  .back { display: inline-block; font-size: 13px; margin-bottom: 10px; }
-  .projhead { margin-bottom: 14px; }
-  .projhead .name { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .projhead .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  .tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; flex-wrap: wrap; }
-  .tabs a { padding: 8px 14px; margin-bottom: -1px; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent; }
-  .tabs a:hover { color: var(--ink); }
-  .tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }
-  .tabs .spacer { flex: 1; }
-  .tabs .side { font-size: 13px; padding-bottom: 6px; }
-  .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; margin-bottom: 18px; }
-  .stages .due { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 12px; color: var(--muted); }
-  .stages .due input { padding: 4px 6px; font-size: 13px; }
-  .stages .due.late { color: var(--bad); font-weight: 600; }
-  .stages .due.late input { border-color: var(--bad); }
-  .stages button { width: 100%; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px; }
-  .stages button:hover { border-color: var(--accent); }
-  .stages button.done { background: #f3e2d4; color: var(--ink); }
-  .stages button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #efe6d6; color: #5c4d43; white-space: nowrap; }
-  .pill.sent { background: #dde8f5; color: #2b5a94; }
-  .pill.accepted, .pill.in_progress { background: #dcefe0; color: var(--good); }
-  .pill.complete, .pill.delivered { background: #2f7a4f; color: #fff; }
-  .pill.declined { background: #f8dcd7; color: var(--bad); }
-
-  /* board */
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .stats .card { margin-top: 0; }
-  .stat b { display: block; font-size: 22px; }
-  .board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
-  .col { background: #f1e7d6; border-radius: var(--radius); padding: 10px; min-height: 120px; }
-  .col h2 { margin: 4px 4px 10px; display: flex; justify-content: space-between; }
-  .job { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: inherit; }
-  .job:hover { border-color: var(--accent); }
-  .job[draggable] { cursor: grab; }
-  .job.dragging { opacity: .4; }
-  .col.over { outline: 2px dashed var(--accent); outline-offset: -2px; background: #ecd5c4; }
-  .job b { display: block; }
-  .job .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
-  .job .foot { margin-top: 6px; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
-  .job .foot span { white-space: nowrap; }
-  .job .amt { color: var(--ink); font-weight: 600; }
-  .empty { text-align: center; padding: 56px 20px; }
-  table.list { width: 100%; border-collapse: collapse; }
-  table.list td, table.list th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
-  table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
-
-  /* calendar */
-  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-  .cal .dow { padding: 6px 8px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); }
-  .cal .day { min-height: 92px; padding-bottom: 6px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
-  .cal .day:nth-child(7n + 1) { border-left: 0; }
-  .cal .day.other { background: #f8f1e4; }
-  .cal .day.other .num { opacity: .45; }
-  .cal .num { display: inline-block; margin: 5px 6px 3px; font-size: 13px; min-width: 22px; text-align: center; border-radius: 99px; padding: 1px 4px; }
-  .cal .today .num { background: var(--accent); color: #fff; font-weight: 700; }
-  .cal .bar { display: block; height: 20px; line-height: 20px; margin: 0 -1px 3px 0; padding: 0 6px; font-size: 12px; font-weight: 600; color: #fff; text-decoration: none; white-space: nowrap; }
-  .cal .bar.label { position: relative; z-index: 1; }
-  .cal .bar.s { border-radius: 5px 0 0 5px; margin-left: 4px; }
-  .cal .bar.e { border-radius: 0 5px 5px 0; margin-right: 4px; }
-  .cal .bar.s.e { border-radius: 5px; }
-  .cal .bar.gap { visibility: hidden; }
-  .cal .bar.past { opacity: .45; }
-  .st-ideation { background: #2f7d4f; } .st-design { background: #2c5f9e; } .st-build { background: #c2610c; } .st-finishing { background: #b3261e; } .st-ready { background: #6f42a3; }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
-  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
-  .late { color: var(--bad); font-weight: 600; }
-
-  /* editor */
-  .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .board { grid-template-columns: repeat(5, 240px); } }
-  fieldset { border: 0; padding: 0; margin: 0 0 22px; }
-  fieldset:last-child { margin-bottom: 0; }
-  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
-  .f { display: block; grid-column: span 2; }
-  .f.w3 { grid-column: span 3; } .f.w6 { grid-column: span 6; }
-  .f > span { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-  input, select, textarea { font: inherit; color: inherit; width: 100%; padding: 7px 9px; border: 1px solid #d8cbb6; border-radius: 7px; background: #fff; }
-  input:focus, select:focus, textarea:focus { outline: 2px solid #e3aa9d; outline-offset: 0; border-color: var(--accent); }
-  textarea { min-height: 70px; resize: vertical; }
-  .combo { position: relative; }
-  .combo input { padding-right: 28px; text-overflow: ellipsis; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237a6a62' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right 9px center; }
-  .combo ul { position: fixed; z-index: 20; margin: 0; padding: 4px; list-style: none; background: #fff; border: 1px solid #d8cbb6; border-radius: 7px; box-shadow: 0 8px 24px rgba(46, 35, 32, .16); max-height: 264px; overflow-y: auto; }
-  .combo li { padding: 6px 8px; border-radius: 5px; cursor: pointer; }
-  .combo li[aria-selected="true"] { font-weight: 600; }
-  .combo li.active { background: var(--accent); color: var(--accent-ink); }
-  .combo li.none { color: var(--muted); cursor: default; }
-  .ph { display: grid; grid-template-columns: 1fr 78px 92px; gap: 8px; align-items: center; padding: 5px 0; }
-  .ph input[type=number] { text-align: right; }
-  .ph .hint { font-size: 12px; color: var(--muted); }
-  .tot { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
-  .tot small { color: var(--muted); }
-  .tot.grand { font-size: 20px; font-weight: 700; border-top: 2px solid var(--ink); margin-top: 8px; padding-top: 10px; }
-  .rule { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .history { list-style: none; margin: 12px 0 0; padding: 0; font-size: 13px; color: var(--muted); }
-  .history li { display: flex; justify-content: space-between; padding: 2px 0; }
-  .note { font-size: 13px; padding: 8px 10px; border-radius: 7px; background: #f6eedf; margin: 0 0 10px; }
-  .note.err { background: #f8dcd7; color: var(--bad); }
-  .note.ok { background: #dcefe0; color: var(--good); }
-
-  /* design notes */
-  .design { max-width: 860px; }
-  .design textarea { field-sizing: content; min-height: 84px; }
-  .design .brief { min-height: 140px; }
-  .entry { border-top: 1px solid var(--line); padding: 14px 0; }
-  .entry:last-child { padding-bottom: 0; }
-  .entry .actions { margin-bottom: 8px; }
-  .entry .actions input, .entry .actions select { width: auto; }
-  .entry .spacer { flex: 1; }
-  .links { font-size: 13px; overflow-wrap: anywhere; }
-  .links a { display: block; margin-top: 6px; }
-
-  /* quote */
-  .quote { max-width: 780px; margin: 0 auto; padding: 44px; }
-  .quote .qhead { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-  .quote .qhead h1 { font-size: 28px; }
-  .quote .pre { white-space: pre-line; }
-  .quote table { width: 100%; border-collapse: collapse; margin: 18px 0; }
-  .quote td { padding: 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .quote td:last-child { text-align: right; white-space: nowrap; }
-  .quote tr.grand td { font-size: 19px; font-weight: 700; border-bottom: 0; border-top: 2px solid var(--ink); }
-  .quote dl { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; margin: 0; }
-  .quote dt { color: var(--muted); } .quote dd { margin: 0; }
-
-  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2e2320; color: #fffaf0; padding: 10px 18px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
-  #toast.show { opacity: 1; }
-
-  @media print {
-    header.top, .noprint, #toast { display: none !important; }
-    body { background: #fff; } main { padding: 0; }
-    .quote { border: 0; padding: 0; max-width: none; }
-  }
-</style>
-</head>
-<body>
-<header class="top">
-  <a class="brand" href="#/">Shop Tracker</a>
-  <nav>
-    <a href="#/" data-nav="board">Projects</a>
-    <a href="#/calendar" data-nav="calendar">Calendar</a>
-    <a href="#/new" data-nav="new">New quote</a>
-    <a href="#/settings" data-nav="settings">Settings</a>
-  </nav>
-  <a id="syncState" href="#/settings"></a>
-</header>
-<main id="view"></main>
-<div id="toast" role="status"></div>
-
-<script>
-'use strict';
+// Shop Tracker in the browser: every page is drawn here from the shop's data, which the server
+// embeds in the page and saves to the database. See README.md for how the pieces fit together.
+export {};
 
 // ---------- estimating model ----------
 // Baseline hours per phase at a reference size (inches, L x W x H). Hours are
@@ -351,35 +166,25 @@ function price(data) {
   };
 }
 
-// ---------- storage (this browser's localStorage) ----------
-const STORE_KEY = 'shopTracker.v1';
-let store = loadStore();
+// ---------- storage (the shop's database, through the server) ----------
+// The page arrives with the shop's data embedded in it; changes are sent back to the server.
+let store = loadStore(JSON.parse(document.getElementById('initialState').textContent));
 
-function loadStore() {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { /* start fresh */ }
-  // A sync interrupted by closing the page must be retryable.
+function loadStore(saved: any) {
+  // A Todoist sync interrupted by closing the page must be retryable.
   for (const p of saved.projects || []) delete p.todoist?.busy;
   return {
     settings: { ...structuredClone(DEFAULT_SETTINGS), ...(saved.settings || {}) },
     projects: Array.isArray(saved.projects) ? saved.projects : [],
-    nextId: saved.nextId || 1,
-    todoistToken: saved.todoistToken || '',
+    todoistConnected: !!saved.todoistConnected,   // whether the server has a Todoist token (the TODOIST_TOKEN secret)
     settingsUpdatedAt: saved.settingsUpdatedAt || '',
-    deleted: Array.isArray(saved.deleted) ? saved.deleted : [],   // identities of deleted projects, so sync doesn't bring them back
-    sync: { repo: '', token: '', sha: '', dirty: false, lastSyncedAt: '', ...(saved.sync || {}) },
   };
 }
-function saveLocal() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
-  catch { toast('Could not save. Browser storage is full or blocked.'); }
-}
-// Save a change to the shop's data, and queue it for syncing to other devices.
+// Save a change to the shop's data.
 let changeSeq = 0;
 function persist() {
   changeSeq++;
-  if (syncOn()) { store.sync.dirty = true; scheduleSync(); }
-  saveLocal();
+  scheduleSave();
 }
 function settingsChanged() {
   store.settingsUpdatedAt = new Date().toISOString();
@@ -400,8 +205,6 @@ function setPath(obj, path, value) {
 }
 const inputValue = el => el.type === 'number' ? (el.value === '' ? '' : num(el.value)) : el.value;
 const projectName = p => p.data.title || TYPES[p.data.spec.type].name;
-const quoteNumber = (id, createdAt) => `Q-${createdAt.slice(0, 4)}-${String(id).padStart(3, '0')}`;
-const projectIdent = p => `${p.id}:${p.created_at}`;
 
 let toastTimer;
 function toast(message) {
@@ -413,20 +216,21 @@ function toast(message) {
 }
 
 // ---------- Todoist ----------
-const TODOIST_API = 'https://api.todoist.com/api/v1';
+// Requests go through the server, which adds the API token (the TODOIST_TOKEN secret) and passes them on to Todoist.
+const TODOIST_API = '/api/todoist';
 
-async function todoist(method, path, body) {
+async function todoist(method, path, body?) {
   let res;
   try {
     res = await fetch(TODOIST_API + path, {
       method,
-      headers: { Authorization: `Bearer ${store.todoistToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
     throw new Error('Could not reach Todoist. Check your internet connection.');
   }
-  if (res.status === 401 || res.status === 403) throw new Error('Todoist rejected the API token. Check it in Settings.');
+  if (res.status === 401 || res.status === 403) throw new Error('Todoist rejected the API token. Check the TODOIST_TOKEN secret.');
   if (!res.ok) throw new Error(`Todoist returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return res.status === 204 ? {} : res.json();
 }
@@ -450,7 +254,7 @@ function todoistPlan(p) {
 async function syncTodoist(p) {
   const state = p.todoist;
   if (state.synced || state.busy) return;
-  if (!store.todoistToken) { state.error = 'No Todoist API token is set. Add one in Settings, then retry.'; persist(); return; }
+  if (!store.todoistConnected) { state.error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.'; persist(); return; }
   if (!state.plan) { state.plan = todoistPlan(p); state.created = 0; }
   state.busy = true;
   try {
@@ -477,9 +281,9 @@ async function syncTodoist(p) {
 }
 
 // ---------- supplier lumber prices ----------
-// A weekly job in the site's repository reads Parkerville Wood Products' price lists into this file.
+// A weekly job on the server reads Parkerville Wood Products' price lists into the database.
 // A species linked to one of its items in Settings takes that item's price per board foot.
-const PRICE_FEED = 'https://raw.githubusercontent.com/jmills077/JMWoodwork_ShopTracker/main/lumber-prices.json';
+const PRICE_FEED = '/api/prices';
 const AUTO_LINK = {
   'Pine': 'Pine, Eastern White (Clear)', 'Poplar': 'Poplar', 'Red oak': 'Oak, Red', 'White oak': 'Oak, White (PS)', 'Ash': 'Ash',
   'Cherry': 'Cherry', 'Hard maple': 'Maple, Hard', 'Walnut': 'Walnut, Black', 'Hickory': 'Hickory', 'Teak': 'Teak',
@@ -505,7 +309,7 @@ function defaultItem(species) {
 }
 
 // Returns true if any setting changed. Prices only move forward to a newer list, so a device
-// still holding last week's list can't undo an update another device has already synced.
+// still holding last week's list can't undo an update another device has already saved.
 function applyPrices() {
   if (!feed) return false;
   const settings = store.settings, fresh = feed.checked > (settings.prices_checked || '');
@@ -538,131 +342,95 @@ function applyPrices() {
   return changed;
 }
 
-// ---------- sync between devices (a data file in a private GitHub repository) ----------
-const SYNC_FILE = 'shop-tracker-data.json';
-const syncOn = () => !!(store.sync.repo && store.sync.token);
-let syncTimer, syncing = false, syncAgain = false, syncMessage = '';
+// ---------- saving to the server (shared by every device) ----------
+// Only what changed is sent: each project on its own, and the settings if they changed. When two
+// devices edit the same project, the most recently edited copy wins.
+const unbusy = (key, value) => key === 'busy' ? undefined : value;
+let saveTimer, saving = false, saveAgain = false, saveMessage = '';
+let saved = snapshot();   // the data as the server last had it
 
-function scheduleSync(ms = 2500) {
-  clearTimeout(syncTimer);
-  if (syncOn()) syncTimer = setTimeout(sync, ms);
+function snapshot() {
+  return {
+    settings: JSON.stringify(store.settings),
+    projects: new Map<number, string>(store.projects.map(p => [p.id, JSON.stringify(p, unbusy)])),
+  };
+}
+function pendingChanges() {
+  const now = snapshot();
+  const projects = [...now.projects].filter(([id, text]) => saved.projects.get(id) !== text).map(([, text]) => JSON.parse(text));
+  const deleted = [...saved.projects.keys()].filter(id => !now.projects.has(id));
+  const settings = now.settings !== saved.settings;
+  return { now, projects, deleted, settings, any: !!(projects.length || deleted.length || settings) };
+}
+
+function scheduleSave(ms = 800) {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, ms);
 }
 
 function setSyncState(state, message = '') {
-  syncMessage = message;
+  saveMessage = message;
   const el = $('#syncState');
   el.className = state;
   el.title = message;
-  el.textContent = !syncOn() ? '' : { busy: 'Syncing\u2026', ok: 'Synced', offline: 'Offline \u00b7 saved on this device', error: 'Sync problem' }[state];
-  if ($('#syncInfo')) renderSyncInfo();
+  el.textContent = { busy: 'Saving…', ok: 'Saved', offline: 'Offline · not saved yet', error: 'Not saved' }[state] || '';
 }
 
-async function github(path, method = 'GET', body, raw) {
+async function api(path, body?, keepalive = false) {
   let res;
   try {
-    res = await fetch(`https://api.github.com/repos/${store.sync.repo}${path}`, {
-      method, cache: 'no-store',
-      headers: { Authorization: `Bearer ${store.sync.token}`, Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json' },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    res = await fetch(path, body === undefined ? { cache: 'no-store' }
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive });
   } catch {
-    throw Object.assign(new Error('Could not reach GitHub.'), { offline: true });
+    throw Object.assign(new Error('Could not reach the server.'), { offline: true });
   }
-  if (res.status === 401) throw new Error('GitHub rejected the access token. It may have expired.');
-  if (res.status === 403) throw new Error('GitHub refused the request. The token needs "Contents: Read and write" on the data repository.');
-  return res;
+  if (res.status === 401) throw new Error('You have been signed out. Reload the page to sign in again.');
+  if (!res.ok) throw new Error(`The server returned ${res.status}${res.status < 500 ? `: ${(await res.text()).slice(0, 200)}` : '.'}`);
+  return res.json();
 }
 
-const toBase64 = text => btoa(Array.from(new TextEncoder().encode(text), b => String.fromCharCode(b)).join(''));
-const fromBase64 = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
-
-// What is shared between devices. Access tokens never leave the device they were entered on.
-const syncSnapshot = () => JSON.stringify({
-  app: 'shop-tracker', version: 1,
-  settings: store.settings, settingsUpdatedAt: store.settingsUpdatedAt,
-  projects: store.projects, nextId: store.nextId, deleted: store.deleted,
-}, (key, value) => key === 'busy' ? undefined : value, 1);
-
-async function readRemote() {
-  const path = `/contents/${SYNC_FILE}`;
-  const res = await github(path);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GitHub returned ${res.status}.`);
-  const meta = await res.json();
-  // Files over 1 MB come back without their content and need a second request.
-  const text = meta.encoding === 'base64' && meta.content ? fromBase64(meta.content) : await (await github(path, 'GET', null, true)).text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = null; }
-  if (!data || !Array.isArray(data.projects) || !data.settings) throw new Error(`${SYNC_FILE} in the repository is not valid Shop Tracker data.`);
-  return { sha: meta.sha, text, data };
-}
-
-// Combine another device's changes with this one's: per project, the most recently edited copy wins.
-function mergeRemote(remote) {
-  const deleted = [...new Set([...store.deleted, ...(remote.deleted || [])])];
-  const merged = new Map();
-  for (const p of [...remote.projects, ...store.projects]) {
-    const key = projectIdent(p), other = merged.get(key);
-    if (!deleted.includes(key) && (!other || p.updated_at > other.updated_at)) merged.set(key, p);
-  }
-  const projects = [...merged.values()];
-  // Two devices can hand out the same number while offline. The synced copy keeps it; the local one is renumbered.
-  const remoteKeys = new Set(remote.projects.map(projectIdent));
-  const used = new Set(projects.filter(p => remoteKeys.has(projectIdent(p))).map(p => p.id));
-  let nextId = Math.max(store.nextId, num(remote.nextId, 1), ...projects.map(p => p.id + 1));
-  for (const p of projects.filter(p => !remoteKeys.has(projectIdent(p)))) {
-    if (used.has(p.id)) {
-      p.id = nextId++;
-      p.quote_number = quoteNumber(p.id, p.created_at);
-      p.updated_at = new Date().toISOString();
-    }
-    used.add(p.id);
-  }
-  if ((remote.settingsUpdatedAt || '') >= store.settingsUpdatedAt) {
-    store.settings = { ...structuredClone(DEFAULT_SETTINGS), ...remote.settings };
-    store.settingsUpdatedAt = remote.settingsUpdatedAt || '';
-  }
-  Object.assign(store, { projects, nextId, deleted });
-}
-
-async function sync() {
-  if (!syncOn()) return;
-  if (syncing) { syncAgain = true; return; }
-  // Wait for a Todoist project that is mid-creation, so its progress isn't replaced underneath it.
-  if (store.projects.some(p => p.todoist.busy)) return scheduleSync();
-  clearTimeout(syncTimer);
-  syncing = true;
+// keepalive lets a save finish while the page is closing.
+async function save(keepalive = false) {
+  if (saving) { saveAgain = true; return; }
+  clearTimeout(saveTimer);
+  const changes = pendingChanges();
+  if (!changes.any) return;
+  saving = true;
   setSyncState('busy');
   try {
-    for (let attempt = 0; ; attempt++) {
-      const remote = await readRemote();
-      if (remote && remote.sha !== store.sync.sha) {
-        mergeRemote(remote.data);
-        store.sync.sha = remote.sha;
-        saveLocal();
-        applyPrices();
-        // Redraw from the merged data, unless a not-yet-saved quote is being written.
-        if (!(ed && !ed.project)) route();
-      }
-      const seq = changeSeq, text = syncSnapshot();
-      if (!remote || text !== remote.text) {
-        const res = await github(`/contents/${SYNC_FILE}`, 'PUT', { message: 'Update shop data', content: toBase64(text), ...(remote ? { sha: remote.sha } : {}) });
-        if ((res.status === 409 || res.status === 422) && attempt < 2) continue;   // another device saved in between: merge again
-        if (res.status === 404) throw new Error('Repository not found, or the token has no access to it.');
-        if (!res.ok) throw new Error(`GitHub returned ${res.status} while saving.`);
-        store.sync.sha = (await res.json()).content.sha;
-      }
-      if (seq === changeSeq) store.sync.dirty = false; else syncAgain = true;
-      break;
-    }
-    store.sync.lastSyncedAt = new Date().toISOString();
-    saveLocal();
+    await api('/api/save', {
+      projects: changes.projects, deleted: changes.deleted,
+      ...(changes.settings ? { settings: store.settings, settingsUpdatedAt: store.settingsUpdatedAt } : {}),
+    }, keepalive);
+    saved = changes.now;
     setSyncState('ok');
   } catch (e) {
+    if (e.message !== saveMessage) toast(`Not saved: ${e.message}`);
     setSyncState(e.offline ? 'offline' : 'error', e.message);
+    saveTimer = setTimeout(save, 10000);   // keep trying; the changes stay on this page meanwhile
   }
-  syncing = false;
-  if (syncAgain) { syncAgain = false; scheduleSync(500); }
+  saving = false;
+  if (saveAgain) { saveAgain = false; scheduleSave(200); }
+}
+
+// Pick up changes made on other devices.
+async function refresh() {
+  // Wait for a Todoist project that is mid-creation, so its progress isn't replaced underneath it.
+  if (store.projects.some(p => p.todoist.busy)) return;
+  await save();
+  const seq = changeSeq;
+  let remote;
+  try { remote = await api('/api/state'); } catch { return; }
+  // Something was edited while the request was out: leave it for the next refresh.
+  if (seq !== changeSeq || saving || pendingChanges().any) return;
+  const next = loadStore(remote);
+  store.todoistConnected = next.todoistConnected;
+  if (JSON.stringify([next.settings, next.projects], unbusy) === JSON.stringify([store.settings, store.projects], unbusy)) return;
+  store = next;
+  saved = snapshot();
+  applyPrices();
+  // Redraw from the new data, unless a not-yet-saved quote is being written.
+  if (!(ed && !ed.project)) route();
 }
 
 // ---------- routing ----------
@@ -682,7 +450,7 @@ function route() {
   else if (project && parts[2] === 'design') showDesign(project);
   else if (project) showEditor(project);
   else showBoard();
-  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav));
+  document.querySelectorAll<HTMLElement>('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav));
   window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', () => {
@@ -815,7 +583,7 @@ function showCalendar(month) {
     day.setDate(day.getDate() + 7);
   } while (day.getMonth() === mon - 1 && day.getFullYear() === year);
 
-  const daysLeft = due => Math.round((new Date(due + 'T00:00') - new Date(today + 'T00:00')) / 86400000);
+  const daysLeft = due => Math.round((+new Date(due + 'T00:00') - +new Date(today + 'T00:00')) / 86400000);
   const dueText = (j, due) => {
     if (!due) return `<a href="#/p/${j.p.id}">Set a date</a>`;
     const n = daysLeft(due);
@@ -855,7 +623,7 @@ function typeAhead(select, minWidth = 0) {
   wrap.style.minWidth = select.style.minWidth;
   select.hidden = true;
   select.before(wrap);
-  const input = wrap.firstChild, list = wrap.lastChild;
+  const input = wrap.firstChild as HTMLInputElement, list = wrap.lastChild as HTMLUListElement;
   const options = [...select.options].map(o => ({ value: o.value, label: o.textContent }));
   const current = () => options.find(o => o.value === select.value) || options[0];
   let shown = [], active = -1;
@@ -910,7 +678,7 @@ function typeAhead(select, minWidth = 0) {
   input.addEventListener('focus', () => { input.select(); open(''); });
   input.addEventListener('click', () => { if (list.hidden) open(''); });
   input.addEventListener('input', () => open(input.value));
-  input.addEventListener('keydown', e => {
+  input.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (list.hidden) open('');
@@ -929,7 +697,7 @@ function typeAhead(select, minWidth = 0) {
   input.addEventListener('blur', () => { input.value = current().label; close(); });
   list.addEventListener('mousedown', e => {
     e.preventDefault();   // keep focus in the box
-    const li = e.target.closest('li[data-i]');
+    const li = (e.target as Element).closest<HTMLElement>('li[data-i]');
     if (li) pick(shown[li.dataset.i]);
   });
 }
@@ -969,7 +737,7 @@ function showEditor(project) {
   d.lumber ??= { bf: '', quarters: '', width: '' };
   const inp = (label, path, type = 'text', cls = '', attrs = '') =>
     `<label class="f ${cls}"><span>${label}</span><input data-path="${path}" type="${type}" value="${esc(getPath(d, path) ?? '')}" ${attrs}></label>`;
-  const numInp = (label, path, step = 'any', cls = '', attrs = '') => inp(label, path, 'number', cls, `min="0" step="${step}" ${attrs}`);
+  const numInp = (label, path, step: number | string = 'any', cls = '', attrs = '') => inp(label, path, 'number', cls, `min="0" step="${step}" ${attrs}`);
   const sel = (label, path, options, cls = '') =>
     `<label class="f ${cls}"><span>${label}</span><select data-path="${path}">${options.map(([v, n]) =>
       `<option value="${esc(v)}" ${getPath(d, path) === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
@@ -1060,7 +828,7 @@ function showEditor(project) {
     }
     // Re-render after focus has moved, then put focus back where the user went.
     setTimeout(() => {
-      const focusId = document.activeElement?.dataset?.fid;
+      const focusId = (document.activeElement as HTMLElement)?.dataset?.fid;
       changed();
       if (focusId) $(`[data-fid="${focusId}"]`, panel)?.focus();
     });
@@ -1093,7 +861,6 @@ function showEditor(project) {
       const synced = project.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
       if (!confirm(`Delete ${project.quote_number} (${projectName(project)})? This cannot be undone.${synced}`)) return;
       store.projects = store.projects.filter(p => p !== project);
-      store.deleted.push(projectIdent(project));
       persist();
       location.hash = '#/';
     });
@@ -1180,7 +947,7 @@ function renderLumber(calc) {
 async function sendLumberTask(p) {
   const n = p.calc.lumber, lumber = p.data.lumber;
   if (!n.feet) return toast('Enter the board width first.');
-  if (!store.todoistToken) return toast('Add a Todoist token in Settings first.');
+  if (!store.todoistConnected) return toast('Todoist is not connected. Set the TODOIST_TOKEN secret first.');
   const summary = lumberSummary(p.data, n);
   const body = {
     content: `Pick up about ${summary}`,
@@ -1208,17 +975,23 @@ async function sendLumberTask(p) {
   if (ed?.project === p) renderLumber(p.calc);
 }
 
-function createProject() {
-  const stamp = new Date().toISOString(), id = store.nextId++;
-  const project = {
-    id, quote_number: quoteNumber(id, stamp), status: 'draft',
+async function createProject() {
+  if (ed.creating) return;
+  const stamp = new Date().toISOString();
+  const draft = {
+    status: 'draft',
     stage: 'ideation', data: ed.data, calc: price(ed.data), todoist: {}, history: [{ status: 'draft', at: stamp }], created_at: stamp, updated_at: stamp,
   };
+  // The server gives the project its id and quote number.
+  let project;
+  ed.creating = true;
+  try { project = await api('/api/projects', draft); }
+  catch (e) { ed.creating = false; return toast(`Not saved: ${e.message}`); }
   store.projects.push(project);
-  persist();
+  saved.projects.set(project.id, JSON.stringify(project, unbusy));
   ed.dirty = false;
   toast(`Saved as ${project.quote_number}`);
-  location.hash = `#/p/${id}`;
+  location.hash = `#/p/${project.id}`;
 }
 
 function renderStatusCard() {
@@ -1283,8 +1056,8 @@ async function setStatus(p, status) {
   else showBoard();
   // Accepting a quote opens the job in Todoist.
   if (status === 'accepted' && !p.todoist.synced) {
-    if (store.todoistToken) await runTodoistSync(p);
-    else toast('Quote accepted. Add a Todoist token in Settings to create its task list.');
+    if (store.todoistConnected) await runTodoistSync(p);
+    else toast('Quote accepted. Set the TODOIST_TOKEN secret to create its task list.');
   }
 }
 
@@ -1306,7 +1079,7 @@ function renderTodoistCard() {
   else if (t.error) body = `<p class="note err">${esc(t.error)}</p>
     ${t.created ? `<p class="muted">${t.created} of ${t.plan.tasks.length} tasks were created. Retrying continues from there.</p>` : ''}
     <div class="actions"><button class="btn primary" id="sync">Retry</button><a href="#/settings">Todoist settings</a></div>`;
-  else if (!store.todoistToken) body = `<p class="muted">Connect Todoist in <a href="#/settings">Settings</a> and a project with a task list will be created when a quote is accepted.</p>`;
+  else if (!store.todoistConnected) body = `<p class="muted">Connect Todoist (see <a href="#/settings">Settings</a>) and a project with a task list will be created when a quote is accepted.</p>`;
   else if (wanted) body = '<button class="btn primary" id="sync">Create Todoist project</button>';
   else body = '<p class="muted">A Todoist project with one task per build phase will be created when this quote is accepted.</p>';
   card.innerHTML = `<h2>Todoist</h2>${body}`;
@@ -1416,14 +1189,6 @@ function showQuote(p) {
 }
 
 // ---------- settings ----------
-function renderSyncInfo() {
-  const { repo, lastSyncedAt, dirty } = store.sync;
-  $('#syncInfo').innerHTML = !syncOn()
-    ? '<span class="pill">Off</span> Connect a private GitHub repository to use the same data on every device.'
-    : syncMessage ? `<span class="pill declined">Not syncing</span> ${esc(syncMessage)} Changes are saved on this device and will sync when this is resolved.`
-    : `<span class="pill accepted">On</span> Syncing with ${esc(repo)}. ${lastSyncedAt ? `Last synced ${esc(new Date(lastSyncedAt).toLocaleString())}.` : ''}${dirty ? ' Changes waiting to sync.' : ''}`;
-}
-
 function showSettings() {
   const s = store.settings;
   const inp = (label, key, type = 'text', cls = '') =>
@@ -1461,28 +1226,12 @@ function showSettings() {
     <div class="card"><h2>Todoist</h2>
       <p id="todoistState"></p>
       <div class="actions">
-        <input id="token" type="password" autocomplete="off" placeholder="Paste your Todoist API token" style="max-width:340px" aria-label="Todoist API token">
-        <button class="btn primary" id="saveToken">Save token</button>
         <button class="btn" id="testToken">Test connection</button>
-        <button class="btn danger" id="clearToken">Remove</button>
       </div>
-      <p class="muted" style="margin-bottom:0">Find your token in Todoist under Settings &rarr; Integrations &rarr; Developer. It is stored only in this browser and sent only to todoist.com.</p>
-    </div>
-    <div class="card"><h2>Sync between devices</h2>
-      <p id="syncInfo"></p>
-      <div class="grid" style="max-width:720px">
-        <label class="f w3"><span>Private GitHub repository</span><input id="syncRepo" placeholder="yourname/shop-tracker-data" value="${esc(store.sync.repo)}" autocomplete="off"></label>
-        <label class="f w3"><span>GitHub access token</span><input id="syncToken" type="password" autocomplete="off" placeholder="${store.sync.token ? 'Saved. Paste to replace' : 'Paste a fine-grained token'}"></label>
-      </div>
-      <div class="actions" style="margin-top:12px">
-        <button class="btn primary" id="syncConnect">Connect</button>
-        <button class="btn" id="syncNow">Sync now</button>
-        <button class="btn danger" id="syncOff">Disconnect</button>
-      </div>
-      <p class="muted" style="margin-bottom:0">Projects and settings are kept in a file in that repository and shared with every device you connect. Use a fine-grained token limited to that one repository, with "Contents: Read and write". Tokens stay on this device, so the Todoist token is entered separately on each one.</p>
+      <p class="muted" style="margin-bottom:0">The API token is set on the server as the <code>TODOIST_TOKEN</code> secret (see DEPLOYMENT.md). Find it in Todoist under Settings &rarr; Integrations &rarr; Developer. It is used for every device and sent only to todoist.com.</p>
     </div>
     <div class="card"><h2>Backup</h2>
-      <p class="muted">Without sync, everything is stored only in this browser on this computer. Export a backup regularly, and before clearing browser data or moving this file.</p>
+      <p class="muted">Projects and settings are stored on the server and shared by every device you sign in on. Export a backup now and then to keep a copy of your own.</p>
       <div class="actions"><button class="btn" id="export">Export backup</button>
         <button class="btn" id="import">Import backup&hellip;</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
     </div>`;
@@ -1546,69 +1295,19 @@ function showSettings() {
   });
 
   const renderTodoistState = () => {
-    $('#todoistState').innerHTML = store.todoistToken
-      ? '<span class="pill accepted">Connected</span> A token is saved. Accepted quotes will create a Todoist project.'
-      : '<span class="pill">Not connected</span> Add a token to create a Todoist project when a quote is accepted.';
+    $('#todoistState').innerHTML = store.todoistConnected
+      ? '<span class="pill accepted">Connected</span> A token is set. Accepted quotes will create a Todoist project.'
+      : '<span class="pill">Not connected</span> Set the <code>TODOIST_TOKEN</code> secret to create a Todoist project when a quote is accepted.';
   };
   renderTodoistState();
-  $('#saveToken').addEventListener('click', () => {
-    const value = $('#token').value.trim();
-    if (!value) return toast('Paste a token first.');
-    store.todoistToken = value;
-    saveLocal();
-    $('#token').value = '';
-    renderTodoistState();
-    toast('Token saved.');
-  });
-  $('#clearToken').addEventListener('click', () => {
-    store.todoistToken = '';
-    saveLocal();
-    renderTodoistState();
-  });
   $('#testToken').addEventListener('click', async () => {
-    if (!store.todoistToken) return toast('Save a token first.');
+    if (!store.todoistConnected) return toast('Set the TODOIST_TOKEN secret first.');
     try { await todoist('GET', '/projects?limit=1'); toast('Connected to Todoist.'); }
     catch (e) { toast(e.message); }
   });
 
-  renderSyncInfo();
-  $('#syncConnect').addEventListener('click', async () => {
-    const repo = $('#syncRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$|\/$/g, '');
-    const token = $('#syncToken').value.trim() || store.sync.token;
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast('Enter the repository as owner/name, for example yourname/shop-tracker-data.');
-    if (!token) return toast('Paste a GitHub access token.');
-    const previous = store.sync;
-    store.sync = { repo, token, sha: '', dirty: true, lastSyncedAt: '' };
-    try {
-      const res = await github('');
-      if (res.status === 404) throw new Error('Repository not found, or the token has no access to it.');
-      if (!res.ok) throw new Error(`GitHub returned ${res.status}.`);
-      if (!(await res.json()).private) throw new Error('That repository is public. Use a private one so client details stay private.');
-    } catch (e) {
-      store.sync = previous;
-      return toast(e.message);
-    }
-    saveLocal();
-    $('#syncToken').value = '';
-    await sync();
-    toast(syncMessage || 'Sync is on.');
-  });
-  $('#syncNow').addEventListener('click', async () => {
-    if (!syncOn()) return toast('Connect a repository first.');
-    await sync();
-    toast(syncMessage || 'Synced.');
-  });
-  $('#syncOff').addEventListener('click', () => {
-    if (!syncOn() || !confirm('Stop syncing on this device? Your data stays here and in the repository.')) return;
-    clearTimeout(syncTimer);
-    store.sync = { repo: '', token: '', sha: '', dirty: false, lastSyncedAt: '' };
-    saveLocal();
-    setSyncState('');
-    route();
-  });
-
   $('#export').addEventListener('click', () => {
-    const { todoistToken, sync, ...backup } = store;   // access tokens stay out of backup files
+    const { todoistConnected, ...backup } = store;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
     a.download = `shop-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -1624,8 +1323,13 @@ function showSettings() {
     try { backup = JSON.parse(await file.text()); } catch { backup = null; }
     if (!backup || !Array.isArray(backup.projects) || !backup.settings) return toast('That file is not a Shop Tracker backup.');
     if (!confirm(`Replace the ${store.projects.length} project(s) here with the ${backup.projects.length} in this backup?`)) return;
-    localStorage.setItem(STORE_KEY, JSON.stringify({ ...backup, todoistToken: store.todoistToken, sync: store.sync }));
-    store = loadStore();
+    try {
+      await save();
+      store = loadStore(await api('/api/import', backup));
+    } catch (e) {
+      return toast(`Import failed: ${e.message}`);
+    }
+    saved = snapshot();
     settingsChanged();
     route();
     toast('Backup imported.');
@@ -1633,11 +1337,8 @@ function showSettings() {
 }
 
 route();
-if (syncOn()) sync();
 loadPrices();
-// Pick up other devices' changes when coming back to this tab, and push pending ones when leaving it.
-document.addEventListener('visibilitychange', sync);
-window.addEventListener('online', sync);
-</script>
-</body>
-</html>
+// Pick up other devices' changes when coming back to this tab, and send pending ones when leaving it.
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' ? save(true) : refresh());
+window.addEventListener('pagehide', () => save(true));
+window.addEventListener('online', () => save());

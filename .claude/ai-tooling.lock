@@ -1,0 +1,12 @@
+source: https://github.com/alex-laycalvert/ai-tooling.git
+commit: 0cc6acc2f86c87b42543749c21306acc5247ac20
+items:
+  - skills/adopt-tooling
+  - skills/ai-triage
+  - skills/feedback-ladder-pr-review
+  - agents/issue-reviewer.agent.md
+  - agents/issue-worker.agent.md
+  - agents/triage-fix.agent.md
+  - agents/triage-investigate.agent.md
+  - agents/triage-reproduce.agent.md
+  - agents/triage-verify.agent.md

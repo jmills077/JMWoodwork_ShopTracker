@@ -1,0 +1,37 @@
+{
+  "name": "shop-tracker",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Quotes, scheduling and Todoist hand-off for a custom furniture shop. Runs on Cloudflare Workers + D1.",
+  "type": "module",
+  "scripts": {
+    "build:client": "esbuild src/client/app.ts --bundle --minify --format=esm --target=es2022 --outfile=public/app.js",
+    "dev": "wrangler dev",
+    "setup:local": "npm run db:migrate:local && npm run db:seed:local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:seed:local": "node scripts/seed-prices.ts && wrangler d1 execute DB --local --file=.wrangler/seed-prices.sql",
+    "db:seed:remote": "node scripts/seed-prices.ts && wrangler d1 execute DB --remote --file=.wrangler/seed-prices.sql",
+    "deploy": "npm run db:migrate:remote && wrangler deploy",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/client && tsc --noEmit -p scripts",
+    "db:reset:local": "rm -rf .wrangler/state && npm run setup:local"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmills077/JMWoodwork_ShopTracker.git"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.151.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true
+  }
+}
