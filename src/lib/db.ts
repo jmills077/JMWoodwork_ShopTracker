@@ -3,18 +3,22 @@
 import type { Project, Prices, PriceItem, Settings } from '../shared/types';
 
 interface ProjectRow {
-  id: number; quote_number: string; status: string; stage: string;
+  id: number; quote_number: string; stream: string; status: string; stage: string;
   data: string; calc: string; todoist: string; history: string; created_at: string; updated_at: string;
 }
 
 const toProject = (r: ProjectRow): Project => ({
-  id: r.id, quote_number: r.quote_number, status: r.status, stage: r.stage,
+  id: r.id, quote_number: r.quote_number, stream: r.stream, status: r.status, stage: r.stage,
   data: JSON.parse(r.data), calc: JSON.parse(r.calc), todoist: JSON.parse(r.todoist), history: JSON.parse(r.history),
   created_at: r.created_at, updated_at: r.updated_at,
 });
 
 // The same numbering as the original app: Q-<year>-<id, at least 3 digits>.
 const quoteNumber = (id: number, createdAt: string) => `Q-${createdAt.slice(0, 4)}-${String(id).padStart(3, '0')}`;
+
+// Projects from before streams existed (and backups of them) are client work.
+const STREAMS = ['client', 'product', 'gallery'];
+const streamOf = (p: Project) => STREAMS.includes(p.stream) ? p.stream : 'client';
 
 /** Throws if `value` isn't a project the browser could have produced. */
 export function checkProject(value: unknown, needId = true): asserts value is Project {
@@ -31,13 +35,13 @@ const json = (v: unknown, fallback: unknown) => JSON.stringify(v ?? fallback);
 
 // Writes a project as given, keeping its id. Only replaces a stored copy that isn't newer.
 const upsertProject = (db: D1Database, p: Project) => db.prepare(`
-  INSERT INTO projects (id, quote_number, status, stage, data, calc, todoist, history, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO projects (id, quote_number, stream, status, stage, data, calc, todoist, history, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (id) DO UPDATE SET
-    quote_number = excluded.quote_number, status = excluded.status, stage = excluded.stage, data = excluded.data,
+    quote_number = excluded.quote_number, stream = excluded.stream, status = excluded.status, stage = excluded.stage, data = excluded.data,
     calc = excluded.calc, todoist = excluded.todoist, history = excluded.history, updated_at = excluded.updated_at
   WHERE excluded.updated_at >= projects.updated_at`)
-  .bind(p.id, p.quote_number || quoteNumber(p.id, p.created_at), p.status, p.stage || 'ideation',
+  .bind(p.id, p.quote_number || quoteNumber(p.id, p.created_at), streamOf(p), p.status, p.stage || 'ideation',
     json(p.data, {}), json(p.calc, {}), json(p.todoist, {}), json(p.history, []), p.created_at, p.updated_at);
 
 // Settings are stored with the time they were last changed; an older copy never replaces a newer one.
@@ -86,15 +90,15 @@ export async function saveChanges(db: D1Database, changes: Changes) {
 export async function createProject(db: D1Database, draft: unknown): Promise<Project> {
   checkProject(draft, false);
   const row = await db.prepare(`
-    INSERT INTO projects (quote_number, status, stage, data, calc, todoist, history, created_at, updated_at)
-    VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
-    .bind(draft.status, draft.stage || 'ideation', json(draft.data, {}), json(draft.calc, {}), json(draft.todoist, {}),
+    INSERT INTO projects (quote_number, stream, status, stage, data, calc, todoist, history, created_at, updated_at)
+    VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
+    .bind(streamOf(draft), draft.status, draft.stage || 'ideation', json(draft.data, {}), json(draft.calc, {}), json(draft.todoist, {}),
       json(draft.history, []), draft.created_at, draft.updated_at)
     .first<{ id: number }>();
   const id = row!.id, quote_number = quoteNumber(id, draft.created_at);
   await db.prepare('UPDATE projects SET quote_number = ? WHERE id = ?').bind(quote_number, id).run();
   const { stage, data, calc, todoist, history, created_at, updated_at, status } = draft;
-  return { id, quote_number, status, stage: stage || 'ideation', data, calc, todoist: todoist ?? {}, history, created_at, updated_at };
+  return { id, quote_number, stream: streamOf(draft), status, stage: stage || 'ideation', data, calc, todoist: todoist ?? {}, history, created_at, updated_at };
 }
 
 /** Replaces every project and the settings with a backup file's (from this app or the original one). */

@@ -51,7 +51,26 @@ const STATUSES = [
   ['draft', 'Draft'], ['sent', 'Quote sent'], ['accepted', 'Accepted'], ['in_progress', 'In progress'],
   ['complete', 'Complete'], ['delivered', 'Delivered & paid'], ['declined', 'Declined'],
 ];
-const STATUS_NAME = Object.fromEntries(STATUSES);
+// Product-line and gallery pieces have no client or quote, so their status is just where the work is.
+const OWN_STATUSES = [['planned', 'Planned'], ['in_progress', 'In progress'], ['complete', 'Complete']];
+const STATUS_NAME = Object.fromEntries([...STATUSES, ...OWN_STATUSES]);
+// The three streams of work. Projects from before streams existed are client work.
+const STREAMS = [
+  ['client', 'Client custom', 'A piece quoted for a client.'],
+  ['product', 'Product line', 'One of your own products, priced for sale.'],
+  ['gallery', 'Gallery', 'A piece made for the business, not for sale.'],
+];
+const STREAM_NAME = Object.fromEntries(STREAMS);
+const streamOf = p => STREAM_NAME[p.stream] ? p.stream : 'client';
+const isClient = p => streamOf(p) === 'client';
+const statusesFor = stream => stream === 'client' ? STATUSES : OWN_STATUSES;
+// Delivered and declined client projects, and finished product and gallery pieces, leave the board for the archive.
+const archived = p => isClient(p) ? ['delivered', 'declined'].includes(p.status) : p.status === 'complete';
+// A status from one stream carried over to another when a project changes stream.
+const STATUS_IN_STREAM = {
+  client: { planned: 'draft' },
+  own: { draft: 'planned', sent: 'planned', declined: 'planned', accepted: 'planned', delivered: 'complete' },
+};
 // The phase of the work itself, tracked separately from the quote/job status above.
 const STAGES = [['ideation', 'Ideation'], ['design', 'Design'], ['build', 'Build'], ['finishing', 'Finishing'], ['ready', 'Delivery']];
 const STAGE_NAME = Object.fromEntries(STAGES);
@@ -62,6 +81,7 @@ const NEXT_STEP = {
   draft: ['sent', 'Mark quote as sent'], sent: ['accepted', 'Quote accepted'], accepted: ['in_progress', 'Start work'],
   in_progress: ['complete', 'Mark complete'], complete: ['delivered', 'Delivered & paid'],
 };
+const OWN_NEXT_STEP = { planned: ['in_progress', 'Start work'], in_progress: ['complete', 'Mark complete'] };
 const STATES = [
   ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'],
   ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'],
@@ -140,8 +160,9 @@ function mergePhases(existing = [], estimated) {
   return merged.concat(existing.filter(p => p.custom));
 }
 
-// Re-estimates data.phases in place and returns the priced totals.
-function price(data) {
+// Re-estimates data.phases in place and returns the priced totals. Only client work has sales tax,
+// a retainer and a deposit; a gallery piece is priced at cost, so its materials carry no markup.
+function price(data, stream = 'client') {
   const est = estimate(data.spec);
   data.phases = mergePhases(data.phases, est.phases);
   const r = data.rates;
@@ -153,16 +174,18 @@ function price(data) {
   const materialsEst = lumber.buyBf * pos(findSpecies(data.spec.species).price);
   const materialsBase = data.materials_override === '' || data.materials_override == null ? materialsEst : pos(data.materials_override);
   const otherCosts = pos(data.other_costs);
-  const subtotal = laborCost + materialsBase * (1 + pos(r.markup_pct) / 100) + otherCosts;
-  const tax = subtotal * pos(r.tax_pct) / 100;
+  const client = stream === 'client', markup = stream === 'gallery' ? 0 : pos(r.markup_pct);
+  const subtotal = laborCost + materialsBase * (1 + markup / 100) + otherCosts;
+  const tax = client ? subtotal * pos(r.tax_pct) / 100 : 0;
   const total = subtotal + tax;
-  const retainer = Math.min(pos(data.retainer), total);
+  const retainer = client ? Math.min(pos(data.retainer), total) : 0;
   const balance = total - retainer;
   return {
     board_feet: est.boardFeet, lumber, labor_hours: cents(laborHours), contingency_hours: contingencyHours, labor_cost: cents(laborCost),
-    materials_est: cents(materialsEst), materials_cost: cents(materialsBase * (1 + pos(r.markup_pct) / 100)), other_costs: cents(otherCosts),
+    materials_est: cents(materialsEst), materials_cost: cents(materialsBase * (1 + markup / 100)), other_costs: cents(otherCosts),
+    cost: cents(laborCost + materialsBase + otherCosts),   // what the piece costs the shop: time, lumber and hardware
     subtotal: cents(subtotal), tax: cents(tax), total: cents(total),
-    retainer: cents(retainer), balance: cents(balance), deposit: cents(balance * pos(r.deposit_pct) / 100),
+    retainer: cents(retainer), balance: cents(balance), deposit: client ? cents(balance * pos(r.deposit_pct) / 100) : 0,
   };
 }
 
@@ -238,15 +261,16 @@ async function todoist(method, path, body?) {
 // The task list created in Todoist when a quote is accepted.
 function todoistPlan(p) {
   const { data, calc } = p;
+  const client = isClient(p);
   const tasks = [
-    { content: `Collect deposit (${money(calc.deposit)})`, description: `Quote ${p.quote_number}, total ${money(calc.total)}` },
+    ...(client ? [{ content: `Collect deposit (${money(calc.deposit)})`, description: `Quote ${p.quote_number}, total ${money(calc.total)}` }] : []),
     { content: 'Order lumber & hardware', description: `About ${calc.lumber?.feet ? lumberSummary(data, calc.lumber) : `${calc.board_feet} board feet of ${data.spec.species || 'lumber'}`}` },
   ];
   for (const phase of data.phases) {
     if (pos(phase.hours) > 0 && phase.name) tasks.push({ content: phase.name, description: `Estimated ${hrs(phase.hours)}` });
   }
-  tasks.push({ content: `Collect final payment (${money((calc.balance ?? calc.total) - calc.deposit)})`, description: '' });
-  const name = projectName(p) + (data.client_name ? ` - ${data.client_name}` : '');
+  if (client) tasks.push({ content: `Collect final payment (${money((calc.balance ?? calc.total) - calc.deposit)})`, description: '' });
+  const name = projectName(p) + (client && data.client_name ? ` - ${data.client_name}` : client ? '' : ` - ${STREAM_NAME[streamOf(p)]}`);
   return { name: name.slice(0, 120), tasks };
 }
 
@@ -443,10 +467,11 @@ function route() {
   const parts = currentHash.replace(/^#\/?/, '').split('/');
   const project = parts[0] === 'p' ? store.projects.find(p => p.id === Number(parts[1])) : null;
   let nav = 'board';
-  if (parts[0] === 'new') { nav = 'new'; showEditor(null); }
+  if (parts[0] === 'new') { nav = 'new'; STREAM_NAME[parts[1]] ? showEditor(null, parts[1]) : showNewPicker(); }
+  else if (parts[0] === 's' && (STREAM_NAME[parts[1]] || parts[1] === 'all')) { boardStream = parts[1]; remember(); showBoard(); }
   else if (parts[0] === 'settings') { nav = 'settings'; showSettings(); }
   else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
-  else if (project && parts[2] === 'quote') showQuote(project);
+  else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
   else if (project) showEditor(project);
   else showBoard();
@@ -462,45 +487,85 @@ window.addEventListener('hashchange', () => {
 });
 
 // ---------- projects board ----------
+// The board shows one stream at a time, or all of them; the choice is remembered on this device.
+let boardStream = (() => { try { return localStorage.getItem('boardStream') || 'all'; } catch { return 'all'; } })();
+if (!STREAM_NAME[boardStream]) boardStream = 'all';
+function remember() { try { localStorage.setItem('boardStream', boardStream); } catch {} }
+const boardLink = () => boardStream === 'all' ? '#/' : `#/s/${boardStream}`;
+const newLink = () => STREAM_NAME[boardStream] ? `#/new/${boardStream}` : '#/new';
+// What a card shows as the piece's value: a client's quote, a product's price, a gallery piece's cost.
+const valueOf = p => streamOf(p) === 'gallery' ? p.calc.cost ?? p.calc.total : p.calc.total;
+
 function showBoard() {
-  const by = status => store.projects.filter(p => p.status === status).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const tab = STREAM_NAME[boardStream] ? boardStream : 'all';
+  const shown = store.projects.filter(p => tab === 'all' || streamOf(p) === tab);
+  const by = (...statuses) => shown.filter(p => statuses.includes(p.status)).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const sum = (list, f) => list.reduce((total, p) => total + f(p), 0);
-  if (!store.projects.length) {
-    view.innerHTML = `<div class="card empty"><h1>No projects yet</h1>
-      <p class="muted">Start by pricing a piece for a prospective client.</p>
-      <p><a class="btn primary" href="#/new">New quote</a></p></div>`;
+  const shopHours = p => p.calc.labor_hours + p.calc.contingency_hours;
+  const tabs = `<nav class="tabs streams">${[['all', 'All projects'], ...STREAMS].map(([key, name]) =>
+    `<a href="${key === 'all' ? '#/s/all' : `#/s/${key}`}" class="${key === tab ? 'on' : ''}">${name}
+      <small>${store.projects.filter(p => key === 'all' || streamOf(p) === key).filter(p => !archived(p)).length}</small></a>`).join('')}</nav>`;
+  const newLabel = tab === 'client' ? 'New quote' : 'New project';
+  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn primary" href="${newLink()}">${newLabel}</a></div>${tabs}`;
+  if (!shown.length) {
+    view.innerHTML = `${head}<div class="card empty"><h1>Nothing here yet</h1>
+      <p class="muted">${tab === 'all' ? 'Start by pricing a piece for a client, or plan one of your own.' : esc(STREAMS.find(x => x[0] === tab)[2])}</p>
+      <p><a class="btn primary" href="${newLink()}">${newLabel}</a></p></div>`;
     return;
   }
-  const open = by('sent'), booked = [...by('accepted'), ...by('in_progress')], done = [...by('complete'), ...by('delivered')];
+  const active = by('accepted', 'in_progress');
+  const stat = (label, value, note) => `<div class="card stat"><span class="muted">${label}</span><b>${value}</b><span class="muted">${note}</span></div>`;
+  let stats;
+  if (tab === 'client' || tab === 'all') {
+    const open = by('sent'), done = by('complete', 'delivered');
+    const booked = active.filter(isClient);
+    stats = stat('Quotes awaiting answer', money(sum(open, p => p.calc.total)), `${open.length} sent`)
+      + stat('Booked client work', money(sum(booked, p => p.calc.total)), `${booked.length} active`)
+      + stat('Shop hours booked', hrs(sum(active, shopHours)), tab === 'all' ? 'all active work' : 'accepted + in progress')
+      + (tab === 'all' ? stat('Completed', String(done.length), 'pieces finished')
+        : stat('Completed', money(sum(done, p => p.calc.total)), `${done.length} finished`));
+  } else {
+    const planned = by('planned'), done = by('complete');
+    const valueLabel = tab === 'product' ? 'retail value' : 'cost';
+    stats = stat('Planned', String(planned.length), `${money(sum(planned, valueOf))} ${valueLabel}`)
+      + stat('In progress', String(active.length), `${money(sum(active, valueOf))} ${valueLabel}`)
+      + stat('Shop hours booked', hrs(sum(active, shopHours)), 'in progress')
+      + stat('Completed', String(done.length), `${money(sum(done, valueOf))} ${valueLabel}`);
+  }
   const jobCard = p => `<a class="job" href="#/p/${p.id}" draggable="true" data-id="${p.id}">
       <b>${esc(projectName(p))}</b>
-      <div class="row"><span>${esc(p.data.client_name || 'No client yet')}</span><span class="amt">${money(p.calc.total)}</span></div>
-      <div class="row"><span>${esc(p.quote_number)}</span><span>${hrs(p.calc.labor_hours + p.calc.contingency_hours)}</span></div>
+      <div class="row"><span>${isClient(p) ? esc(p.data.client_name || 'No client yet') : streamOf(p) === 'gallery' ? 'Cost' : 'Retail price'}</span><span class="amt">${money(valueOf(p))}</span></div>
+      <div class="row"><span>${isClient(p) ? esc(p.quote_number) : ''}</span><span>${hrs(shopHours(p))}</span></div>
       <div class="row foot"><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>${stageDue(p, stageOf(p)) ? `<span>Phase due ${esc(fmtDate(stageDue(p, stageOf(p))))}</span>` : ''}</div>
     </a>`;
-  const archive = [...by('delivered'), ...by('declined')];
-  // Delivered and declined projects leave the board for the archive.
-  const inStage = key => store.projects.filter(p => !archive.includes(p) && stageOf(p) === key).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  view.innerHTML = `
-    <div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn primary" href="#/new">New quote</a></div>
-    <div class="stats">
-      <div class="card stat"><span class="muted">Quotes awaiting answer</span><b>${money(sum(open, p => p.calc.total))}</b><span class="muted">${open.length} sent</span></div>
-      <div class="card stat"><span class="muted">Booked work</span><b>${money(sum(booked, p => p.calc.total))}</b><span class="muted">${booked.length} active</span></div>
-      <div class="card stat"><span class="muted">Shop hours booked</span><b>${hrs(sum(booked, p => p.calc.labor_hours + p.calc.contingency_hours))}</b><span class="muted">accepted + in progress</span></div>
-      <div class="card stat"><span class="muted">Completed</span><b>${money(sum(done, p => p.calc.total))}</b><span class="muted">${done.length} finished</span></div>
-    </div>
-    <div class="board">
+  const archive = shown.filter(archived).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const inStage = (key, list = shown) => list.filter(p => !archived(p) && stageOf(p) === key).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const boardHtml = (list = shown) => `<div class="board">
       ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
-        <h2><span>${name}</span><span>${inStage(key).length}</span></h2>${inStage(key).map(jobCard).join('')}</section>`).join('')}
-    </div>
+        <h2><span>${name}</span><span>${inStage(key, list).length}</span></h2>${inStage(key, list).map(jobCard).join('')}</section>`).join('')}
+    </div>`;
+  // "All projects" shows each stream as its own section, one above the other. Every section keeps its
+  // columns, even when empty, so a card can be dragged into another stream.
+  const lanes = () => STREAMS.map(([key, name]) => {
+    const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
+    return `<section class="lane ${key}" data-stream="${key}">
+      <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open ${name.toLowerCase()} &rarr;</a></div>
+      ${boardHtml(list)}
+    </section>`;
+  }).join('');
+  view.innerHTML = `
+    ${head}
+    <div class="stats">${stats}</div>
+    <div class="boards">${tab === 'all' ? lanes() : boardHtml()}</div>
     ${archive.length ? `<div class="card" style="margin-top:20px"><h2>Archive</h2><table class="list">
-      <tr><th>Project</th><th>Client</th><th>Quote</th><th>Total</th><th>Status</th></tr>
-      ${archive.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a></td><td>${esc(p.data.client_name)}</td>
-        <td>${esc(p.quote_number)}</td><td>${money(p.calc.total)}</td><td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></td></tr>`).join('')}
+      <tr><th>Project</th><th>${tab === 'client' ? 'Client' : tab === 'all' ? 'Stream' : ''}</th><th>${tab === 'client' ? 'Quote' : ''}</th><th>${tab === 'gallery' ? 'Cost' : 'Total'}</th><th>Status</th></tr>
+      ${archive.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a></td>
+        <td>${tab === 'client' ? esc(p.data.client_name) : tab === 'all' ? STREAM_NAME[streamOf(p)] : ''}</td>
+        <td>${tab === 'client' ? esc(p.quote_number) : ''}</td><td>${money(valueOf(p))}</td><td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></td></tr>`).join('')}
       </table></div>` : ''}`;
 
-  // Drag a card to another column to change its phase.
-  const board = $('.board');
+  // Drag a card to another column to change its phase, or (on "All projects") into another stream's section.
+  const board = $('.boards');
   let dragged = null;
   const clearOver = () => board.querySelectorAll('.col.over').forEach(c => c.classList.remove('over'));
   board.addEventListener('dragstart', e => {
@@ -527,8 +592,12 @@ function showBoard() {
     const col = e.target.closest('.col');
     if (!dragged || !col) return;
     e.preventDefault();
-    setStage(dragged, col.dataset.stage);
-    showBoard();
+    const p = dragged, stream = col.closest('.lane')?.dataset.stream;
+    const move = stream && stream !== streamOf(p);
+    if (move && !confirm(`Move ${projectName(p)} to ${STREAM_NAME[stream]}?`)) { clearOver(); return; }
+    setStage(p, col.dataset.stage);
+    if (move) setStream(p, stream);
+    else showBoard();
   });
 }
 
@@ -540,12 +609,13 @@ function showCalendar(month) {
   const [year, mon] = (/^\d{4}-\d{2}$/.test(month || '') ? month : today.slice(0, 7)).split('-').map(Number);
   const monthLink = offset => `#/calendar/${ymd(new Date(year, mon - 1 + offset, 1)).slice(0, 7)}`;
 
-  // A job goes on the calendar once its quote is accepted and comes off when it is delivered.
+  // A job goes on the calendar once its quote is accepted (or, for the shop's own pieces, once work
+  // starts) and comes off when it is delivered.
   // Its bar is split at each phase's due date, one colored stretch per phase; phases already
   // finished are faded. With no phase dates it is one bar in the color of the current phase.
   const nextDay = date => { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + 1); return ymd(d); };
   const jobs = store.projects.filter(p => ['accepted', 'in_progress', 'complete'].includes(p.status)).map(p => {
-    const began = p.history.findLast(h => h.status === 'accepted') || p.history.findLast(h => h.status === 'in_progress');
+    const began = (isClient(p) && p.history.findLast(h => h.status === 'accepted')) || p.history.findLast(h => h.status === 'in_progress');
     const start = ymd(new Date(began?.at || p.updated_at));
     const current = STAGES.findIndex(([key]) => key === stageOf(p));
     const dated = STAGES.map(([key], i) => ({ key, i, due: stageDue(p, key) })).filter(x => x.due);
@@ -577,7 +647,7 @@ function showCalendar(month) {
         const named = key === seg.from || d.getDay() === 0, due = key === stageDue(j.p, seg.key) || key === j.p.data.due_date;
         const text = named ? `${projectName(j.p)} \u00b7 ${STAGE_NAME[seg.key]}${due ? ' (due)' : ''}` : due ? 'Due' : '';
         return `<a class="bar st-${seg.key} ${seg.past ? 'past' : ''} ${named ? 'label' : ''} ${key === j.start ? 's' : ''} ${key === j.end ? 'e' : ''}" href="#/p/${j.p.id}"
-          title="${esc(projectName(j.p))}${j.p.data.client_name ? ` \u2013 ${esc(j.p.data.client_name)}` : ''}">${esc(text)}</a>`;
+          title="${esc(projectName(j.p))} \u2013 ${esc(isClient(j.p) ? j.p.data.client_name || STREAM_NAME.client : STREAM_NAME[streamOf(j.p)])}">${esc(text)}</a>`;
       }).join('')}</div>`;
     }
     day.setDate(day.getDate() + 7);
@@ -598,11 +668,11 @@ function showCalendar(month) {
     </div>
     <div class="cal">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(n => `<div class="dow">${n}</div>`).join('')}${cells}</div>
     <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}</div>
-    <div class="card" style="margin-top:16px"><h2>Accepted projects</h2>
-      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client</th><th>Phase</th><th>Phase due</th><th>Target completion</th></tr>
+    <div class="card" style="margin-top:16px"><h2>Scheduled projects</h2>
+      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client or stream</th><th>Phase</th><th>Phase due</th><th>Target completion</th></tr>
         ${jobs.map(j => `<tr><td><span class="swatch st-${stageOf(j.p)}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
-          <td>${esc(j.p.data.client_name)}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${dueText(j, stageDue(j.p, stageOf(j.p)))}</td><td>${dueText(j, j.p.data.due_date)}</td></tr>`).join('')}</table>`
-        : '<p class="muted" style="margin:0">Nothing is scheduled. A project appears here once its quote is marked accepted, from that day to its target completion date.</p>'}
+          <td>${isClient(j.p) ? esc(j.p.data.client_name) : STREAM_NAME[streamOf(j.p)]}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${dueText(j, stageDue(j.p, stageOf(j.p)))}</td><td>${dueText(j, j.p.data.due_date)}</td></tr>`).join('')}</table>`
+        : '<p class="muted" style="margin:0">Nothing is scheduled. A project appears here once its quote is marked accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
     </div>`;
 }
 
@@ -702,6 +772,13 @@ function typeAhead(select, minWidth = 0) {
   });
 }
 
+// ---------- choosing a stream for a new project ----------
+function showNewPicker() {
+  view.innerHTML = `<a href="${boardLink()}" class="back">&larr; Projects</a><div class="pagehead"><h1>New project</h1></div>
+    <p class="muted">Which kind of project is this?</p>
+    <div class="picker">${STREAMS.map(([key, name, about]) => `<a class="card pick" href="#/new/${key}"><b>${name}</b><span class="muted">${about}</span></a>`).join('')}</div>`;
+}
+
 // ---------- quote editor / project page ----------
 function blankData() {
   const s = store.settings, [length, width, height] = TYPES.dining_table.ref;
@@ -717,22 +794,23 @@ function blankData() {
 // Heading and tabs shared by a project's Details and Client quote views.
 function projectHeader(p, tab, side) {
   return `<div class="noprint">
-    <a href="#/" class="back">&larr; Projects</a>
+    <a href="${boardLink()}" class="back">&larr; Projects</a>
     <div class="projhead">
       <div class="name"><h1 id="projTitle">${esc(projectName(p))}</h1><span class="pill ${p.status}" id="statusPill">${STATUS_NAME[p.status]}</span></div>
-      <div class="sub">${esc(p.quote_number)}</div>
+      <div class="sub">${isClient(p) ? `${esc(p.quote_number)} &middot; ` : ''}${STREAM_NAME[streamOf(p)]}</div>
     </div>
     <nav class="tabs">
       <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
       <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
-      <a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>
+      ${isClient(p) ? `<a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>` : ''}
       <span class="spacer"></span><span class="side">${side}</span>
     </nav>
   </div>`;
 }
 
-function showEditor(project) {
-  ed = { project, data: project ? project.data : blankData(), dirty: false };
+function showEditor(project, newStream = 'client') {
+  const stream = project ? streamOf(project) : newStream, client = stream === 'client';
+  ed = { project, stream, data: project ? project.data : blankData(), dirty: false };
   const d = ed.data;
   d.lumber ??= { bf: '', quarters: '', width: '' };
   const inp = (label, path, type = 'text', cls = '', attrs = '') =>
@@ -746,20 +824,21 @@ function showEditor(project) {
 
   view.innerHTML = `
     ${project ? projectHeader(project, 'details', '<span class="muted">Changes save automatically</span>')
-      : '<a href="#/" class="back">&larr; Projects</a><div class="pagehead"><h1>New quote</h1></div>'}
+      : `<a href="${boardLink()}" class="back">&larr; Projects</a><div class="pagehead"><h1>${client ? 'New quote' : `New ${STREAM_NAME[stream].toLowerCase()} piece`}</h1>
+        <span class="spacer"></span><a href="#/new">Change kind of project</a></div>`}
     ${project ? '<div class="stages" id="stages" role="group" aria-label="Project phase"></div>' : ''}
     <div class="cols">
       <form class="card" id="form" autocomplete="off">
-        <fieldset><h2>Client</h2><div class="grid">
+        ${client ? `<fieldset><h2>Client</h2><div class="grid">
           ${inp('Name', 'client_name')}${inp('Email', 'client_email', 'email')}${inp('Phone', 'client_phone', 'tel')}
           ${sel('State (sets the sales tax)', 'client_state', [['', 'Not set'], ...STATES], 'w3')}
-        </div></fieldset>
+        </div></fieldset>` : ''}
         <fieldset><h2>What's being built</h2><div class="grid">
           ${inp('Project name', 'title', 'text', 'w6', 'placeholder="e.g. Live-edge dining table"')}
           ${sel('Furniture type', 'spec.type', Object.entries(TYPES).map(([k, t]) => [k, t.name]), 'w3')}
           ${sel('Wood species', 'spec.species', speciesNames.map(n => [n, n]), 'w3')}
           ${numInp('Length (in)', 'spec.length')}${numInp('Width / depth (in)', 'spec.width')}${numInp('Height (in)', 'spec.height')}
-          <label class="f w6"><span>Description (shown on the quote)</span><textarea data-path="spec.description">${esc(d.spec.description)}</textarea></label>
+          <label class="f w6"><span>Description${client ? ' (shown on the quote)' : ''}</span><textarea data-path="spec.description">${esc(d.spec.description)}</textarea></label>
         </div></fieldset>
         <fieldset><h2>Build details</h2><div class="grid">
           ${sel('Joinery & complexity', 'spec.complexity', Object.entries(COMPLEXITY).map(([k, c]) => [k, c.name]), 'w3')}
@@ -767,14 +846,15 @@ function showEditor(project) {
           ${numInp('Drawers', 'spec.drawers', 1)}${numInp('Doors', 'spec.doors', 1)}${numInp('Shelves', 'spec.shelves', 1)}
           ${numInp('Delivery & install (hours)', 'spec.delivery_hours', 0.25, 'w3')}
         </div></fieldset>
-        <fieldset><h2>Pricing</h2><div class="grid">
-          ${numInp('Hourly rate ($)', 'rates.hourly_rate')}${numInp('Contingency (%)', 'rates.contingency_pct')}${numInp('Materials markup (%)', 'rates.markup_pct')}
-          ${numInp('Sales tax (%)', 'rates.tax_pct')}${numInp('Deposit (%)', 'rates.deposit_pct')}${numInp('Hardware & other costs ($)', 'other_costs')}
-          ${numInp('Design retainer ($)', 'retainer', 'any', 'w3')}
+        <fieldset><h2>${stream === 'gallery' ? 'Cost' : 'Pricing'}</h2><div class="grid">
+          ${numInp('Hourly rate ($)', 'rates.hourly_rate')}${numInp('Contingency (%)', 'rates.contingency_pct')}
+          ${stream === 'gallery' ? '' : numInp('Materials markup (%)', 'rates.markup_pct')}
+          ${client ? `${numInp('Sales tax (%)', 'rates.tax_pct')}${numInp('Deposit (%)', 'rates.deposit_pct')}` : ''}${numInp('Hardware & other costs ($)', 'other_costs')}
+          ${client ? numInp('Design retainer ($)', 'retainer', 'any', 'w3') : ''}
           ${numInp('Lumber cost override ($)', 'materials_override', 'any', 'w3', 'id="override"')}
         </div></fieldset>
         <fieldset><h2>Notes</h2><div class="grid">
-          <label class="f w6"><span>Internal notes (not shown on the quote)</span><textarea data-path="notes">${esc(d.notes)}</textarea></label>
+          <label class="f w6"><span>${client ? 'Internal notes (not shown on the quote)' : 'Notes'}</span><textarea data-path="notes">${esc(d.notes)}</textarea></label>
         </div></fieldset>
       </form>
       <aside>
@@ -859,10 +939,11 @@ function showEditor(project) {
   if (project) {
     $('#delete').addEventListener('click', () => {
       const synced = project.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
-      if (!confirm(`Delete ${project.quote_number} (${projectName(project)})? This cannot be undone.${synced}`)) return;
+      const what = isClient(project) ? `${project.quote_number} (${projectName(project)})` : projectName(project);
+      if (!confirm(`Delete ${what}? This cannot be undone.${synced}`)) return;
       store.projects = store.projects.filter(p => p !== project);
       persist();
-      location.hash = '#/';
+      location.hash = boardLink();
     });
     renderStages();
     renderStatusCard();
@@ -882,7 +963,7 @@ function changed() {
 }
 
 function renderPanel() {
-  const d = ed.data, calc = price(d);
+  const d = ed.data, stream = ed.stream, calc = price(d, stream);
   if (ed.project) ed.project.calc = calc;
   const override = $('#override');
   if (override) override.placeholder = `Estimate: ${money(calc.materials_est)}`;
@@ -900,14 +981,17 @@ function renderPanel() {
     <div class="tot"><span>Labor</span><span>${hrs(calc.labor_hours)}</span></div>
     <div class="tot"><span>Contingency <small>${+pos(d.rates.contingency_pct)}%</small></span><span>+ ${hrs(calc.contingency_hours)}</span></div>
     <div class="tot"><span>Labor cost <small>${hrs(calc.labor_hours + calc.contingency_hours)} @ ${money(pos(d.rates.hourly_rate))}/h</small></span><b>${money(calc.labor_cost)}</b></div>
-    <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `${calc.lumber.feet ? `${calc.lumber.boards} \u00d7 ${BOARD_LENGTH_FT} ft boards, ` : '~'}${+calc.lumber.buyBf} bf ${esc(d.spec.species)}`} + ${+pos(d.rates.markup_pct)}% markup</small></span><b>${money(calc.materials_cost)}</b></div>
+    <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `${calc.lumber.feet ? `${calc.lumber.boards} \u00d7 ${BOARD_LENGTH_FT} ft boards, ` : '~'}${+calc.lumber.buyBf} bf ${esc(d.spec.species)}`}${stream === 'gallery' ? '' : ` + ${+pos(d.rates.markup_pct)}% markup`}</small></span><b>${money(calc.materials_cost)}</b></div>
     ${calc.other_costs ? `<div class="tot"><span>Hardware & other</span><b>${money(calc.other_costs)}</b></div>` : ''}
     ${calc.tax ? `<div class="tot"><span>Sales tax <small>${d.client_state ? `${esc(d.client_state)} ` : ''}${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
-    <div class="tot grand"><span>Quote total</span><span>${money(calc.total)}</span></div>
+    ${stream === 'gallery' ? `<div class="tot grand"><span>Total cost</span><span>${money(calc.cost)}</span></div>`
+      : stream === 'product' ? `<div class="tot grand"><span>Suggested retail price</span><span>${money(calc.total)}</span></div>
+        <div class="tot"><span class="muted">Cost to make <small>time, lumber and hardware</small></span><span class="muted">${money(calc.cost)}</span></div>`
+      : `<div class="tot grand"><span>Quote total</span><span>${money(calc.total)}</span></div>`}
     ${calc.retainer ? `<div class="tot"><span>Design retainer <small>already paid</small></span><span>&minus; ${money(calc.retainer)}</span></div>
     <div class="tot"><b>Balance due</b><b>${money(calc.balance)}</b></div>` : ''}
-    <div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''}</small></span><span class="muted">${money(calc.deposit)}</span></div>
-    ${ed.project ? '' : '<hr class="rule"><button type="button" class="btn primary" data-act="create" style="width:100%">Save quote</button>'}`;
+    ${stream === 'client' ? `<div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''}</small></span><span class="muted">${money(calc.deposit)}</span></div>` : ''}
+    ${ed.project ? '' : `<hr class="rule"><button type="button" class="btn primary" data-act="create" style="width:100%">${stream === 'client' ? 'Save quote' : 'Save project'}</button>`}`;
   renderLumber(calc);
 }
 
@@ -951,7 +1035,7 @@ async function sendLumberTask(p) {
   const summary = lumberSummary(p.data, n);
   const body = {
     content: `Pick up about ${summary}`,
-    description: `${+n.bf} board feet for ${projectName(p)} (${p.quote_number}).`,
+    description: `${+n.bf} board feet for ${projectName(p)} (${isClient(p) ? p.quote_number : STREAM_NAME[streamOf(p)]}).`,
   };
   try {
     let task = null, updated = false;
@@ -977,10 +1061,11 @@ async function sendLumberTask(p) {
 
 async function createProject() {
   if (ed.creating) return;
-  const stamp = new Date().toISOString();
+  const stamp = new Date().toISOString(), stream = ed.stream, status = stream === 'client' ? 'draft' : 'planned';
+  if (stream !== 'client') Object.assign(ed.data, { client_name: '', client_email: '', client_phone: '', client_state: '', retainer: 0 });
   const draft = {
-    status: 'draft',
-    stage: 'ideation', data: ed.data, calc: price(ed.data), todoist: {}, history: [{ status: 'draft', at: stamp }], created_at: stamp, updated_at: stamp,
+    stream, status,
+    stage: 'ideation', data: ed.data, calc: price(ed.data, stream), todoist: {}, history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp,
   };
   // The server gives the project its id and quote number.
   let project;
@@ -990,12 +1075,12 @@ async function createProject() {
   store.projects.push(project);
   saved.projects.set(project.id, JSON.stringify(project, unbusy));
   ed.dirty = false;
-  toast(`Saved as ${project.quote_number}`);
+  toast(stream === 'client' ? `Saved as ${project.quote_number}` : 'Project saved');
   location.hash = `#/p/${project.id}`;
 }
 
 function renderStatusCard() {
-  const p = ed.project, next = NEXT_STEP[p.status];
+  const p = ed.project, client = isClient(p), next = (client ? NEXT_STEP : OWN_NEXT_STEP)[p.status];
   $('#statusPill').className = `pill ${p.status}`;
   $('#statusPill').textContent = STATUS_NAME[p.status];
   const card = $('#statusCard');
@@ -1005,12 +1090,28 @@ function renderStatusCard() {
       ${next ? `<button class="btn primary" data-status="${next[0]}">${next[1]}</button>` : ''}
       ${p.status === 'sent' ? '<button class="btn danger" data-status="declined">Declined</button>' : ''}
       <select id="statusSelect" style="width:auto" aria-label="Change status">
-        ${STATUSES.map(([k, n]) => `<option value="${k}" ${k === p.status ? 'selected' : ''}>${n}</option>`).join('')}
+        ${statusesFor(streamOf(p)).map(([k, n]) => `<option value="${k}" ${k === p.status ? 'selected' : ''}>${n}</option>`).join('')}
       </select>
     </div>
+    <label class="f" style="margin-top:12px"><span>Kind of project</span><select id="streamSelect">
+      ${STREAMS.map(([k, n]) => `<option value="${k}" ${k === streamOf(p) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <ul class="history">${p.history.map(h => `<li><span>${h.stage ? `Phase: ${STAGE_NAME[h.stage]}` : STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
   card.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', () => setStatus(p, b.dataset.status)));
   $('#statusSelect').addEventListener('change', e => setStatus(p, e.target.value));
+  $('#streamSelect').addEventListener('change', e => setStream(p, e.target.value));
+}
+
+// Moves a project to another stream, carrying its status over to the nearest one that stream has.
+function setStream(p, stream) {
+  if (stream === streamOf(p)) return;
+  const status = STATUS_IN_STREAM[stream === 'client' ? 'client' : 'own'][p.status] || p.status;
+  p.stream = stream;
+  p.calc = price(p.data, stream);
+  p.updated_at = new Date().toISOString();
+  if (status !== p.status) { p.status = status; p.history.push({ status, at: p.updated_at }); }
+  persist();
+  toast(`Moved to ${STREAM_NAME[stream]}`);
+  route();
 }
 
 function renderStages() {
@@ -1054,10 +1155,10 @@ async function setStatus(p, status) {
   persist();
   if (ed?.project === p) { renderStatusCard(); renderTodoistCard(); }
   else showBoard();
-  // Accepting a quote opens the job in Todoist.
-  if (status === 'accepted' && !p.todoist.synced) {
+  // Accepting a quote, or starting work on one of the shop's own pieces, opens the job in Todoist.
+  if (status === (isClient(p) ? 'accepted' : 'in_progress') && !p.todoist.synced) {
     if (store.todoistConnected) await runTodoistSync(p);
-    else toast('Quote accepted. Set the TODOIST_TOKEN secret to create its task list.');
+    else toast(`${isClient(p) ? 'Quote accepted' : 'Work started'}. Set the TODOIST_TOKEN secret to create its task list.`);
   }
 }
 
@@ -1072,6 +1173,7 @@ async function runTodoistSync(p) {
 function renderTodoistCard() {
   const p = ed.project, t = p.todoist, card = $('#todoistCard');
   const wanted = ['accepted', 'in_progress', 'complete'].includes(p.status);
+  const when = isClient(p) ? 'this quote is accepted' : 'work starts';
   let body;
   if (t.busy) body = '<p class="note">Creating the project and tasks in Todoist&hellip;</p>';
   else if (t.synced) body = `<p class="note ok">Task list created (${t.plan.tasks.length} tasks).</p>
@@ -1079,9 +1181,9 @@ function renderTodoistCard() {
   else if (t.error) body = `<p class="note err">${esc(t.error)}</p>
     ${t.created ? `<p class="muted">${t.created} of ${t.plan.tasks.length} tasks were created. Retrying continues from there.</p>` : ''}
     <div class="actions"><button class="btn primary" id="sync">Retry</button><a href="#/settings">Todoist settings</a></div>`;
-  else if (!store.todoistConnected) body = `<p class="muted">Connect Todoist (see <a href="#/settings">Settings</a>) and a project with a task list will be created when a quote is accepted.</p>`;
+  else if (!store.todoistConnected) body = `<p class="muted">Connect Todoist (see <a href="#/settings">Settings</a>) and a project with a task list will be created when ${when}.</p>`;
   else if (wanted) body = '<button class="btn primary" id="sync">Create Todoist project</button>';
-  else body = '<p class="muted">A Todoist project with one task per build phase will be created when this quote is accepted.</p>';
+  else body = `<p class="muted">A Todoist project with one task per build phase will be created when ${when}.</p>`;
   card.innerHTML = `<h2>Todoist</h2>${body}`;
   $('#sync', card)?.addEventListener('click', () => runTodoistSync(p));
 }

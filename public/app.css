@@ -52,6 +52,21 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .pill.accepted, .pill.in_progress { background: #dcefe0; color: var(--good); }
 .pill.complete, .pill.delivered { background: #2f7a4f; color: #fff; }
 .pill.declined { background: #f8dcd7; color: var(--bad); }
+/* "All projects": one section per stream, set apart by space and a colored rule. */
+.lane { --lane: var(--accent); border-top: 3px solid var(--lane); padding-top: 14px; }
+.lane + .lane { margin-top: 36px; }
+.lane.product { --lane: #2b5a94; }
+.lane.gallery { --lane: #7a4a8c; }
+.lanehead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.lanehead h2 { margin: 0; font-size: 15px; color: var(--lane); }
+.lanehead h2 span { color: var(--muted); font-weight: 600; margin-left: 6px; }
+.lanehead a { font-size: 13px; }
+.lane .job { border-left: 3px solid var(--lane); }
+.tabs.streams small { font-weight: 600; color: var(--muted); margin-left: 4px; }
+.picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.picker .card + .card { margin-top: 0; }
+.pick { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: inherit; }
+.pick:hover { border-color: var(--accent); }
 
 /* board */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
