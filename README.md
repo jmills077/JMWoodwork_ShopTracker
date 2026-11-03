@@ -30,7 +30,7 @@ To run the weekly price check by hand while `npm run dev` is running (this one s
 the internet, to read Parkerville's pages):
 
 ```sh
-curl -X POST "http://localhost:8787/cdn-cgi/local/explorer/api/local/scheduled?worker=shop-tracker" \
+curl -X POST "http://localhost:8787/cdn-cgi/local/explorer/api/local/scheduled?worker=jmwoodwork-shoptracker" \
   -H 'Content-Type: application/json' -d '{"cron":"17 9 * * 1"}'
 ```
 
