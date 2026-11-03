@@ -3,7 +3,7 @@
 // `npm run deploy` publishes it. See DEPLOYMENT.md.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "shop-tracker",
+  "name": "jmwoodwork-shoptracker",
   "main": "src/index.tsx",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
@@ -18,9 +18,10 @@
     {
       "binding": "DB",
       "database_name": "shop-tracker",
-      // Replace with the id printed by `npx wrangler d1 create shop-tracker` before deploying.
+      // The shop-tracker database in the jmwood.work Cloudflare account. If you recreate it,
+      // replace this with the id printed by `npx wrangler d1 create shop-tracker`.
       // Local development ignores it.
-      "database_id": "f5d52af6-9059-4f96-bd6e-022d8001d846",
+      "database_id": "960ca1a4-400c-438f-b6cd-100ab73354a0",
       "migrations_dir": "migrations"
     }
   ],

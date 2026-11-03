@@ -16,7 +16,7 @@ npx wrangler r2 bucket create shop-tracker-files
 ```
 
 `d1 create` prints a `database_id`. Paste it into `wrangler.jsonc`, replacing
-`00000000-0000-0000-0000-000000000000`:
+the existing id:
 
 ```jsonc
 "d1_databases": [
