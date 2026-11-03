@@ -536,17 +536,26 @@ function showBoard() {
       <b>${esc(projectName(p))}</b>
       <div class="row"><span>${isClient(p) ? esc(p.data.client_name || 'No client yet') : streamOf(p) === 'gallery' ? 'Cost' : 'Retail price'}</span><span class="amt">${money(valueOf(p))}</span></div>
       <div class="row"><span>${isClient(p) ? esc(p.quote_number) : ''}</span><span>${hrs(shopHours(p))}</span></div>
-      <div class="row foot"><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>${tab === 'all' ? `<span class="tag ${streamOf(p)}">${STREAM_NAME[streamOf(p)]}</span>` : ''}${stageDue(p, stageOf(p)) ? `<span>Phase due ${esc(fmtDate(stageDue(p, stageOf(p))))}</span>` : ''}</div>
+      <div class="row foot"><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>${stageDue(p, stageOf(p)) ? `<span>Phase due ${esc(fmtDate(stageDue(p, stageOf(p))))}</span>` : ''}</div>
     </a>`;
   const archive = shown.filter(archived).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  const inStage = key => shown.filter(p => !archived(p) && stageOf(p) === key).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const inStage = (key, list = shown) => list.filter(p => !archived(p) && stageOf(p) === key).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const boardHtml = (list = shown) => `<div class="board">
+      ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
+        <h2><span>${name}</span><span>${inStage(key, list).length}</span></h2>${inStage(key, list).map(jobCard).join('')}</section>`).join('')}
+    </div>`;
+  // "All projects" shows each stream as its own section, one above the other.
+  const lanes = () => STREAMS.map(([key, name]) => {
+    const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
+    return `<section class="lane ${key}">
+      <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open ${name.toLowerCase()} &rarr;</a></div>
+      ${open.length ? boardHtml(list) : `<p class="muted lanenone">Nothing on the go. <a href="#/new/${key}">Add one</a></p>`}
+    </section>`;
+  }).join('');
   view.innerHTML = `
     ${head}
     <div class="stats">${stats}</div>
-    <div class="board">
-      ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
-        <h2><span>${name}</span><span>${inStage(key).length}</span></h2>${inStage(key).map(jobCard).join('')}</section>`).join('')}
-    </div>
+    <div class="boards">${tab === 'all' ? lanes() : boardHtml()}</div>
     ${archive.length ? `<div class="card" style="margin-top:20px"><h2>Archive</h2><table class="list">
       <tr><th>Project</th><th>${tab === 'client' ? 'Client' : tab === 'all' ? 'Stream' : ''}</th><th>${tab === 'client' ? 'Quote' : ''}</th><th>${tab === 'gallery' ? 'Cost' : 'Total'}</th><th>Status</th></tr>
       ${archive.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a></td>
@@ -555,7 +564,7 @@ function showBoard() {
       </table></div>` : ''}`;
 
   // Drag a card to another column to change its phase.
-  const board = $('.board');
+  const board = $('.boards');
   let dragged = null;
   const clearOver = () => board.querySelectorAll('.col.over').forEach(c => c.classList.remove('over'));
   board.addEventListener('dragstart', e => {
