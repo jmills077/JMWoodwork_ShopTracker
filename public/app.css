@@ -61,7 +61,6 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .lanehead h2 { margin: 0; font-size: 15px; color: var(--lane); }
 .lanehead h2 span { color: var(--muted); font-weight: 600; margin-left: 6px; }
 .lanehead a { font-size: 13px; }
-.lanenone { margin: 0; padding: 14px; background: #f1e7d6; border-radius: var(--radius); }
 .lane .job { border-left: 3px solid var(--lane); }
 .tabs.streams small { font-weight: 600; color: var(--muted); margin-left: 4px; }
 .picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }

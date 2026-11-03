@@ -544,12 +544,13 @@ function showBoard() {
       ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
         <h2><span>${name}</span><span>${inStage(key, list).length}</span></h2>${inStage(key, list).map(jobCard).join('')}</section>`).join('')}
     </div>`;
-  // "All projects" shows each stream as its own section, one above the other.
+  // "All projects" shows each stream as its own section, one above the other. Every section keeps its
+  // columns, even when empty, so a card can be dragged into another stream.
   const lanes = () => STREAMS.map(([key, name]) => {
     const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
-    return `<section class="lane ${key}">
+    return `<section class="lane ${key}" data-stream="${key}">
       <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open ${name.toLowerCase()} &rarr;</a></div>
-      ${open.length ? boardHtml(list) : `<p class="muted lanenone">Nothing on the go. <a href="#/new/${key}">Add one</a></p>`}
+      ${boardHtml(list)}
     </section>`;
   }).join('');
   view.innerHTML = `
@@ -563,7 +564,7 @@ function showBoard() {
         <td>${tab === 'client' ? esc(p.quote_number) : ''}</td><td>${money(valueOf(p))}</td><td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></td></tr>`).join('')}
       </table></div>` : ''}`;
 
-  // Drag a card to another column to change its phase.
+  // Drag a card to another column to change its phase, or (on "All projects") into another stream's section.
   const board = $('.boards');
   let dragged = null;
   const clearOver = () => board.querySelectorAll('.col.over').forEach(c => c.classList.remove('over'));
@@ -591,8 +592,12 @@ function showBoard() {
     const col = e.target.closest('.col');
     if (!dragged || !col) return;
     e.preventDefault();
-    setStage(dragged, col.dataset.stage);
-    showBoard();
+    const p = dragged, stream = col.closest('.lane')?.dataset.stream;
+    const move = stream && stream !== streamOf(p);
+    if (move && !confirm(`Move ${projectName(p)} to ${STREAM_NAME[stream]}?`)) { clearOver(); return; }
+    setStage(p, col.dataset.stage);
+    if (move) setStream(p, stream);
+    else showBoard();
   });
 }
 
