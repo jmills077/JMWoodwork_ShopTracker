@@ -1,0 +1,35 @@
+// Cloudflare Workers configuration for Shop Tracker.
+// `npm run dev` runs all of this locally (D1, R2 and the cron are simulated on your machine);
+// `npm run deploy` publishes it. See DEPLOYMENT.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shop-tracker",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+
+  // Builds the browser script into public/ before every `wrangler dev` / `wrangler deploy`.
+  "build": { "command": "npm run build:client", "watch_dir": "src" },
+
+  // Stylesheet and browser script. Everything else goes through the Worker (and its login).
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shop-tracker",
+      // Replace with the id printed by `npx wrangler d1 create shop-tracker` before deploying.
+      // Local development ignores it.
+      "database_id": "f5d52af6-9059-4f96-bd6e-022d8001d846",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // File storage for upcoming features (photos, drawings). Not used by any page yet.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "shop-tracker-files" }],
+
+  // Weekly supplier price check: Mondays, about 5 am Eastern.
+  "triggers": { "crons": ["17 9 * * 1"] }
+
+  // Secrets (not in this file): APP_PASSWORD, TODOIST_TOKEN. Locally, put them in .dev.vars.
+}
