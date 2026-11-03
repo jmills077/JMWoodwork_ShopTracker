@@ -52,6 +52,15 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .pill.accepted, .pill.in_progress { background: #dcefe0; color: var(--good); }
 .pill.complete, .pill.delivered { background: #2f7a4f; color: #fff; }
 .pill.declined { background: #f8dcd7; color: var(--bad); }
+/* Which stream a project belongs to, on cards in the "All projects" view. */
+.tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tag.product { color: #2b5a94; }
+.tag.gallery { color: #7a4a8c; }
+.tabs.streams small { font-weight: 600; color: var(--muted); margin-left: 4px; }
+.picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.picker .card + .card { margin-top: 0; }
+.pick { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: inherit; }
+.pick:hover { border-color: var(--accent); }
 
 /* board */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
