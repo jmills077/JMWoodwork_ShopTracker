@@ -517,11 +517,13 @@ function showBoard() {
   const stat = (label, value, note) => `<div class="card stat"><span class="muted">${label}</span><b>${value}</b><span class="muted">${note}</span></div>`;
   let stats;
   if (tab === 'client' || tab === 'all') {
-    const open = by('sent'), done = by('complete', 'delivered');
+    const drafts = by('draft').filter(isClient), sent = by('sent'), done = by('complete', 'delivered');
     const booked = active.filter(isClient);
-    stats = stat('Quotes awaiting answer', money(sum(open, p => p.calc.total)), `${open.length} sent`)
+    // Shop hours count everything still on the board, so drafts and planned pieces show up too.
+    const onBoard = shown.filter(p => !archived(p));
+    stats = stat('Open quotes', money(sum([...drafts, ...sent], p => p.calc.total)), `${drafts.length} draft · ${sent.length} sent`)
       + stat('Booked client work', money(sum(booked, p => p.calc.total)), `${booked.length} active`)
-      + stat('Shop hours booked', hrs(sum(active, shopHours)), tab === 'all' ? 'all active work' : 'accepted + in progress')
+      + stat('Shop hours on the board', hrs(sum(onBoard, shopHours)), `${hrs(sum(active, shopHours))} in progress`)
       + (tab === 'all' ? stat('Completed', String(done.length), 'pieces finished')
         : stat('Completed', money(sum(done, p => p.calc.total)), `${done.length} finished`));
   } else {
