@@ -8,11 +8,10 @@ Do this once to set it up. After that, `npm run deploy` publishes each new versi
 npx wrangler login
 ```
 
-## 2. Create the database and file bucket
+## 2. Create the database
 
 ```sh
 npx wrangler d1 create shop-tracker
-npx wrangler r2 bucket create shop-tracker-files
 ```
 
 `d1 create` prints a `database_id`. Paste it into `wrangler.jsonc`, replacing

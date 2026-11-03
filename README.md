@@ -6,12 +6,12 @@ accepted quotes into Todoist task lists. Lumber is priced from Parkerville Wood 
 lists, refreshed weekly.
 
 It runs on Cloudflare: a single [Worker](https://developers.cloudflare.com/workers/) built with
-[Hono](https://hono.dev), with [D1](https://developers.cloudflare.com/d1/) (SQLite) for storage and an
-[R2](https://developers.cloudflare.com/r2/) bucket ready for file storage. Everything is TypeScript.
+[Hono](https://hono.dev), with [D1](https://developers.cloudflare.com/d1/) (SQLite) for storage.
+Everything is TypeScript.
 
 ## Run it locally
 
-Everything runs on your machine. `wrangler dev` simulates the Worker, D1, R2 and the cron trigger
+Everything runs on your machine. `wrangler dev` simulates the Worker, D1 and the cron trigger
 locally, so you don't need a Cloudflare account or login.
 
 Requirements: Node.js 22.18 or newer (the seed script is TypeScript run directly by Node).
@@ -49,7 +49,7 @@ Reload the app afterwards and linked species pick up the new prices.
 ```
 src/
   index.tsx          Hono app: sign-in, the app page, the JSON API, the weekly cron
-  env.ts             Worker bindings (DB, FILES, ASSETS) and secrets
+  env.ts             Worker bindings (DB, ASSETS) and secrets
   lib/auth.ts        Single-password sign-in with a signed session cookie
   lib/db.ts          D1 reads and writes
   lib/prices.ts      Reads Parkerville's price lists (runs from the cron)
@@ -75,7 +75,7 @@ scripts/             Seed script
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and
   changing the password signs every device out.
-- **R2** is bound as `FILES`, but nothing uses it yet. It's there for photos and drawings.
+- **R2** file storage (for photos and drawings) isn't set up yet. To add it, enable R2 in the Cloudflare dashboard, create a bucket, and add an `r2_buckets` binding in wrangler.jsonc.
 
 ## Moving data from the old app
 

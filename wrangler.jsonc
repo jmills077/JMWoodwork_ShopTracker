@@ -1,5 +1,5 @@
 // Cloudflare Workers configuration for Shop Tracker.
-// `npm run dev` runs all of this locally (D1, R2 and the cron are simulated on your machine);
+// `npm run dev` runs all of this locally (D1 and the cron are simulated on your machine);
 // `npm run deploy` publishes it. See DEPLOYMENT.md.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -25,9 +25,6 @@
       "migrations_dir": "migrations"
     }
   ],
-
-  // File storage for upcoming features (photos, drawings). Not used by any page yet.
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "shop-tracker-files" }],
 
   // Weekly supplier price check: Mondays, about 5 am Eastern.
   "triggers": { "crons": ["17 9 * * 1"] }
