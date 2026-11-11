@@ -30,6 +30,20 @@ npx wrangler secret put APP_PASSWORD    # the sign-in password
 npx wrangler secret put TODOIST_TOKEN   # Todoist → Settings → Integrations → Developer → API token
 ```
 
+### Shopify (optional: small-batch runs from orders)
+
+With these two secrets the Product line tab keeps one batch run per product filled from the shop's
+unfulfilled orders. In the [Shopify Dev Dashboard](https://dev.shopify.com/dashboard), create an app
+(for example "Shop Tracker") with only the `read_orders` and `read_products` access scopes, install it
+on the JM Woodwork store, then copy its Client ID and Secret from the app's Settings:
+
+```
+npx wrangler secret put SHOPIFY_CLIENT_ID
+npx wrangler secret put SHOPIFY_CLIENT_SECRET
+```
+
+Without them, products still come from the shop's public storefront feed and runs are made by hand.
+
 To change the Todoist token later, run `npx wrangler secret put TODOIST_TOKEN` again. On a Worker
 that's already deployed, this publishes the change immediately. Without the secret, the app runs with Todoist turned off.
 

@@ -78,6 +78,9 @@ scripts/             Seed script
   "too many requests"); per-unit cost, hours and materials are filled in on the Products page and kept in
   the settings. A run is a product-line project with a `data.batch` section, due on its ship-by
   date. Its Todoist project is created with it and updated after every change.
+  With the Shopify app connected (`SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET`, see
+  DEPLOYMENT.md), `GET /api/shop-orders` reads unfulfilled orders through the Admin API and each
+  product gets one open run holding everything still owed (`src/lib/shopify.ts`).
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and

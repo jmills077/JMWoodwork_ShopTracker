@@ -204,6 +204,7 @@ function loadStore(saved: any) {
     settings: { ...structuredClone(DEFAULT_SETTINGS), ...(saved.settings || {}) },
     projects: Array.isArray(saved.projects) ? saved.projects : [],
     todoistConnected: !!saved.todoistConnected,   // whether the server has a Todoist token (the TODOIST_TOKEN secret)
+    shopifyConnected: !!saved.shopifyConnected,   // whether the server can read the shop's orders (the SHOPIFY_* secrets)
     settingsUpdatedAt: saved.settingsUpdatedAt || '',
   };
 }
@@ -453,6 +454,7 @@ async function refresh() {
   if (seq !== changeSeq || saving || pendingChanges().any) return;
   const next = loadStore(remote);
   store.todoistConnected = next.todoistConnected;
+  store.shopifyConnected = next.shopifyConnected;
   if (JSON.stringify([next.settings, next.projects], unbusy) === JSON.stringify([store.settings, store.projects], unbusy)) return;
   store = next;
   saved = snapshot();
@@ -1335,6 +1337,7 @@ function renderQuickBatch() {
   const draw = () => {
     const pr = product(), variants = pr.variants.length ? pr.variants : [{ name: '', price: 0 }];
     card.innerHTML = `<div class="actions" style="margin-bottom:12px"><h2 style="margin:0">Quick batch run</h2><span style="flex:1"></span><a href="#/products" style="font-size:13px">Edit products</a></div>
+      ${store.shopifyConnected ? '<p class="muted" style="margin:-4px 0 12px;font-size:13px">Your Shopify orders fill a run for each product on their own. Use this for anything extra, like stock for a market.</p>' : ''}
       <form id="batchForm" class="grid" autocomplete="off">
         <label class="f"><span>Product</span><select id="qbProduct">${products.map(x => `<option value="${esc(x.id)}" ${x.id === pr.id ? 'selected' : ''}>${esc(x.name || 'Unnamed product')}</option>`).join('')}</select></label>
         <div class="f w6"><span>${variants.length > 1 ? 'How many of each variant' : 'How many'}</span><div class="qbvariants">
@@ -1368,7 +1371,7 @@ function renderQuickBatch() {
   draw();
 }
 
-async function createBatch(pr, qtys, ship) {
+async function createBatch(pr, qtys, ship, opts: { source?: string; quiet?: boolean } = {}) {
   const stamp = new Date().toISOString(), s = store.settings, status = 'in_progress', stamped = Date.now();
   const data = {
     ...blankData(), title: pr.name || 'Product', due_date: ship, retainer: 0,
@@ -1378,7 +1381,9 @@ async function createBatch(pr, qtys, ship) {
       product_id: pr.id, product: pr.name || 'Product',
       unit_cost: pos(pr.unit_cost), unit_hours: pos(pr.unit_hours), materials: pr.materials || '',
       // Only the variants being made; others can be added on the run's page.
-      variants: qtys.filter(v => v.qty > 0).map((v, i) => ({ id: `v${stamped}${i}`, name: v.name, price: pos(v.price), qty: v.qty })),
+      variants: qtys.filter(v => v.qty > 0).map((v, i) => ({ id: `v${stamped}${i}`, name: v.name, price: pos(v.price), qty: v.qty,
+        ...(opts.source === 'shopify' ? { ordered: v.qty, extra: 0 } : {}) })),
+      ...(opts.source ? { source: opts.source } : {}),
     },
   };
   data.rates.hourly_rate = s.hourly_rate;
@@ -1386,10 +1391,10 @@ async function createBatch(pr, qtys, ship) {
   const draft = { stream: 'product', status, stage: 'build', data, calc: batchCalc(data), todoist: {}, history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp };
   let project;
   try { project = await api('/api/projects', draft); }
-  catch (e) { toast(`Not saved: ${e.message}`); return null; }
+  catch (e) { if (!opts.quiet) toast(`Not saved: ${e.message}`); return null; }
   store.projects.push(project);
   saved.projects.set(project.id, JSON.stringify(project, unbusy));
-  toast(`Added ${projectName(project)}${store.todoistConnected ? '. Creating its Todoist list\u2026' : ''}`);
+  toast(`${opts.source === 'shopify' ? 'New Shopify orders: added' : 'Added'} ${projectName(project)}${store.todoistConnected ? '. Creating its Todoist list\u2026' : ''}`);
   if (store.todoistConnected) runTodoistSync(project);
   return project;
 }
@@ -1429,12 +1434,14 @@ function showBatch(p) {
     const n = batchUnits(b), calc = p.calc;
     const unused = (store.settings.products.find(x => x.id === b.product_id)?.variants || []).filter(x => !b.variants.some(v => v.name === x.name));
     units.innerHTML = `<h2>Units to make</h2>
+      ${fromShop(b) ? `<p class="note">Kept up to date from your Shopify orders${b.orders?.length ? `: ${b.orders.map(o => esc(o.name)).join(', ')}` : ' (none open right now)'}.
+        Use &minus; / + to make more or fewer than ordered.</p>` : ''}
       ${b.variants.map((v, i) => `<div class="qty">
-        <span>${esc(v.name || b.product)} <small class="muted">${money(v.price ?? b.unit_price)}</small></span>
+        <span>${esc(v.name || b.product)} <small class="muted">${money(v.price ?? b.unit_price)}${fromShop(b) ? ` &middot; ${pos(v.ordered)} ordered${v.extra ? `, ${v.extra > 0 ? '+' : ''}${v.extra} by hand` : ''}` : ''}</small></span>
         <button type="button" class="btn small" data-step="-1" data-i="${i}" aria-label="One fewer ${esc(v.name || 'unit')}">&minus;</button>
         <input type="number" min="0" step="1" data-i="${i}" value="${pos(v.qty)}" aria-label="${esc(v.name || 'Units')}">
         <button type="button" class="btn small" data-step="1" data-i="${i}" aria-label="One more ${esc(v.name || 'unit')}">+</button>
-        <button type="button" class="link" data-remove="${i}" ${b.variants.length === 1 ? 'hidden' : ''}>remove</button>
+        <button type="button" class="link" data-remove="${i}" ${b.variants.length === 1 || pos(v.ordered) > 0 ? 'hidden' : ''}>remove</button>
       </div>`).join('')}
       <div class="actions" style="margin-top:10px">
         <select id="addVariant" style="width:auto" aria-label="Variant to add">${unused.map(x => `<option value="${esc(x.name)}">${esc(x.name)} (${money(x.price)})</option>`).join('')}<option value="">Other&hellip;</option></select>
@@ -1451,15 +1458,14 @@ function showBatch(p) {
     const el = e.target.closest('button');
     if (!el) return;
     if (el.dataset.step) {
-      const v = b.variants[el.dataset.i];
-      v.qty = Math.max(0, Math.round(pos(v.qty)) + Number(el.dataset.step));
+      setVariantQty(b, b.variants[el.dataset.i], Math.round(pos(b.variants[el.dataset.i].qty)) + Number(el.dataset.step));
     } else if (el.dataset.remove !== undefined) {
       b.variants.splice(Number(el.dataset.remove), 1);
     } else if (el.id === 'addVariantBtn') {
       const listed = store.settings.products.find(x => x.id === b.product_id)?.variants || [];
       const name = $('#addVariant').value || prompt('Name of the variant')?.trim();
       if (!name) return;
-      b.variants.push({ id: `v${Date.now()}`, name, price: pos(listed.find(x => x.name === name)?.price ?? b.variants[0]?.price), qty: 1 });
+      b.variants.push({ id: `v${Date.now()}`, name, price: pos(listed.find(x => x.name === name)?.price ?? b.variants[0]?.price), qty: 1, ...(fromShop(b) ? { ordered: 0, extra: 1 } : {}) });
     } else return;
     touch();
     renderUnits();
@@ -1467,11 +1473,11 @@ function showBatch(p) {
   units.addEventListener('change', e => {
     const el = e.target;
     if (el.dataset.i === undefined || el.tagName !== 'INPUT') return;
-    b.variants[el.dataset.i].qty = Math.max(0, Math.round(pos(el.value)));
+    setVariantQty(b, b.variants[el.dataset.i], Math.round(pos(el.value)));
     touch();
     renderUnits();
   });
-  $('#shipBy').addEventListener('change', e => { p.data.due_date = e.target.value; touch(); renderStages(); });
+  $('#shipBy').addEventListener('change', e => { p.data.due_date = e.target.value; b.ship_manual = true; touch(); renderStages(); });
   $('#batchNotes').addEventListener('input', e => { p.data.notes = e.target.value; touch(false); });
   $('#delete').addEventListener('click', () => {
     const synced = p.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
@@ -1481,7 +1487,8 @@ function showBatch(p) {
     location.hash = boardLink();
   });
   // The phase strip's last date is the ship-by date too, so keep the two in step.
-  $('#stages').addEventListener('change', () => { $('#shipBy').value = p.data.due_date || ''; scheduleBatchSync(p); });
+  $('#stages').addEventListener('change', () => { $('#shipBy').value = p.data.due_date || ''; b.ship_manual = true; scheduleBatchSync(p); });
+  ed.redraw = () => { $('#shipBy').value = p.data.due_date || ''; renderUnits(); renderStages(); renderStatusCard(); $('#projTitle').textContent = projectName(p); };
   renderUnits();
   renderStages();
   renderStatusCard();
@@ -1540,6 +1547,7 @@ function showProducts() {
       <div class="grid">
         <label class="f"><span>Materials cost per unit ($)</span><input data-k="unit_cost" type="number" min="0" step="any" value="${esc(pr.unit_cost)}"></label>
         <label class="f"><span>Shop hours per unit</span><input data-k="unit_hours" type="number" min="0" step="any" value="${esc(pr.unit_hours)}"></label>
+        <label class="f"><span>Days from order to in the mail</span><input data-k="lead_days" type="number" min="0" step="1" value="${esc(pr.lead_days ?? DEFAULT_LEAD_DAYS)}"></label>
         <label class="f w6"><span>Materials to buy per unit (goes on the Todoist shopping task)</span><input data-k="materials" value="${esc(pr.materials)}" placeholder="e.g. 1.5 bf walnut, 2 rubber feet"></label>
       </div></div>`).join('')}</div>`;
   $('#productList').addEventListener('input', e => {
@@ -1548,6 +1556,82 @@ function showProducts() {
     pr[k] = inputValue(e.target);
     settingsChanged();
   });
+}
+
+// ---------- runs fed by Shopify orders ----------
+// With the Shopify app connected, each product with unfulfilled orders has one open batch run that
+// holds everything still owed for it, by variant. New orders add to it, fulfilled or cancelled ones
+// come off, and when nothing is left to make it is marked complete. The next order starts a new run.
+// Each variant keeps what was ordered and what was added or taken off by hand: qty = ordered + extra.
+// The ship-by date is the oldest open order's date plus the product's lead time, unless it was set by hand.
+const DEFAULT_LEAD_DAYS = 14;
+function fromShop(b) { return b.source === 'shopify'; }
+function setVariantQty(b, v, qty) {
+  v.qty = Math.max(0, qty);
+  if (fromShop(b)) v.extra = v.qty - pos(v.ordered);
+}
+const shipByFor = (pr, orders) => {
+  const d = new Date(orders.map(o => o.created_at).sort()[0]);
+  d.setDate(d.getDate() + Math.round(pos(pr.lead_days ?? DEFAULT_LEAD_DAYS)));
+  return ymd(d);
+};
+
+let ordersBusy = false;
+async function loadShopOrders() {
+  if (!store.shopifyConnected || ordersBusy || store.projects.some(p => p.todoist.busy)) return;
+  ordersBusy = true;
+  try {
+    const res = await fetch('/api/shop-orders', { cache: 'no-store' });
+    const data = res.ok ? await res.json() : null;
+    if (Array.isArray(data?.orders)) await syncRunsWithOrders(data.orders);
+    else if (data?.error) console.warn(`Shopify orders: ${data.error}`);
+  } catch {}
+  ordersBusy = false;
+}
+
+async function syncRunsWithOrders(orders) {
+  const touched = [];
+  for (const pr of store.settings.products || []) {
+    const mine = orders.map(o => ({ ...o, items: o.items.filter(i => i.handle === pr.handle) })).filter(o => o.items.length);
+    const owed = new Map();
+    for (const o of mine) for (const i of o.items) owed.set(i.variant, (owed.get(i.variant) || 0) + i.qty);
+    let run = store.projects.find(p => isBatch(p) && fromShop(p.data.batch) && p.data.batch.product_id === pr.id && !archived(p));
+    if (!run) {
+      if (!mine.length) continue;
+      run = await createBatch(pr, [...owed].map(([name, qty]) => ({ name, qty, price: pr.variants.find(v => v.name === name)?.price ?? 0 })),
+        shipByFor(pr, mine), { source: 'shopify', quiet: true });
+      if (!run) return;   // the server couldn't be reached: try again next time
+    }
+    const b = run.data.batch, before = JSON.stringify([b, run.data.due_date, run.status]);
+    for (const [name, qty] of owed) {
+      let v = b.variants.find(x => x.name === name);
+      if (!v) b.variants.push(v = { id: `v${Date.now()}${b.variants.length}`, name, price: pr.variants.find(x => x.name === name)?.price ?? 0, extra: 0 });
+      v.ordered = qty;
+    }
+    for (const v of b.variants) {
+      if (!owed.has(v.name)) v.ordered = 0;
+      v.extra ??= 0;
+      v.qty = Math.max(0, pos(v.ordered) + v.extra);
+    }
+    b.variants = b.variants.filter(v => v.qty > 0 || v.ordered > 0);
+    b.orders = mine.map(o => ({ name: o.name, created_at: o.created_at }));
+    if (mine.length && !b.ship_manual) run.data.due_date = shipByFor(pr, mine);
+    if (!b.variants.length) {   // everything has shipped
+      b.variants = [];
+      run.status = 'complete';
+      run.history.push({ status: 'complete', at: new Date().toISOString() });
+    }
+    if (JSON.stringify([b, run.data.due_date, run.status]) === before) continue;
+    run.calc = batchCalc(run.data);
+    run.updated_at = new Date().toISOString();
+    touched.push(run);
+  }
+  if (!touched.length) return;
+  persist();
+  for (const run of touched) if (run.status !== 'complete') scheduleBatchSync(run);
+  // Show the new numbers on whatever page is open.
+  if (ed?.project && touched.includes(ed.project) && ed.redraw) ed.redraw();
+  else if (!ed && (currentHash === '#/' || currentHash.startsWith('#/s/') || currentHash.startsWith('#/calendar'))) route();
 }
 
 // ---------- design notes (internal; never shown on the client quote) ----------
@@ -1688,7 +1772,8 @@ function showSettings() {
       <p class="muted" style="margin-bottom:0">Labor factor: 1.0 is cherry or walnut. Harder, tear-out-prone woods are above 1, softwoods below.</p>
     </div>
     <div class="card"><h2>Product line</h2>
-      <p class="muted" style="margin-top:0">${(s.products || []).length} product${(s.products || []).length === 1 ? '' : 's'} from jmwood.work, for quick batch runs on the Product line tab.</p>
+      <p class="muted" style="margin-top:0">${(s.products || []).length} product${(s.products || []).length === 1 ? '' : 's'} from jmwood.work, for quick batch runs on the Product line tab.
+        ${store.shopifyConnected ? 'Shopify is connected: unfulfilled orders keep each product\'s run up to date.' : 'Connect the Shopify app (the <code>SHOPIFY_CLIENT_ID</code> and <code>SHOPIFY_CLIENT_SECRET</code> secrets, see DEPLOYMENT.md) to build runs from unfulfilled orders.'}</p>
       <a class="btn" href="#/products">Edit products</a>
     </div>
     <div class="card"><h2>Todoist</h2>
@@ -1775,7 +1860,7 @@ function showSettings() {
   });
 
   $('#export').addEventListener('click', () => {
-    const { todoistConnected, ...backup } = store;
+    const { todoistConnected, shopifyConnected, ...backup } = store;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
     a.download = `shop-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -1806,8 +1891,10 @@ function showSettings() {
 
 route();
 loadPrices();
-loadShopProducts();
+loadShopProducts().then(loadShopOrders);
+// While the page is open, check for new and fulfilled orders every few minutes.
+setInterval(() => { if (document.visibilityState === 'visible') loadShopOrders(); }, 5 * 60 * 1000);
 // Pick up other devices' changes when coming back to this tab, and send pending ones when leaving it.
-document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' ? save(true) : refresh());
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' ? save(true) : refresh().then(loadShopOrders));
 window.addEventListener('pagehide', () => save(true));
 window.addEventListener('online', () => save());

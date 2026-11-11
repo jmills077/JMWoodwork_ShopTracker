@@ -2,3 +2,6 @@
 APP_PASSWORD=shop
 # Todoist API token (Todoist -> Settings -> Integrations -> Developer). Leave empty to run without Todoist.
 TODOIST_TOKEN=
+# Shopify Dev Dashboard app (read_orders, read_products). Leave empty to make batch runs by hand.
+SHOPIFY_CLIENT_ID=
+SHOPIFY_CLIENT_SECRET=
