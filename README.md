@@ -54,7 +54,7 @@ The site can be installed like an app, with its own icon, opening full screen.
 Sign in once from the home-screen icon: it keeps its own sign-in, separate from the browser's.
 A sign-in lasts 90 days and is renewed whenever the app is used, so it only asks again after
 three months without opening it, or after `APP_PASSWORD` is changed.
-The manifest and icons are in `public/` (`manifest.webmanifest`, `icon.svg` and the PNGs drawn from it).
+The manifest and icons are in `public/`. The icons are the J.M. Woodwork wordmark (from the branding files) in cream on the brand red.
 
 ## How it fits together
 

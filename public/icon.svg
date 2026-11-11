@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#a63a2b"/>
-  <g fill="none" stroke="#c4594a" stroke-width="6" stroke-linecap="round">
-    <path d="M-10 380 C 120 350, 220 410, 522 372"/>
-    <path d="M-10 408 C 140 380, 260 440, 522 400"/>
-    <path d="M-10 436 C 110 412, 280 466, 522 430"/>
-  </g>
-  <text x="256" y="296" text-anchor="middle" fill="#fdf6e9" font-family="Georgia, 'DejaVu Serif', 'Times New Roman', serif" font-weight="700" font-size="200" letter-spacing="-6">JM</text>
-</svg>

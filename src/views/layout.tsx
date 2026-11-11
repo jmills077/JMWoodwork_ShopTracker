@@ -12,7 +12,7 @@ export const Layout = ({ title = 'Shop Tracker', children }: { title?: string; c
         {/* Lets the site be added to an iPhone or Android home screen and open full screen, like an app.
             The manifest and icons live in public/, so they load without signing in. */}
         <link rel="manifest" href="/manifest.webmanifest" />
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon-32.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#a63a2b" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
