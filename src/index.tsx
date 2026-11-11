@@ -62,18 +62,38 @@ app.get('/api/prices', async c => {
   return prices ? c.json(prices) : c.json({ error: 'No price list yet' }, 404);
 });
 
-// The shop's products and variants, for the quick batch-run form on the Product line tab.
+// The shop's products and variants, for the quick batch-run form on the Product line tab. The last list
+// read is kept in the database and reused for an hour, so page loads don't each ask the shop (which
+// answers "too many requests" when asked often). If the shop can't be read, the kept list is used.
+const SHOP_CACHE_MS = 60 * 60 * 1000;
 app.get('/api/shop-products', async c => {
-  const res = await fetch(SHOP_PRODUCTS, { headers: { Accept: 'application/json' }, cf: { cacheTtl: 300 } } as RequestInit);
-  if (!res.ok) return c.json({ error: `The shop returned ${res.status}` }, 502);
-  const { products } = await res.json<{ products: ShopProduct[] }>();
-  return c.json({
-    products: products.map(p => ({
-      handle: p.handle, title: p.title,
-      // A product without options has one variant called "Default Title".
-      variants: p.variants.map(v => ({ name: v.title === 'Default Title' ? '' : v.title, price: Number(v.price) || 0 })),
-    })),
-  });
+  const db = c.env.DB;
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'shop_products'").first<{ value: string }>();
+  const kept: { checked: string; products: unknown[] } | null = row ? JSON.parse(row.value) : null;
+  if (kept && Date.now() - Date.parse(kept.checked) < SHOP_CACHE_MS) return c.json(kept);
+  try {
+    const res = await fetch(SHOP_PRODUCTS, { headers: { Accept: 'application/json', 'User-Agent': 'ShopTracker (jmwood.work)' } });
+    if (!res.ok) throw new Error(`The shop returned ${res.status}`);
+    const { products } = await res.json<{ products: ShopProduct[] }>();
+    const fresh = {
+      checked: new Date().toISOString(),
+      products: products.map(p => ({
+        handle: p.handle, title: p.title,
+        // A product without options has one variant called "Default Title".
+        variants: p.variants.map(v => ({ name: v.title === 'Default Title' ? '' : v.title, price: Number(v.price) || 0 })),
+      })),
+    };
+    await db.prepare("INSERT INTO settings (key, value) VALUES ('shop_products', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value")
+      .bind(JSON.stringify(fresh)).run();
+    return c.json(fresh);
+  } catch (error) {
+    console.error(`Shop products: ${error}`);
+    if (!kept) return c.json({ error: String(error) }, 502);
+    // Keep using the old list, and leave the shop alone for 10 minutes before asking again.
+    const retry = { ...kept, checked: new Date(Date.now() - SHOP_CACHE_MS + 10 * 60 * 1000).toISOString() };
+    await db.prepare("UPDATE settings SET value = ? WHERE key = 'shop_products'").bind(JSON.stringify(retry)).run();
+    return c.json(kept);
+  }
 });
 interface ShopProduct { handle: string; title: string; variants: { title: string; price: string }[] }
 
