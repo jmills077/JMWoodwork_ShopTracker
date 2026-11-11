@@ -164,8 +164,13 @@ function mergePhases(existing = [], estimated) {
   return merged.concat(existing.filter(p => p.custom));
 }
 
+// The price agreed with the client (or set for a product), or null to use the estimate.
+const agreedPrice = (data, stream) => stream === 'gallery' || data.final_price === '' || data.final_price == null ? null : pos(data.final_price);
+
 // Re-estimates data.phases in place and returns the priced totals. Only client work has sales tax,
 // a retainer and a deposit; a gallery piece is priced at cost, so its materials carry no markup.
+// An agreed final price replaces the estimated total (sales tax included); the estimate is kept
+// alongside it as estimate_total.
 function price(data, stream = 'client') {
   const est = estimate(data.spec);
   data.phases = mergePhases(data.phases, est.phases);
@@ -179,9 +184,13 @@ function price(data, stream = 'client') {
   const materialsBase = data.materials_override === '' || data.materials_override == null ? materialsEst : pos(data.materials_override);
   const otherCosts = pos(data.other_costs);
   const client = stream === 'client', markup = stream === 'gallery' ? 0 : pos(r.markup_pct);
-  const subtotal = laborCost + materialsBase * (1 + markup / 100) + otherCosts;
-  const tax = client ? subtotal * pos(r.tax_pct) / 100 : 0;
-  const total = subtotal + tax;
+  const estSubtotal = laborCost + materialsBase * (1 + markup / 100) + otherCosts;
+  const estTotal = estSubtotal + (client ? estSubtotal * pos(r.tax_pct) / 100 : 0);
+  const agreed = agreedPrice(data, stream);
+  const total = agreed ?? estTotal;
+  // With an agreed price, the tax shown is the part of that price that is sales tax.
+  const subtotal = agreed == null ? estSubtotal : client ? total / (1 + pos(r.tax_pct) / 100) : total;
+  const tax = total - subtotal;
   const retainer = client ? Math.min(pos(data.retainer), total) : 0;
   const balance = total - retainer;
   return {
@@ -189,6 +198,7 @@ function price(data, stream = 'client') {
     materials_est: cents(materialsEst), materials_cost: cents(materialsBase * (1 + markup / 100)), other_costs: cents(otherCosts),
     cost: cents(laborCost + materialsBase + otherCosts),   // what the piece costs the shop: time, lumber and hardware
     subtotal: cents(subtotal), tax: cents(tax), total: cents(total),
+    estimate_total: cents(estTotal), agreed: agreed != null,
     retainer: cents(retainer), balance: cents(balance), deposit: client ? cents(balance * pos(r.deposit_pct) / 100) : 0,
   };
 }
@@ -799,7 +809,7 @@ function blankData() {
     spec: { type: 'dining_table', description: '', species: (s.species.find(x => x.name === 'Walnut') || s.species[0] || {}).name || '',
       length, width, height, complexity: 'standard', finish: 'hardwax', drawers: 0, doors: 0, shelves: 0, delivery_hours: 0 },
     rates: { hourly_rate: s.hourly_rate, contingency_pct: s.contingency_pct, markup_pct: s.markup_pct, tax_pct: s.tax_pct, deposit_pct: s.deposit_pct },
-    phases: [], materials_override: '', other_costs: 0, retainer: s.design_retainer,
+    phases: [], materials_override: '', other_costs: 0, retainer: s.design_retainer, final_price: '',
   };
 }
 
@@ -864,6 +874,10 @@ function showEditor(project, newStream = 'client') {
           ${client ? `${numInp('Sales tax (%)', 'rates.tax_pct')}${numInp('Deposit (%)', 'rates.deposit_pct')}` : ''}${numInp('Hardware & other costs ($)', 'other_costs')}
           ${client ? numInp('Design retainer ($)', 'retainer', 'any', 'w3') : ''}
           ${numInp('Lumber cost override ($)', 'materials_override', 'any', 'w3', 'id="override"')}
+          ${stream === 'gallery' ? '' : `${numInp(client ? 'Agreed final price ($, with tax)' : 'Retail price ($)', 'final_price', 'any', 'w3', 'id="finalPrice"')}
+          <p class="muted" style="grid-column:1/-1;margin:0;font-size:13px">${client
+            ? 'Leave blank to use the estimate. Once you and the client agree on a price, enter it here: it becomes the quote total everywhere, including the client quote, deposit and the totals on the board.'
+            : 'Leave blank to use the suggested retail price.'}</p>`}
         </div></fieldset>
         <fieldset><h2>Notes</h2><div class="grid">
           <label class="f w6"><span>${client ? 'Internal notes (not shown on the quote)' : 'Notes'}</span><textarea data-path="notes">${esc(d.notes)}</textarea></label>
@@ -979,6 +993,9 @@ function renderPanel() {
   if (ed.project) ed.project.calc = calc;
   const override = $('#override');
   if (override) override.placeholder = `Estimate: ${money(calc.materials_est)}`;
+  const finalPrice = $('#finalPrice');
+  if (finalPrice) finalPrice.placeholder = `Estimate: ${money(calc.estimate_total)}`;
+  const estLine = calc.agreed ? `<div class="tot"><span class="muted">Estimate <small>from pricing and time</small></span><span class="muted">${money(calc.estimate_total)}</span></div>` : '';
   const overridden = !(d.materials_override === '' || d.materials_override == null);
   $('#panel').innerHTML = `
     <h2>Labor estimate</h2>
@@ -995,11 +1012,12 @@ function renderPanel() {
     <div class="tot"><span>Labor cost <small>${hrs(calc.labor_hours + calc.contingency_hours)} @ ${money(pos(d.rates.hourly_rate))}/h</small></span><b>${money(calc.labor_cost)}</b></div>
     <div class="tot"><span>Materials <small>${overridden ? 'your lumber cost' : `${calc.lumber.feet ? `${calc.lumber.boards} \u00d7 ${BOARD_LENGTH_FT} ft boards, ` : '~'}${+calc.lumber.buyBf} bf ${esc(d.spec.species)}`}${stream === 'gallery' ? '' : ` + ${+pos(d.rates.markup_pct)}% markup`}</small></span><b>${money(calc.materials_cost)}</b></div>
     ${calc.other_costs ? `<div class="tot"><span>Hardware & other</span><b>${money(calc.other_costs)}</b></div>` : ''}
-    ${calc.tax ? `<div class="tot"><span>Sales tax <small>${d.client_state ? `${esc(d.client_state)} ` : ''}${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
+    ${calc.tax && !calc.agreed ? `<div class="tot"><span>Sales tax <small>${d.client_state ? `${esc(d.client_state)} ` : ''}${+pos(d.rates.tax_pct)}%</small></span><b>${money(calc.tax)}</b></div>` : ''}
     ${stream === 'gallery' ? `<div class="tot grand"><span>Total cost</span><span>${money(calc.cost)}</span></div>`
-      : stream === 'product' ? `<div class="tot grand"><span>Suggested retail price</span><span>${money(calc.total)}</span></div>
+      : stream === 'product' ? `${estLine}<div class="tot grand"><span>${calc.agreed ? 'Retail price' : 'Suggested retail price'}</span><span>${money(calc.total)}</span></div>
         <div class="tot"><span class="muted">Cost to make <small>time, lumber and hardware</small></span><span class="muted">${money(calc.cost)}</span></div>`
-      : `<div class="tot grand"><span>Quote total</span><span>${money(calc.total)}</span></div>`}
+      : `${estLine}<div class="tot grand"><span>${calc.agreed ? 'Agreed price' : 'Quote total'}</span><span>${money(calc.total)}</span></div>
+        ${calc.agreed && calc.tax ? `<div class="tot"><span class="muted">Includes sales tax <small>${+pos(d.rates.tax_pct)}%</small></span><span class="muted">${money(calc.tax)}</span></div>` : ''}`}
     ${calc.retainer ? `<div class="tot"><span>Design retainer <small>already paid</small></span><span>&minus; ${money(calc.retainer)}</span></div>
     <div class="tot"><b>Balance due</b><b>${money(calc.balance)}</b></div>` : ''}
     ${stream === 'client' ? `<div class="tot"><span class="muted">Deposit <small>${+pos(d.rates.deposit_pct)}%${calc.retainer ? ' of balance' : ''}</small></span><span class="muted">${money(calc.deposit)}</span></div>` : ''}
