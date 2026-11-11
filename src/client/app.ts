@@ -423,7 +423,7 @@ async function api(path, body?, keepalive = false) {
   } catch {
     throw Object.assign(new Error('Could not reach the server.'), { offline: true });
   }
-  if (res.status === 401) throw new Error('You have been signed out. Reload the page to sign in again.');
+  if (res.status === 401) throw Object.assign(new Error('You have been signed out. Sign in again to save.'), { signedOut: true });
   if (!res.ok) throw new Error(`The server returned ${res.status}${res.status < 500 ? `: ${(await res.text()).slice(0, 200)}` : '.'}`);
   return res.json();
 }
@@ -459,7 +459,11 @@ async function refresh() {
   await save();
   const seq = changeSeq;
   let remote;
-  try { remote = await api('/api/state'); } catch { return; }
+  try { remote = await api('/api/state'); } catch (e) {
+    // Nothing is waiting to be saved, so go straight to sign-in. A home-screen app has no reload button.
+    if (e.signedOut && !pendingChanges().any) location.assign('/login');
+    return;
+  }
   // Something was edited while the request was out: leave it for the next refresh.
   if (seq !== changeSeq || saving || pendingChanges().any) return;
   const next = loadStore(remote);

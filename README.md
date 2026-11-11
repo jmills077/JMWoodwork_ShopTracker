@@ -44,6 +44,18 @@ Reload the app afterwards and linked species pick up the new prices.
 | `npm run typecheck` | Type-check the Worker, the browser script and the scripts |
 | `npm run deploy` | Apply migrations to the Cloudflare database, then deploy (see [DEPLOYMENT.md](DEPLOYMENT.md)) |
 
+## Put it on your phone's home screen
+
+The site can be installed like an app, with its own icon, opening full screen.
+
+- **iPhone or iPad:** open the site in Safari, tap the Share button, then **Add to Home Screen**, then **Add**.
+- **Android:** open the site in Chrome, tap the ⋮ menu, then **Add to Home screen** (or **Install app**).
+
+Sign in once from the home-screen icon: it keeps its own sign-in, separate from the browser's.
+A sign-in lasts 90 days and is renewed whenever the app is used, so it only asks again after
+three months without opening it, or after `APP_PASSWORD` is changed.
+The manifest and icons are in `public/`. The icons are the J.M. Woodwork wordmark (from the branding files) in cream on the brand red.
+
 ## How it fits together
 
 ```
