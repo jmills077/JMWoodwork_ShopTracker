@@ -194,3 +194,34 @@ header.top .signout:hover { color: #fff; text-decoration: underline; }
 .qty input { text-align: center; }
 .qty .btn.small { padding: 4px 0; font-size: 16px; line-height: 1.2; }
 #quickBatch { margin-bottom: 20px; }
+
+/* phones, and the home-screen app (manifest.webmanifest). The header runs under the iPhone's
+   status bar there, so it pads itself by the screen's safe areas. */
+header.top { padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+#toast { bottom: max(20px, env(safe-area-inset-bottom)); }
+@media (max-width: 600px) {
+  header.top { gap: 6px 12px; padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); }
+  header.top .brand { flex: 1; }
+  header.top nav { order: 3; flex: 1 0 100%; justify-content: space-between; gap: 2px; }
+  header.top nav a { padding: 7px 8px; font-size: 14px; white-space: nowrap; }
+  #syncState { font-size: 12px; }
+  main { padding: 16px max(12px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+  /* iPhone zooms the page into any box with text under 16px when it's tapped. */
+  input, select, textarea { font-size: 16px; }
+  .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stats .card { padding: 12px; }
+  .stat b { font-size: 19px; }
+  .board { grid-template-columns: repeat(5, 78vw); scroll-snap-type: x mandatory; }
+  .board .col { scroll-snap-align: start; }
+  .card { padding: 14px; }
+  .quote { padding: 20px; }
+  .quote .qhead { flex-direction: column; gap: 12px; }
+  .cal .day { min-height: 64px; }
+  .cal .bar { font-size: 11px; padding: 0 3px; }
+  .login { margin-top: 24px; }
+  h1 { font-size: 21px; }
+  .pagehead { gap: 6px; }
+  .pagehead .btn { padding: 7px 11px; }
+  .quote .qhead > * { text-align: left !important; }
+}

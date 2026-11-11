@@ -6,7 +6,10 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { App } from '../env';
 
 const COOKIE = 'shop_session';
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 90;
+// A session used within this many days of running out is extended, so a phone that opens the app
+// now and then (from its home screen, say) stays signed in.
+const RENEW_DAYS = 60;
 
 async function sign(secret: string, message: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -24,7 +27,9 @@ export async function isSignedIn(c: Context<App>) {
   const password = c.env.APP_PASSWORD, cookie = getCookie(c, COOKIE);
   if (!password || !cookie) return false;
   const [expires, mac] = cookie.split('.');
-  return Number(expires) > Date.now() && mac === await sign(password, `session:${expires}`);
+  if (!(Number(expires) > Date.now() && mac === await sign(password, `session:${expires}`))) return false;
+  if (Number(expires) - Date.now() < RENEW_DAYS * 86400000) await startSession(c);
+  return true;
 }
 
 export async function startSession(c: Context<App>) {
