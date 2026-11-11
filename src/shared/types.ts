@@ -7,7 +7,7 @@ export interface Project {
   id: number; quote_number: string;
   stream: string;                     // 'client' (custom work for a client), 'product' (product line) or 'gallery' (not for sale)
   status: string; stage: string;
-  data: Record<string, unknown>;      // client, spec, rates, phases, lumber, design notes, due dates
+  data: Record<string, unknown>;      // client, spec, rates, phases, lumber, design notes, due dates; `frozen` while on hold
   calc: Record<string, unknown>;      // priced totals
   todoist: Record<string, unknown>;   // progress creating the job's Todoist project
   history: { status?: string; stage?: string; at: string }[];

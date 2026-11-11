@@ -66,6 +66,10 @@ const isClient = p => streamOf(p) === 'client';
 const statusesFor = stream => stream === 'client' ? STATUSES : OWN_STATUSES;
 // Delivered and declined client projects, and finished product and gallery pieces, leave the board for the archive.
 const archived = p => isClient(p) ? ['delivered', 'declined'].includes(p.status) : p.status === 'complete';
+// A frozen project is on hold: the client went quiet but may come back, or the job hit a long delay.
+// It keeps its status, phase and dates, but leaves the board and calendar for the Frozen list, and
+// its Todoist project is archived, until it is unfrozen. data.frozen is { at, reason }.
+const isFrozen = p => !!p.data?.frozen;
 // A status from one stream carried over to another when a project changes stream.
 const STATUS_IN_STREAM = {
   client: { planned: 'draft' },
@@ -292,7 +296,7 @@ function todoistPlan(p) {
 // Creates the Todoist project and its tasks. Picks up where it left off if a previous attempt failed part-way.
 async function syncTodoist(p) {
   const state = p.todoist;
-  if (state.synced || state.busy) return;
+  if (state.synced || state.busy || isFrozen(p)) return;
   if (!store.todoistConnected) { state.error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.'; persist(); return; }
   if (!state.plan) { state.plan = todoistPlan(p); state.created = 0; }
   state.busy = true;
@@ -492,6 +496,7 @@ function route() {
   else if (parts[0] === 'settings') { nav = 'settings'; showSettings(); }
   else if (parts[0] === 'products') { nav = 'settings'; showProducts(); }
   else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
+  else if (parts[0] === 'frozen') showFrozen();
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
   else if (project && isBatch(project)) showBatch(project);
@@ -520,13 +525,15 @@ const valueOf = p => streamOf(p) === 'gallery' ? p.calc.cost ?? p.calc.total : p
 
 function showBoard() {
   const tab = STREAM_NAME[boardStream] ? boardStream : 'all';
-  const shown = store.projects.filter(p => tab === 'all' || streamOf(p) === tab);
+  const shown = store.projects.filter(p => !isFrozen(p) && (tab === 'all' || streamOf(p) === tab));
+  const frozenCount = store.projects.filter(isFrozen).length;
   const by = (...statuses) => shown.filter(p => statuses.includes(p.status)).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const sum = (list, f) => list.reduce((total, p) => total + f(p), 0);
   const shopHours = p => p.calc.labor_hours + p.calc.contingency_hours;
   const tabs = `<nav class="tabs streams">${[['all', 'All projects'], ...STREAMS].map(([key, name]) =>
     `<a href="${key === 'all' ? '#/s/all' : `#/s/${key}`}" class="${key === tab ? 'on' : ''}">${name}
-      <small>${store.projects.filter(p => key === 'all' || streamOf(p) === key).filter(p => !archived(p)).length}</small></a>`).join('')}</nav>`;
+      <small>${store.projects.filter(p => key === 'all' || streamOf(p) === key).filter(p => !archived(p) && !isFrozen(p)).length}</small></a>`).join('')}
+    <span class="spacer"></span><a href="#/frozen" class="frozenlink">Frozen <small>${frozenCount}</small></a></nav>`;
   const newLabel = tab === 'client' ? 'New quote' : 'New project';
   const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn primary" href="${newLink()}">${newLabel}</a></div>${tabs}`;
   const quick = tab === 'product' ? '<div class="card" id="quickBatch"></div>' : '';
@@ -640,7 +647,7 @@ function showCalendar(month) {
   // Its bar is split at each phase's due date, one colored stretch per phase; phases already
   // finished are faded. With no phase dates it is one bar in the color of the current phase.
   const nextDay = date => { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + 1); return ymd(d); };
-  const jobs = store.projects.filter(p => ['accepted', 'in_progress', 'complete'].includes(p.status)).map(p => {
+  const jobs = store.projects.filter(p => !isFrozen(p) && ['accepted', 'in_progress', 'complete'].includes(p.status)).map(p => {
     const began = (isClient(p) && p.history.findLast(h => h.status === 'accepted')) || p.history.findLast(h => h.status === 'in_progress');
     const start = ymd(new Date(began?.at || p.updated_at));
     const current = STAGES.findIndex(([key]) => key === stageOf(p));
@@ -825,6 +832,8 @@ function projectHeader(p, tab, side) {
       <div class="name"><h1 id="projTitle">${esc(projectName(p))}</h1><span class="pill ${p.status}" id="statusPill">${STATUS_NAME[p.status]}</span></div>
       <div class="sub">${isClient(p) ? `${esc(p.quote_number)} &middot; ` : ''}${STREAM_NAME[streamOf(p)]}</div>
     </div>
+    ${isFrozen(p) ? `<div class="note frozen"><span><b>Frozen since ${esc(fmtDate(p.data.frozen.at))}</b>${p.data.frozen.reason ? `: ${esc(p.data.frozen.reason)}` : ''}.
+      It's off the board and calendar until you unfreeze it.</span><button type="button" class="btn small" data-unfreeze="${p.id}">Unfreeze</button></div>` : ''}
     <nav class="tabs">
       <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
       <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
@@ -1129,9 +1138,12 @@ function renderStatusCard() {
         ${statusesFor(streamOf(p)).map(([k, n]) => `<option value="${k}" ${k === p.status ? 'selected' : ''}>${n}</option>`).join('')}
       </select>
     </div>
+    <div class="actions" style="margin-top:10px">${isFrozen(p)
+      ? `<button class="btn" data-unfreeze="${p.id}">Unfreeze</button><span class="muted" style="font-size:13px">Frozen since ${esc(fmtDate(p.data.frozen.at))}</span>`
+      : archived(p) ? '' : `<button class="btn" data-freeze="${p.id}">Freeze project</button><span class="muted" style="font-size:13px">For a client who's gone quiet, or a long delay</span>`}</div>
     <label class="f" style="margin-top:12px"><span>Kind of project</span><select id="streamSelect">
       ${STREAMS.map(([k, n]) => `<option value="${k}" ${k === streamOf(p) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <ul class="history">${p.history.map(h => `<li><span>${h.stage ? `Phase: ${STAGE_NAME[h.stage]}` : STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
+    <ul class="history">${p.history.map(h => `<li><span>${'frozen' in h ? (h.frozen ? `Frozen${h.note ? `: ${esc(h.note)}` : ''}` : 'Unfrozen') : h.stage ? `Phase: ${STAGE_NAME[h.stage]}` : STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
   card.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', () => setStatus(p, b.dataset.status)));
   $('#statusSelect').addEventListener('change', e => setStatus(p, e.target.value));
   $('#streamSelect').addEventListener('change', e => setStream(p, e.target.value));
@@ -1193,7 +1205,8 @@ async function setStatus(p, status) {
   else showBoard();
   // Accepting a quote, or starting work on one of the shop's own pieces, opens the job in Todoist.
   if (status === (isClient(p) ? 'accepted' : 'in_progress') && !p.todoist.synced && !p.todoist.busy) {
-    if (store.todoistConnected) await runTodoistSync(p);
+    if (isFrozen(p)) toast('Its Todoist list will be made when you unfreeze it.');
+    else if (store.todoistConnected) await runTodoistSync(p);
     else toast(`${isClient(p) ? 'Quote accepted' : 'Work started'}. Set the TODOIST_TOKEN secret to create its task list.`);
   }
 }
@@ -1213,7 +1226,12 @@ function renderTodoistCard() {
   const wanted = streamOf(p) === 'product' || ['accepted', 'in_progress', 'complete'].includes(p.status);
   const when = isClient(p) ? 'this quote is accepted' : streamOf(p) === 'product' ? 'the project is created' : 'work starts';
   let body;
-  if (isBatch(p)) body = batchTodoistHtml(p);
+  if (t.archive_error) body = `<p class="note err">${esc(t.archive_error)}</p>
+    <div class="actions"><button class="btn primary" id="archiveRetry">Retry</button>${t.url ? `<a class="btn" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Todoist</a>` : ''}</div>`;
+  else if (isFrozen(p)) body = t.project_id
+    ? `<p class="muted">Its Todoist project is archived while the project is frozen. Unfreezing brings it back with its tasks as they were.</p>`
+    : '<p class="muted">Frozen. Any Todoist list is made once it is unfrozen.</p>';
+  else if (isBatch(p)) body = batchTodoistHtml(p);
   else if (t.busy) body = '<p class="note">Creating the project and tasks in Todoist&hellip;</p>';
   else if (t.synced) body = `<p class="note ok">Task list created (${t.plan.tasks.length} tasks).</p>
     <a class="btn" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Todoist</a>`;
@@ -1225,7 +1243,109 @@ function renderTodoistCard() {
   else body = `<p class="muted">A Todoist project with one task per build phase will be created when ${when}.</p>`;
   card.innerHTML = `<h2>Todoist</h2>${body}`;
   $('#sync', card)?.addEventListener('click', () => runTodoistSync(p));
+  $('#archiveRetry', card)?.addEventListener('click', () => matchTodoistToFreeze(p));
 }
+
+// ---------- frozen projects ----------
+function freezeProject(p) {
+  const reason = prompt(`Freeze ${projectName(p)}? It leaves the board and calendar until you unfreeze it${p.todoist.project_id ? ', and its Todoist project is archived' : ''}.\n\nWhy is it on hold? (optional)`, '');
+  if (reason === null) return;
+  const at = new Date().toISOString();
+  p.data.frozen = { at, reason: reason.trim() };
+  p.updated_at = at;
+  p.history.push({ frozen: true, at, ...(reason.trim() ? { note: reason.trim() } : {}) });
+  persist();
+  toast(`${projectName(p)} is frozen. It's under Frozen on the Projects page.`);
+  route();
+  matchTodoistToFreeze(p);
+}
+
+// Puts a frozen project back where it left off. The time it spent frozen can be added to its due dates.
+function unfreezeProject(p) {
+  const f = p.data.frozen;
+  if (!f) return;
+  const days = Math.round((+new Date(ymd(new Date()) + 'T00:00') - +new Date(ymd(new Date(f.at)) + 'T00:00')) / 86400000);
+  const dated = [['due_date', p.data.due_date], ...Object.entries(p.data.stage_due || {})].filter(([, d]) => d);
+  if (days > 0 && dated.length && confirm(`${projectName(p)} was frozen for ${days} day${days === 1 ? '' : 's'}. Push its due dates back ${days} day${days === 1 ? '' : 's'} as well?`)) {
+    const later = d => { const x = new Date(d + 'T00:00'); x.setDate(x.getDate() + days); return ymd(x); };
+    if (p.data.due_date) p.data.due_date = later(p.data.due_date);
+    for (const [k, d] of Object.entries(p.data.stage_due || {})) if (d) p.data.stage_due[k] = later(d);
+    if (isBatch(p)) p.data.batch.ship_manual = true;
+  }
+  delete p.data.frozen;
+  const at = new Date().toISOString();
+  p.updated_at = at;
+  p.history.push({ frozen: false, at });
+  persist();
+  toast(`${projectName(p)} is back on the board.`);
+  route();
+  matchTodoistToFreeze(p);
+}
+
+// Archives a frozen project's Todoist project, and brings it back (tasks and all) when it is unfrozen.
+// A batch run edited while frozen is then brought up to date, and a job that was accepted or started
+// while frozen gets the Todoist list it would have had.
+async function matchTodoistToFreeze(p) {
+  const t = p.todoist, frozen = isFrozen(p);
+  if (t.busy) { setTimeout(() => matchTodoistToFreeze(p), 1500); return; }
+  if (t.project_id && !!t.archived !== frozen) {
+    if (!store.todoistConnected) t.archive_error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.';
+    else {
+      try {
+        await todoist('POST', `/projects/${t.project_id}/${frozen ? 'archive' : 'unarchive'}`);
+        t.archived = frozen;
+        delete t.archive_error;
+      } catch (e) {
+        if (e.status === 404) t.archived = frozen;   // deleted in Todoist: nothing to archive or bring back
+        else t.archive_error = `Couldn't ${frozen ? 'archive' : 'bring back'} its Todoist project. ${e.message}`;
+      }
+    }
+    p.updated_at = new Date().toISOString();
+    persist();
+  } else if (t.archive_error) {
+    delete t.archive_error;
+    persist();
+  }
+  if (t.archive_error) toast(`Todoist: ${t.archive_error}`);
+  else if (!frozen && store.todoistConnected) {
+    if (isBatch(p) && t.project_id) await syncBatchTodoist(p);
+    else if (!t.project_id && !t.synced && p.status === (isClient(p) ? 'accepted' : 'in_progress')) await runTodoistSync(p);
+    else if (t.project_id) toast('Its Todoist project is back.');
+  }
+  if (ed?.project === p) renderTodoistCard();
+}
+
+// Every frozen project, to look over and unfreeze.
+function showFrozen() {
+  const list = store.projects.filter(isFrozen).sort((a, b) => b.data.frozen.at.localeCompare(a.data.frozen.at));
+  const today = new Date(ymd(new Date()) + 'T00:00');
+  const since = p => {
+    const n = Math.round((+today - +new Date(ymd(new Date(p.data.frozen.at)) + 'T00:00')) / 86400000);
+    return `${esc(fmtDate(p.data.frozen.at))} <span class="muted">(${n === 0 ? 'today' : `${n} day${n === 1 ? '' : 's'}`})</span>`;
+  };
+  view.innerHTML = `<a href="${boardLink()}" class="back">&larr; Projects</a>
+    <div class="pagehead"><h1>Frozen projects</h1></div>
+    <p class="muted">Projects on hold: a client who's gone quiet but may come back, or a job with a long delay. They stay off the board and calendar,
+      and their Todoist projects are archived. Unfreezing one puts it back on the board where it left off and brings its Todoist project back.</p>
+    ${list.length ? `<div class="card"><table class="list frozenlist">
+      <tr><th>Project</th><th>Client or stream</th><th>Where it was</th><th>Frozen since</th><th>Why</th><th></th></tr>
+      ${list.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a>${isClient(p) ? `<br><small class="muted">${esc(p.quote_number)}</small>` : ''}</td>
+        <td>${isClient(p) ? esc(p.data.client_name || 'No client yet') : STREAM_NAME[streamOf(p)]}</td>
+        <td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span> <span class="muted">${STAGE_NAME[stageOf(p)]}</span></td>
+        <td>${since(p)}</td><td>${esc(p.data.frozen.reason)}</td>
+        <td><button class="btn small" data-unfreeze="${p.id}">Unfreeze</button></td></tr>`).join('')}
+    </table></div>`
+    : '<div class="card empty"><p class="muted" style="margin:0">Nothing is frozen. To put a project on hold, open it and choose <b>Freeze project</b> in its Status box.</p></div>'}`;
+}
+
+// The Freeze and Unfreeze buttons, wherever they are on the page.
+view.addEventListener('click', e => {
+  const el = (e.target as Element).closest<HTMLElement>('[data-freeze], [data-unfreeze]');
+  const p = el && store.projects.find(x => x.id === Number(el.dataset.freeze ?? el.dataset.unfreeze));
+  if (!p) return;
+  if (el.dataset.freeze !== undefined) freezeProject(p);
+  else unfreezeProject(p);
+});
 
 // ---------- small-batch product runs ----------
 // A batch run is a product-line project made from one of the catalog's products (Settings → Products):
@@ -1271,6 +1391,7 @@ function batchTodoistPlan(p) {
 const batchSyncAgain = new Set();
 async function syncBatchTodoist(p) {
   const t = p.todoist;
+  if (isFrozen(p)) return;   // caught up when it's unfrozen
   if (t.busy) { batchSyncAgain.add(p.id); return; }
   if (!store.todoistConnected) { t.error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.'; persist(); return; }
   t.busy = true;
@@ -1642,6 +1763,7 @@ async function syncRunsWithOrders(orders) {
       b.variants = [];
       run.status = 'complete';
       run.history.push({ status: 'complete', at: new Date().toISOString() });
+      if (isFrozen(run)) { delete run.data.frozen; run.history.push({ frozen: false, at: new Date().toISOString() }); }
     }
     if (JSON.stringify([b, run.data.due_date, run.status]) === before) continue;
     run.calc = batchCalc(run.data);
