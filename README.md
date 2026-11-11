@@ -71,6 +71,16 @@ scripts/             Seed script
 - **Todoist.** The API token is the `TODOIST_TOKEN` Worker secret (locally, in `.dev.vars`). It
   never reaches the browser or the database. The browser's Todoist calls go through
   `/api/todoist/*`, which adds the token. Without it, the app runs with Todoist turned off.
+- **Small-batch runs.** The Product line tab has a quick form for a batch of one of the shop's
+  products. Products, variants and prices come from the jmwood.work Shopify storefront
+  (`GET /api/shop-products` reads its public `products.json` for the collection on the Small Batch
+  Projects page, kept in the database for an hour and used as a fallback when the shop answers
+  "too many requests"); per-unit cost, hours and materials are filled in on the Products page and kept in
+  the settings. A run is a product-line project with a `data.batch` section, due on its ship-by
+  date. Its Todoist project is created with it and updated after every change.
+  With the Shopify app connected (`SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET`, see
+  DEPLOYMENT.md), `GET /api/shop-orders` reads unfulfilled orders through the Admin API and each
+  product gets one open run holding everything still owed (`src/lib/shopify.ts`).
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and
