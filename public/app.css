@@ -183,3 +183,14 @@ header.top .signout { background: none; border: 0; padding: 0; font: inherit; fo
 header.top .signout:hover { color: #fff; text-decoration: underline; }
 .login { max-width: 420px; margin: 48px auto 0; }
 .login h1 { margin-bottom: 14px; }
+
+/* small-batch product runs */
+.f.w4 { grid-column: span 4; }
+.qbvariants { display: flex; flex-wrap: wrap; gap: 10px; }
+.qbv { display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; width: 170px; font-size: 13px; }
+.qbv span { font-weight: 600; color: var(--ink); }
+.qbv small { color: var(--muted); font-weight: 400; }
+.qty { display: grid; grid-template-columns: 1fr 36px 72px 36px 56px; gap: 6px; align-items: center; padding: 4px 0; }
+.qty input { text-align: center; }
+.qty .btn.small { padding: 4px 0; font-size: 16px; line-height: 1.2; }
+#quickBatch { margin-bottom: 20px; }

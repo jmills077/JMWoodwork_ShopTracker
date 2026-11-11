@@ -2,6 +2,7 @@
 //
 //   GET  /                the app page, with the shop's data embedded (src/views/app.tsx)
 //   /api/*                JSON the browser script saves and reloads through
+//   /api/shop-products    the jmwood.work shop's small-batch products and variants
 //   /app.css, /app.js     static files from public/ (served by Workers Static Assets)
 //   cron (weekly)         refreshes the supplier price list
 import { Hono } from 'hono';
@@ -15,6 +16,9 @@ import { AppPage } from './views/app';
 import { LoginPage, SetupPage } from './views/login';
 
 const TODOIST_API = 'https://api.todoist.com/api/v1';
+// The products on the Small Batch Projects page of the shop (jmwood.work/pages/small-batch-projects),
+// from Shopify's public storefront feed. No sign-in is needed: it's what any visitor to the shop sees.
+const SHOP_PRODUCTS = 'https://jmwood.work/collections/all-products-collection/products.json?limit=250';
 
 const app = new Hono<App>();
 
@@ -57,6 +61,21 @@ app.get('/api/prices', async c => {
   const prices = await getPrices(c.env.DB);
   return prices ? c.json(prices) : c.json({ error: 'No price list yet' }, 404);
 });
+
+// The shop's products and variants, for the quick batch-run form on the Product line tab.
+app.get('/api/shop-products', async c => {
+  const res = await fetch(SHOP_PRODUCTS, { headers: { Accept: 'application/json' }, cf: { cacheTtl: 300 } } as RequestInit);
+  if (!res.ok) return c.json({ error: `The shop returned ${res.status}` }, 502);
+  const { products } = await res.json<{ products: ShopProduct[] }>();
+  return c.json({
+    products: products.map(p => ({
+      handle: p.handle, title: p.title,
+      // A product without options has one variant called "Default Title".
+      variants: p.variants.map(v => ({ name: v.title === 'Default Title' ? '' : v.title, price: Number(v.price) || 0 })),
+    })),
+  });
+});
+interface ShopProduct { handle: string; title: string; variants: { title: string; price: string }[] }
 
 // ---------- Todoist ----------
 // Passes the browser's Todoist requests on with the TODOIST_TOKEN secret, and Todoist's answers back as they are.
