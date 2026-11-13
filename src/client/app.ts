@@ -477,6 +477,7 @@ async function refresh() {
   store = next;
   saved = snapshot();
   applyPrices();
+  backfillTodos();
   // Redraw from the new data, unless a not-yet-saved quote is being written.
   if (!(ed && !ed.project)) route();
 }
@@ -497,6 +498,11 @@ function route() {
   else if (parts[0] === 'products') { nav = 'settings'; showProducts(); }
   else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
   else if (parts[0] === 'frozen') showFrozen();
+  else if (parts[0] === 'tasks') {
+    nav = 'tasks';
+    const listed = store.projects.find(p => p.id === Number(parts[1]));
+    if (listed) showTodo(listed); else showTasks();
+  }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
   else if (project && isBatch(project)) showBatch(project);
@@ -837,6 +843,7 @@ function projectHeader(p, tab, side) {
     <nav class="tabs">
       <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
       <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
+      <a href="#/tasks/${p.id}">To-do list</a>
       ${isClient(p) ? `<a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>` : ''}
       <span class="spacer"></span><span class="side">${side}</span>
     </nav>
@@ -1110,6 +1117,8 @@ async function createProject() {
     stream, status,
     stage: 'ideation', data: ed.data, calc: price(ed.data, stream), todoist: {}, history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp,
   };
+  // Every project gets its to-do list the moment it is created.
+  draft.data.todo = defaultTodo(draft);
   // The server gives the project its id and quote number.
   let project;
   ed.creating = true;
@@ -1200,6 +1209,7 @@ async function setStatus(p, status) {
   p.status = status;
   p.updated_at = new Date().toISOString();
   p.history.push({ status, at: p.updated_at });
+  if (isFinished(p)) finishTodo(p);
   persist();
   if (ed?.project === p) { renderStatusCard(); renderTodoistCard(); }
   else showBoard();
@@ -1346,6 +1356,260 @@ view.addEventListener('click', e => {
   if (el.dataset.freeze !== undefined) freezeProject(p);
   else unfreezeProject(p);
 });
+
+// ---------- to-do lists ----------
+// Every project has its own to-do list and lumber store shopping list, made when the project is
+// created and kept in its data as data.todo = { items, lumber, log }. Each entry is { id, text, done_at }
+// (done_at is null while open); the log records every task added, checked off, unchecked or removed.
+// Checked-off tasks stay where they are, struck through, so they can be unchecked later. When a project
+// is finished (a client job delivered, or one of the shop's own pieces complete) everything is checked off.
+const TODO_LISTS = { items: 'To-do list', lumber: 'Shopping list' };
+let taskSeq = 0;
+const newTask = (text, extra = {}) => ({ id: `t${Date.now().toString(36)}${(taskSeq++).toString(36)}`, text, done_at: null, ...extra });
+const isFinished = p => isClient(p) ? p.status === 'delivered' : p.status === 'complete';
+
+// The shopping list's first line: the lumber to buy, worked out from the project's size and species.
+function lumberLine(p) {
+  if (isBatch(p)) {
+    const b = p.data.batch;
+    return `Materials for ${batchUnits(b)} × ${b.product}${b.materials ? ` (each: ${b.materials})` : ''}`;
+  }
+  const n = p.calc?.lumber, species = p.data.spec?.species || 'lumber';
+  return n?.feet ? `${lumberSummary(p.data, n)}` : `About ${+(n?.buyBf ?? p.calc?.board_feet ?? 0)} board feet of ${species}`;
+}
+
+// The starting list for a project: the steps of the job, from quote (or materials) to final payment.
+function defaultTodo(p) {
+  const d = p.data, client = isClient(p);
+  let steps;
+  if (isBatch(p)) {
+    const b = d.batch, units = batchUnits(b);
+    steps = [`Buy materials for ${units} × ${b.product}`,
+      ...b.variants.filter(v => pos(v.qty) > 0).map(v => `Make ${pos(v.qty)} × ${variantLabel(b, v)}`),
+      `Ship ${units} × ${b.product}`];
+  } else {
+    steps = [
+      ...(client ? ['Send the quote', 'Collect deposit'] : []),
+      'Buy lumber & hardware',
+      ...(d.phases || []).filter(ph => pos(ph.hours) > 0 && ph.name).map(ph => ph.name),
+      ...(client ? ['Collect final payment'] : []),
+    ];
+  }
+  return {
+    items: steps.map(text => newTask(text)),
+    lumber: [newTask(lumberLine(p), { auto: true })],   // auto: follows the estimate until it is checked off
+    log: [{ at: new Date().toISOString(), what: 'created' }],
+  };
+}
+
+// Projects from before to-do lists existed get one, checked off as far as the project has got.
+function backfillTodos() {
+  let any = false;
+  for (const p of store.projects) {
+    if (p.data.todo) continue;
+    const todo = defaultTodo(p);
+    if (isClient(p) && p.status !== 'draft') todo.items[0].done_at = p.history.find(h => h.status === 'sent')?.at || p.updated_at;
+    if (isFinished(p) || archived(p)) {
+      const at = p.history.findLast(h => h.status)?.at || p.updated_at;
+      for (const t of [...todo.items, ...todo.lumber]) t.done_at ??= at;
+    }
+    p.data.todo = todo;
+    any = true;
+  }
+  if (any) persist();
+}
+
+function todoChanged(p, entry?) {
+  if (entry) p.data.todo.log.push({ at: new Date().toISOString(), ...entry });
+  p.updated_at = new Date().toISOString();
+  persist();
+}
+
+// A finished project has nothing left to do: everything still open is checked off.
+function finishTodo(p) {
+  const todo = p.data.todo;
+  if (!todo) return;
+  const at = new Date().toISOString(), open = [...todo.items, ...todo.lumber].filter(t => !t.done_at);
+  if (!open.length) return;
+  for (const t of open) t.done_at = at;
+  todo.log.push({ at, what: 'finished', count: open.length });
+}
+
+const todoCounts = p => {
+  const items = p.data.todo?.items || [];
+  return { done: items.filter(t => t.done_at).length, total: items.length, next: items.find(t => !t.done_at) };
+};
+
+// The Tasks page: every active project, to open its list.
+function showTasks() {
+  const active = store.projects.filter(p => !archived(p) && !isFrozen(p))
+    .sort((a, b) => (a.data.due_date || '9999').localeCompare(b.data.due_date || '9999') || b.updated_at.localeCompare(a.updated_at));
+  const frozen = store.projects.filter(isFrozen).length;
+  view.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>
+    ${active.length ? `<div class="taskgrid">${active.map(p => {
+      const c = todoCounts(p), today = ymd(new Date()), due = p.data.due_date;
+      return `<a class="card taskproj" href="#/tasks/${p.id}">
+        <div class="name"><b>${esc(projectName(p))}</b><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></div>
+        <span class="muted" style="font-size:13px">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}${due ? ` &middot; <span class="${due < today ? 'late' : ''}">due ${esc(fmtDate(due))}</span>` : ''}</span>
+        <div class="progress" aria-hidden="true"><span style="width:${c.total ? Math.round(c.done / c.total * 100) : 0}%"></span></div>
+        <span style="font-size:13px">${c.total ? `${c.done} of ${c.total} done` : 'No tasks yet'}${c.next ? `<br><span class="muted">Next: ${esc(c.next.text)}</span>` : ''}</span>
+      </a>`;
+    }).join('')}</div>`
+    : `<div class="card empty"><p class="muted" style="margin:0">No active projects. Every new project gets its own to-do list as soon as it's created.</p></div>`}
+    ${frozen ? `<p class="muted" style="font-size:13px;margin-top:16px">${frozen} frozen project${frozen === 1 ? '' : 's'} not shown. Their lists are on their own pages (see <a href="#/frozen">Frozen</a>).</p>` : ''}`;
+}
+
+// One project's to-do list, its lumber store shopping list and the log of everything done.
+function showTodo(p) {
+  if (!p.data.todo) { p.data.todo = defaultTodo(p); todoChanged(p); }
+  const todo = p.data.todo;
+  view.innerHTML = `<a href="#/tasks" class="back">&larr; Tasks</a>
+    <div class="pagehead"><h1>${esc(projectName(p))}</h1><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>
+      <span class="spacer"></span><a class="btn" href="#/p/${p.id}">Open project</a></div>
+    ${isFrozen(p) ? `<p class="note frozen">This project is frozen. Its list is kept as it is until you unfreeze it.</p>` : ''}
+    <div class="cols">
+      <div class="card">
+        <h2>To-do list</h2>
+        <form class="addtask" data-list="items" autocomplete="off"><input placeholder="Add a task" aria-label="New task"><button class="btn primary">Add</button></form>
+        <ul class="tasks" data-list="items"></ul>
+        <p class="muted hint">Press and hold a task to move it up or down the list.</p>
+      </div>
+      <aside>
+        <div class="card">
+          <h2>Lumber store shopping list</h2>
+          <form class="addtask" data-list="lumber" autocomplete="off"><input placeholder="Add something to buy" aria-label="New shopping list item"><button class="btn primary">Add</button></form>
+          <ul class="tasks" data-list="lumber"></ul>
+        </div>
+        <div class="card"><h2>Task log</h2><ul class="history tasklog" id="todoLog"></ul></div>
+      </aside>
+    </div>`;
+
+  const draw = list => {
+    const ul = $(`ul[data-list="${list}"]`);
+    // The lumber line follows the project's estimate until it is checked off or edited.
+    if (list === 'lumber') for (const t of todo.lumber) if (t.auto && !t.done_at) t.text = lumberLine(p);
+    ul.innerHTML = todo[list].length ? todo[list].map(t => `<li class="task ${t.done_at ? 'done' : ''}" data-id="${esc(t.id)}">
+        <input type="checkbox" ${t.done_at ? 'checked' : ''} aria-label="${esc(t.text)}">
+        <span class="text">${esc(t.text)}</span>
+        ${t.done_at ? `<span class="when">Done ${esc(fmtDate(t.done_at))}</span>` : ''}
+        <button type="button" class="x" aria-label="Remove ${esc(t.text)}" title="Remove">&times;</button>
+      </li>`).join('')
+      : `<li class="none muted">${list === 'lumber' ? 'Nothing to buy yet.' : 'Nothing on the list yet.'}</li>`;
+  };
+  const drawLog = () => {
+    const what = e => ({
+      created: 'List made', finished: `Project finished: ${e.count} open item${e.count === 1 ? '' : 's'} checked off`,
+      done: `Done: ${esc(e.text)}`, undone: `Unchecked: ${esc(e.text)}`, added: `Added: ${esc(e.text)}`, removed: `Removed: ${esc(e.text)}`,
+    }[e.what] || esc(e.what)) + (e.list === 'lumber' ? ' <small>(shopping list)</small>' : '');
+    $('#todoLog').innerHTML = [...todo.log].reverse().map(e => `<li><span>${what(e)}</span><span>${esc(fmtDate(e.at))}</span></li>`).join('');
+  };
+  const redraw = () => { draw('items'); draw('lumber'); drawLog(); };
+
+  const find = (list, id) => todo[list].find(t => t.id === id);
+  const toggle = (list, id) => {
+    const t = find(list, id);
+    if (!t) return;
+    t.done_at = t.done_at ? null : new Date().toISOString();
+    if (t.done_at) delete t.auto;
+    todoChanged(p, { what: t.done_at ? 'done' : 'undone', text: t.text, list });
+    redraw();
+  };
+
+  view.querySelectorAll('form.addtask').forEach(form => form.addEventListener('submit', e => {
+    e.preventDefault();
+    const input = form.querySelector('input'), text = input.value.trim(), list = form.dataset.list;
+    if (!text) return input.focus();
+    todo[list].push(newTask(text));
+    todoChanged(p, { what: 'added', text, list });
+    input.value = '';
+    redraw();
+    input.focus();
+  }));
+
+  view.querySelectorAll('ul.tasks').forEach(ul => {
+    const list = ul.dataset.list;
+    const reorder = ids => {
+      todo[list].sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+      todoChanged(p);
+    };
+    const press = longPressReorder(ul, reorder);
+    ul.addEventListener('click', e => {
+      const li = (e.target as Element).closest<HTMLElement>('li.task');
+      if (!li) return;
+      if (press.justMoved()) { e.preventDefault(); return; }
+      if ((e.target as Element).closest('.x')) {
+        const t = find(list, li.dataset.id);
+        if (!t || !confirm(`Remove "${t.text}" from the ${TODO_LISTS[list].toLowerCase()}?`)) return;
+        todo[list] = todo[list].filter(x => x !== t);
+        todoChanged(p, { what: 'removed', text: t.text, list });
+        redraw();
+        return;
+      }
+      // Tapping the checkbox or the task's text checks it off (or back on).
+      if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
+      toggle(list, li.dataset.id);
+    });
+    // From the keyboard: Alt + up / down arrow moves the focused task.
+    ul.addEventListener('keydown', e => {
+      const li = (e.target as Element).closest<HTMLElement>('li.task');
+      if (!li || !e.altKey || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+      e.preventDefault();
+      const i = todo[list].findIndex(t => t.id === li.dataset.id), j = i + (e.key === 'ArrowUp' ? -1 : 1);
+      if (i < 0 || j < 0 || j >= todo[list].length) return;
+      [todo[list][i], todo[list][j]] = [todo[list][j], todo[list][i]];
+      todoChanged(p);
+      draw(list);
+      ($(`li[data-id="${li.dataset.id}"] input`, ul) as HTMLElement)?.focus();
+    });
+  });
+  redraw();
+}
+
+// Press and hold an item to pick it up, then drag it up or down the list and let go. A quick swipe
+// still scrolls the page; only a steady press lifts the item. `drop` gets the new order of ids.
+function longPressReorder(ul, drop) {
+  let timer = null, lifted = null, startX = 0, startY = 0, movedUntil = 0, pointer = null, order = '';
+  const cancelPress = () => { clearTimeout(timer); timer = null; };
+  ul.addEventListener('contextmenu', e => { if (e.target.closest('li.task')) e.preventDefault(); });
+  // While an item is lifted, a finger moving on the screen drags it instead of scrolling the page.
+  ul.addEventListener('touchmove', e => { if (lifted) e.preventDefault(); }, { passive: false });
+  ul.addEventListener('pointerdown', e => {
+    const li = e.target.closest('li.task');
+    if (!li || e.button > 0 || e.target.closest('.x')) return;
+    startX = e.clientX; startY = e.clientY; pointer = e.pointerId;
+    cancelPress();
+    timer = setTimeout(() => {
+      timer = null;
+      lifted = li;
+      order = [...ul.querySelectorAll('li.task')].map(x => x.dataset.id).join();
+      li.classList.add('lifted');
+      try { li.setPointerCapture(pointer); } catch {}
+      navigator.vibrate?.(15);
+    }, 450);
+  });
+  ul.addEventListener('pointermove', e => {
+    if (!lifted) {
+      if (timer && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) cancelPress();
+      return;
+    }
+    e.preventDefault();
+    const others = [...ul.querySelectorAll('li.task')].filter(x => x !== lifted);
+    const before = others.find(x => { const r = x.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    if ((before || null) !== lifted.nextElementSibling) ul.insertBefore(lifted, before || null);
+  });
+  const end = () => {
+    cancelPress();
+    if (!lifted) return;
+    lifted.classList.remove('lifted');
+    lifted = null;
+    movedUntil = Date.now() + 400;   // the click that follows letting go is not a tap on the task
+    const ids = [...ul.querySelectorAll('li.task')].map(x => x.dataset.id);
+    if (ids.join() !== order) drop(ids);
+  };
+  ul.addEventListener('pointerup', end);
+  ul.addEventListener('pointercancel', end);
+  return { justMoved: () => Date.now() < movedUntil };
+}
 
 // ---------- small-batch product runs ----------
 // A batch run is a product-line project made from one of the catalog's products (Settings → Products):
@@ -1532,6 +1796,7 @@ async function createBatch(pr, qtys, ship, opts: { source?: string; quiet?: bool
   data.rates.hourly_rate = s.hourly_rate;
   // Starts in Build and In progress: it is a real order, and materials can be bought straight away.
   const draft = { stream: 'product', status, stage: 'build', data, calc: batchCalc(data), todoist: {}, history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp };
+  (draft.data as any).todo = defaultTodo(draft);
   let project;
   try { project = await api('/api/projects', draft); }
   catch (e) { if (!opts.quiet) toast(`Not saved: ${e.message}`); return null; }
@@ -1763,6 +2028,7 @@ async function syncRunsWithOrders(orders) {
       b.variants = [];
       run.status = 'complete';
       run.history.push({ status: 'complete', at: new Date().toISOString() });
+      finishTodo(run);
       if (isFrozen(run)) { delete run.data.frozen; run.history.push({ frozen: false, at: new Date().toISOString() }); }
     }
     if (JSON.stringify([b, run.data.due_date, run.status]) === before) continue;
@@ -2027,12 +2293,14 @@ function showSettings() {
       return toast(`Import failed: ${e.message}`);
     }
     saved = snapshot();
+    backfillTodos();
     settingsChanged();
     route();
     toast('Backup imported.');
   });
 }
 
+backfillTodos();
 route();
 loadPrices();
 loadShopProducts().then(loadShopOrders);
