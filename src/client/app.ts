@@ -1362,11 +1362,11 @@ view.addEventListener('click', e => {
 // created and kept in its data as data.todo = { items, lumber, log }. Each entry is { id, text, done_at }
 // (done_at is null while open); the log records every task added, checked off, unchecked or removed.
 // Checked-off tasks stay where they are, struck through, so they can be unchecked later. When a project
-// is finished (a client job delivered, or one of the shop's own pieces complete) everything is checked off.
+// is finished (marked Complete, or for a client job Delivered & paid if it skipped Complete) everything is checked off.
 const TODO_LISTS = { items: 'To-do list', lumber: 'Shopping list' };
 let taskSeq = 0;
 const newTask = (text, extra = {}) => ({ id: `t${Date.now().toString(36)}${(taskSeq++).toString(36)}`, text, done_at: null, ...extra });
-const isFinished = p => isClient(p) ? p.status === 'delivered' : p.status === 'complete';
+const isFinished = p => p.status === 'complete' || (isClient(p) && p.status === 'delivered');
 
 // The shopping list's first line: the lumber to buy, worked out from the project's size and species.
 function lumberLine(p) {
@@ -1440,23 +1440,38 @@ const todoCounts = p => {
   return { done: items.filter(t => t.done_at).length, total: items.length, next: items.find(t => !t.done_at) };
 };
 
-// The Tasks page: every active project, to open its list.
+// The Tasks page: active projects first, then frozen ones, then finished ones (most recently finished
+// first; the older ones are behind a "Show all" button so the page stays short).
+let showAllFinished = false;
+const finishedAt = p => [...p.history].reverse().find(h => h.status === p.status)?.at || p.updated_at;
 function showTasks() {
-  const active = store.projects.filter(p => !archived(p) && !isFrozen(p))
-    .sort((a, b) => (a.data.due_date || '9999').localeCompare(b.data.due_date || '9999') || b.updated_at.localeCompare(a.updated_at));
-  const frozen = store.projects.filter(isFrozen).length;
+  const byDue = (a, b) => (a.data.due_date || '9999').localeCompare(b.data.due_date || '9999') || b.updated_at.localeCompare(a.updated_at);
+  const active = store.projects.filter(p => !archived(p) && !isFrozen(p)).sort(byDue);
+  const frozen = store.projects.filter(isFrozen).sort((a, b) => b.data.frozen.at.localeCompare(a.data.frozen.at));
+  const finished = store.projects.filter(p => archived(p) && !isFrozen(p)).sort((a, b) => finishedAt(b).localeCompare(finishedAt(a)));
+  const today = ymd(new Date()), FINISHED_SHOWN = 9;
+  const card = (p, kind = 'active') => {
+    const c = todoCounts(p), due = p.data.due_date;
+    const note = kind === 'frozen' ? `frozen since ${esc(fmtDate(p.data.frozen.at))}`
+      : kind === 'finished' ? `${p.status === 'declined' ? 'declined' : 'finished'} ${esc(fmtDate(finishedAt(p)))}`
+      : due ? `<span class="${due < today ? 'late' : ''}">due ${esc(fmtDate(due))}</span>` : '';
+    return `<a class="card taskproj ${kind}" href="#/tasks/${p.id}">
+      <div class="name"><b>${esc(projectName(p))}</b><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></div>
+      <span class="muted" style="font-size:13px">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}${note ? ` &middot; ${note}` : ''}</span>
+      <div class="progress" aria-hidden="true"><span style="width:${c.total ? Math.round(c.done / c.total * 100) : 0}%"></span></div>
+      <span style="font-size:13px">${c.total ? `${c.done} of ${c.total} done` : 'No tasks yet'}${c.next && kind !== 'finished' ? `<br><span class="muted">Next: ${esc(c.next.text)}</span>` : ''}</span>
+    </a>`;
+  };
+  const shownFinished = showAllFinished ? finished : finished.slice(0, FINISHED_SHOWN);
   view.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>
-    ${active.length ? `<div class="taskgrid">${active.map(p => {
-      const c = todoCounts(p), today = ymd(new Date()), due = p.data.due_date;
-      return `<a class="card taskproj" href="#/tasks/${p.id}">
-        <div class="name"><b>${esc(projectName(p))}</b><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></div>
-        <span class="muted" style="font-size:13px">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}${due ? ` &middot; <span class="${due < today ? 'late' : ''}">due ${esc(fmtDate(due))}</span>` : ''}</span>
-        <div class="progress" aria-hidden="true"><span style="width:${c.total ? Math.round(c.done / c.total * 100) : 0}%"></span></div>
-        <span style="font-size:13px">${c.total ? `${c.done} of ${c.total} done` : 'No tasks yet'}${c.next ? `<br><span class="muted">Next: ${esc(c.next.text)}</span>` : ''}</span>
-      </a>`;
-    }).join('')}</div>`
-    : `<div class="card empty"><p class="muted" style="margin:0">No active projects. Every new project gets its own to-do list as soon as it's created.</p></div>`}
-    ${frozen ? `<p class="muted" style="font-size:13px;margin-top:16px">${frozen} frozen project${frozen === 1 ? '' : 's'} not shown. Their lists are on their own pages (see <a href="#/frozen">Frozen</a>).</p>` : ''}`;
+    ${active.length ? `<div class="taskgrid">${active.map(p => card(p)).join('')}</div>`
+      : `<div class="card empty"><p class="muted" style="margin:0">No active projects. Every new project gets its own to-do list as soon as it's created.</p></div>`}
+    ${frozen.length ? `<section class="tasksection"><h2>Frozen projects <span>${frozen.length}</span></h2>
+      <div class="taskgrid">${frozen.map(p => card(p, 'frozen')).join('')}</div></section>` : ''}
+    ${finished.length ? `<section class="tasksection"><h2>Finished projects <span>${finished.length}</span></h2>
+      <div class="taskgrid">${shownFinished.map(p => card(p, 'finished')).join('')}</div>
+      ${finished.length > FINISHED_SHOWN ? `<p><button type="button" class="link" id="allFinished">${showAllFinished ? 'Show fewer' : `Show all ${finished.length}`}</button></p>` : ''}</section>` : ''}`;
+  $('#allFinished')?.addEventListener('click', () => { showAllFinished = !showAllFinished; showTasks(); });
 }
 
 // One project's to-do list, its lumber store shopping list and the log of everything done.
@@ -1479,6 +1494,7 @@ function showTodo(p) {
           <h2>Lumber store shopping list</h2>
           <form class="addtask" data-list="lumber" autocomplete="off"><input placeholder="Add something to buy" aria-label="New shopping list item"><button class="btn primary">Add</button></form>
           <ul class="tasks" data-list="lumber"></ul>
+          <p class="muted hint">Paste a list (one item per line) to add every item at once.</p>
         </div>
         <div class="card"><h2>Task log</h2><ul class="history tasklog" id="todoLog"></ul></div>
       </aside>
@@ -1514,6 +1530,21 @@ function showTodo(p) {
     todoChanged(p, { what: t.done_at ? 'done' : 'undone', text: t.text, list });
     redraw();
   };
+
+  // Pasting several lines (a list from Notes, a text message, an email) adds each line as its own item.
+  view.querySelectorAll('form.addtask input').forEach(input => input.addEventListener('paste', e => {
+    const items = splitPasted(e.clipboardData?.getData('text/plain') || '');
+    if (items.length < 2) return;   // one item: paste it into the box as usual
+    e.preventDefault();
+    const list = input.closest('form').dataset.list;
+    for (const text of items) {
+      todo[list].push(newTask(text));
+      todo.log.push({ at: new Date().toISOString(), what: 'added', text, list });
+    }
+    todoChanged(p);
+    redraw();
+    toast(`Added ${items.length} items to the ${TODO_LISTS[list].toLowerCase()}.`);
+  }));
 
   view.querySelectorAll('form.addtask').forEach(form => form.addEventListener('submit', e => {
     e.preventDefault();
@@ -1563,6 +1594,17 @@ function showTodo(p) {
     });
   });
   redraw();
+}
+
+// Turns pasted text into list items: one per line (or per semicolon, or per bullet when they all came
+// on one line), without the bullets, numbers or checkboxes the list was written with. Commas are left
+// alone, since they turn up inside items ("8/4 walnut, 7\" wide").
+function splitPasted(text) {
+  let parts = text.split(/\r?\n/);
+  if (parts.filter(x => x.trim()).length < 2) parts = text.split(/;|\s[\u2022\u00b7\u25aa\u25e6\u2023\u2043]\s/);
+  return parts
+    .map(x => x.replace(/^\s*(?:[-*+\u2022\u00b7\u25aa\u25e6\u2023\u2043\u2013\u2014]|\d{1,3}[.)]|[a-z][.)](?=\s)|\[[ xX]?\]|[\u2610\u2611\u2612\u2713\u2714])\s*/, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
 }
 
 // Press and hold an item to pick it up, then drag it up or down the list and let go. A quick swipe

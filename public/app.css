@@ -264,3 +264,9 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   table.frozenlist td { border: 0; padding: 2px 0; }
   table.frozenlist td:last-child { padding-top: 8px; }
 }
+/* Tasks page: frozen and finished projects below the active ones. */
+.tasksection { margin-top: 28px; }
+.tasksection h2 span { font-weight: 600; margin-left: 4px; }
+.taskproj.frozen { border-left: 3px solid #2b5a94; }
+.taskproj.finished { opacity: .8; }
+.taskproj.finished .progress span { background: #8a9a8e; }
