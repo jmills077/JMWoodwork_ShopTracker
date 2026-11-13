@@ -63,6 +63,10 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .lanehead a { font-size: 13px; }
 .lane .job { border-left: 3px solid var(--lane); }
 .tabs.streams small { font-weight: 600; color: var(--muted); margin-left: 4px; }
+/* Frozen projects: the link beside the stream tabs, and the banner on a frozen project's page. */
+.tabs .frozenlink { color: #2b5a94; }
+.note.frozen { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #dde8f5; color: #23476f; margin: 0 0 14px; font-size: 14px; }
+table.frozenlist td { vertical-align: top; }
 .picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .picker .card + .card { margin-top: 0; }
 .pick { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: inherit; }
@@ -224,4 +228,10 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .pagehead { gap: 6px; }
   .pagehead .btn { padding: 7px 11px; }
   .quote .qhead > * { text-align: left !important; }
+  /* The frozen list stacks each project's details instead of squeezing six columns. */
+  table.frozenlist, table.frozenlist tbody, table.frozenlist tr, table.frozenlist td { display: block; }
+  table.frozenlist tr:first-child { display: none; }
+  table.frozenlist tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  table.frozenlist td { border: 0; padding: 2px 0; }
+  table.frozenlist td:last-child { padding-top: 8px; }
 }

@@ -93,6 +93,12 @@ scripts/             Seed script
   With the Shopify app connected (`SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET`, see
   DEPLOYMENT.md), `GET /api/shop-orders` reads unfulfilled orders through the Admin API and each
   product gets one open run holding everything still owed (`src/lib/shopify.ts`).
+- **Frozen projects.** A project can be frozen from its Status box when a client goes quiet or a job
+  hits a long delay. It keeps its status, phase and dates (in `data.frozen`) but leaves the board,
+  the stats and the calendar for the Frozen list (`#/frozen`), and its Todoist project is archived.
+  Unfreezing puts it back where it was, unarchives the Todoist project (catching a batch run up on
+  any edits) and offers to push its due dates back by the time it spent frozen. No migration: it's
+  part of the project's data.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and
