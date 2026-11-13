@@ -731,6 +731,7 @@ function showCalendar(month) {
 // The calendar opens on the timeline (one row per project) unless Month was picked last time.
 let calView = (() => { try { return localStorage.getItem('calView') || 'timeline'; } catch { return 'timeline'; } })();
 document.addEventListener('click', e => {
+  if ((e.target as Element).closest('[data-caltoday]')) { tlScrollDate = ''; if (currentHash === '#/calendar') route(); }
   const b = (e.target as Element).closest('[data-calview]') as HTMLElement | null;
   if (!b) return;
   calView = b.dataset.calview;
@@ -741,9 +742,9 @@ const calHeadButtons = monthLink => `
       <span class="seg" role="group" aria-label="Calendar view">
         <button type="button" class="${calView === 'timeline' ? 'on' : ''}" data-calview="timeline">Timeline</button><button type="button" class="${calView === 'month' ? 'on' : ''}" data-calview="month">Month</button>
       </span>
-      <a class="btn" href="${monthLink(-1)}" aria-label="Previous month">&larr;</a>
-      <a class="btn" href="#/calendar">Today</a>
-      <a class="btn" href="${monthLink(1)}" aria-label="Next month">&rarr;</a>`;
+      ${monthLink ? `<a class="btn" href="${monthLink(-1)}" aria-label="Previous month">&larr;</a>` : ''}
+      <a class="btn" href="#/calendar" data-caltoday>Today</a>
+      ${monthLink ? `<a class="btn" href="${monthLink(1)}" aria-label="Next month">&rarr;</a>` : ''}`;
 // "Build", or "Build — still marked Design" in red when the board is behind the dates.
 const shouldBe = pl => !pl.expected ? '<span class="muted">Not started yet</span>'
   : `<span class="stagechip st-${pl.expected}">${STAGE_NAME[pl.expected]}</span>${pl.late ? ' <span class="late">past target date</span>' : pl.behind ? ` <span class="late">still marked ${STAGE_NAME[pl.marked]}</span>` : ''}`;
@@ -751,22 +752,32 @@ const shouldBe = pl => !pl.expected ? '<span class="muted">Not started yet</span
 // Timeline: each project on its own row across the month, its bar split into one chevron per phase,
 // so a phase change shows as a step from one color to the next with the new phase's start date. A
 // line marks today, and each row says which phase the project should be in now and what comes next.
+// On a phone the timeline isn't cut into months: it runs from the earliest active project's start to
+// the furthest-out finish, and you swipe through it, with a little rebound past either end.
+const phoneTimeline = () => window.matchMedia('(max-width: 600px)').matches;
+let tlScrollDate = '';   // the date at the left edge of the phone timeline, kept when the page redraws
+window.matchMedia('(max-width: 600px)').addEventListener('change', () => { if (currentHash.startsWith('#/calendar')) route(); });
+
 function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
-  const first = ymd(new Date(year, mon - 1, 1)), last = ymd(new Date(year, mon, 0));
-  const days = new Date(year, mon, 0).getDate();
-  const col = date => Number(date.slice(8, 10));   // day of month, within this month
+  const swipe = phoneTimeline() && jobs.length > 0;
+  const addDays = (date, n) => { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + n); return ymd(d); };
+  const between = (a, b) => Math.round((+new Date(b + 'T00:00') - +new Date(a + 'T00:00')) / 86400000);
+  const first = swipe ? jobs.reduce((m, j) => j.start < m ? j.start : m, jobs[0].start) : ymd(new Date(year, mon - 1, 1));
+  const last = swipe ? jobs.reduce((m, j) => j.end > m ? j.end : m, jobs[0].end) : ymd(new Date(year, mon, 0));
+  const days = between(first, last) + 1;
+  const col = date => between(first, date) + 1;   // column of a date, 1 = first
+  const dateAt = n => addDays(first, n - 1);
+  const dows = Array.from({ length: days }, (_, i) => new Date(dateAt(i + 1) + 'T00:00').getDay());
   const shown = jobs.filter(j => j.start <= last && j.end >= first);
   const todayCol = today >= first && today <= last ? col(today) : 0;
   const todayLine = todayCol ? `<span class="tl-today" style="left:calc(${todayCol - 1} * 100% / ${days});width:calc(100% / ${days})"></span>` : '';
-  const weekends = Array.from({ length: days }, (_, i) => new Date(year, mon - 1, i + 1).getDay() % 6 === 0
-    ? `<span class="tl-wkend" style="grid-column:${i + 1}"></span>` : '').join('');
+  const weekends = dows.map((wk, i) => wk % 6 === 0 ? `<span class="tl-wkend" style="grid-column:${i + 1}"></span>` : '').join('');
+  const weekLines = dows.map((wk, i) => i > 0 && wk === 0 ? `<span class="tl-wkline" style="grid-column:${i + 1}"></span>` : '').join('');
 
-  const weekLines = Array.from({ length: days }, (_, i) => i > 0 && new Date(year, mon - 1, i + 1).getDay() === 0
-    ? `<span class="tl-wkline" style="grid-column:${i + 1}"></span>` : '').join('');
   const row = j => {
     const pl = plan(j);
     const segs = j.segs.filter(x => x.from <= last && x.to >= first);
-    const bars = segs.map((x, i) => {
+    const bars = segs.map(x => {
       const a = x.from < first ? 1 : col(x.from), b = x.to > last ? days : col(x.to);
       const cls = [`st-${x.key}`, x.past ? 'past' : '', x === j.segs[0] && x.from >= first ? 'first' : '', x === j.segs.at(-1) && x.to <= last ? 'last' : '',
         today >= x.from && today <= x.to ? 'now' : ''].join(' ');
@@ -774,8 +785,8 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
         title="${esc(STAGE_NAME[x.key])}: ${esc(fmtDate(x.from))} \u2013 ${esc(fmtDate(x.to))}"><span>${STAGE_NAME[x.key]}</span></a>`;
     }).join('');
     const marks = segs.filter(x => x !== j.segs[0] && x.from >= first)
-      // A label near the month's end sits to the left of its line so it stays on the page.
-      .map(x => { const c = col(x.from), text = `${STAGE_NAME[x.key]} from ${esc(shortDate(x.from).replace(/,.*$/, ''))} ${c}`;
+      // A label near the end sits to the left of its line so it stays on the page.
+      .map(x => { const c = col(x.from), text = `${STAGE_NAME[x.key]} from ${esc(shortDate(x.from).replace(/,.*$/, ''))} ${Number(x.from.slice(8))}`;
         return c > days - 6 ? `<span class="tl-mark end" style="grid-column:${Math.max(1, c - 7)} / ${c}">${text}</span>`
           : `<span class="tl-mark" style="grid-column:${c} / span 7">${text}</span>`; }).join('');
     const nextText = pl.next ? `${STAGE_NAME[pl.next.key]} from ${esc(shortDate(pl.next.from))}`
@@ -788,31 +799,83 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
     </div>`;
   };
 
-  const dayNums = Array.from({ length: days }, (_, i) => {
-    const d = new Date(year, mon - 1, i + 1), wk = d.getDay();
-    return `<span class="${i + 1 === todayCol ? 'today' : ''} ${wk % 6 === 0 ? 'wkend' : ''}">${i + 1}<small>${'SMTWTFS'[wk]}</small></span>`;
-  }).join('');
+  const dayNums = dows.map((wk, i) => `<span class="${i + 1 === todayCol ? 'today' : ''} ${wk % 6 === 0 ? 'wkend' : ''}">${Number(dateAt(i + 1).slice(8))}<small>${'SMTWTFS'[wk]}</small></span>`).join('');
   // Above the days: each week labeled by the date it starts ("Nov 8"), and a "Today" tag over today.
-  const monShort = new Date(year, mon - 1, 1).toLocaleDateString(undefined, { month: 'short' });
-  const weekStarts = Array.from({ length: days }, (_, i) => i + 1).filter(n => n === 1 || new Date(year, mon - 1, n).getDay() === 0);
+  const weekStarts = dows.map((wk, i) => i === 0 || wk === 0 ? i + 1 : 0).filter(Boolean);
   const weekLabels = weekStarts.map((n, i) => {
-    const end = weekStarts[i + 1] || days + 1;   // a stub of a week at the month's end just gets the number
-    return `<span style="grid-column:${n} / ${end}">${end - n < 3 ? n : `${monShort} ${n}`}</span>`;
+    const end = weekStarts[i + 1] || days + 1, date = new Date(dateAt(n) + 'T00:00');   // a stub of a week just gets the number
+    return `<span style="grid-column:${n} / ${end}">${end - n < 3 ? date.getDate() : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`;
   }).join('');
   const todayTag = todayCol ? `<span class="tl-todaytag" style="left:calc(${todayCol - 0.5} * 100% / ${days})">Today</span>` : '';
+  const monthTitle = date => new Date(date + 'T00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   view.innerHTML = `
     <div class="pagehead">
-      <h1>${new Date(year, mon - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h1><span class="spacer"></span>
-      ${calHeadButtons(monthLink)}
+      <h1 id="tlTitle">${monthTitle(swipe ? (todayCol ? today : first) : first)}</h1><span class="spacer"></span>
+      ${swipe ? calHeadButtons(null) : calHeadButtons(monthLink)}
     </div>
-    <div class="tl card">
-      <div class="tl-head">${todayTag}<div class="tl-weeks" style="--days:${days}">${weekLabels}</div>
-      <div class="tl-days" style="--days:${days}">${dayNums}</div></div>
+    <div class="tl card ${swipe ? 'swipe' : ''}">
+      <div class="tl-scroll"><div class="tl-canvas">
+      <div class="tl-head">${todayTag}<div class="tl-weeks">${weekLabels}</div>
+      <div class="tl-days">${dayNums}</div></div>
       ${shown.length ? shown.map(row).join('') : '<p class="muted" style="margin:12px 0 0">Nothing is scheduled this month. A project appears once its quote is accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
+      </div></div>
     </div>
     <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}<span><span class="swatch tl-todaykey"></span>Today</span></div>`;
-  view.querySelectorAll('.tl-track, .tl-marks').forEach(t => t.style.setProperty('--days', days));
+  view.querySelector('.tl-canvas').style.setProperty('--days', days);
+  if (swipe) swipeTimeline({ days, first, dateAt, col, todayCol, monthTitle });
+}
+
+// Sizes the phone timeline so about a month shows at once, starts it at today (or where it was before
+// the page redrew), keeps the title on the month in view, and adds the rebound at the ends.
+function swipeTimeline({ days, first, dateAt, col, todayCol, monthTitle }) {
+  const scroller = view.querySelector('.tl-scroll'), canvas = view.querySelector('.tl-canvas'), title = $('#tlTitle');
+  const width = scroller.clientWidth, dayPx = width / 30;
+  canvas.style.width = `${Math.max(width, days * dayPx)}px`;
+  canvas.style.setProperty('--view', `${width}px`);
+  const max = () => scroller.scrollWidth - scroller.clientWidth;
+  const saved = tlScrollDate && tlScrollDate >= first ? col(tlScrollDate) : 0;
+  scroller.scrollLeft = saved ? (saved - 1) * dayPx : todayCol ? (todayCol - 1) * dayPx - width / 3 : 0;
+  const onScroll = () => {
+    const leftCol = Math.min(days, Math.max(1, Math.round(scroller.scrollLeft / dayPx) + 1));
+    tlScrollDate = dateAt(leftCol);
+    title.textContent = monthTitle(dateAt(Math.min(days, leftCol + 15)));
+  };
+  onScroll();
+
+  // Pulling past an end stretches the timeline a little (less the further you pull), and it springs
+  // back when you let go. A fling that runs into an end gets a small bump instead.
+  let x0 = 0, y0 = 0, s0 = 0, pull = 0, touching = false, edge = scroller.scrollLeft <= 0 ? 'l' : scroller.scrollLeft >= max() - 1 ? 'r' : '';
+  const stretch = px => { canvas.style.transform = px ? `translateX(${px}px)` : ''; };
+  scroller.addEventListener('touchstart', e => {
+    touching = true; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; s0 = scroller.scrollLeft; pull = 0;
+    canvas.style.transition = 'none';
+  }, { passive: true });
+  scroller.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - x0;
+    if (Math.abs(dx) < Math.abs(e.touches[0].clientY - y0)) return;   // scrolling the page up or down
+    const want = s0 - dx, over = want < 0 ? -want : want > max() ? max() - want : 0;
+    pull = Math.sign(over) * Math.min(70, Math.abs(over) * 0.35);
+    stretch(pull);
+  }, { passive: true });
+  const release = () => {
+    touching = false;
+    if (!pull) return;
+    canvas.style.transition = 'transform .45s cubic-bezier(.25, 1.6, .45, 1)';   // overshoots a touch, then settles
+    stretch(0); pull = 0;
+  };
+  scroller.addEventListener('touchend', release);
+  scroller.addEventListener('touchcancel', release);
+  scroller.addEventListener('scroll', () => {
+    onScroll();
+    const now = scroller.scrollLeft <= 0 ? 'l' : scroller.scrollLeft >= max() - 1 ? 'r' : '';
+    if (now && now !== edge && !touching) {
+      canvas.classList.remove('bump-l', 'bump-r');
+      void canvas.offsetWidth;   // restart the animation
+      canvas.classList.add(`bump-${now}`);
+    }
+    edge = now;
+  }, { passive: true });
 }
 
 // ---------- type-ahead dropdowns ----------
