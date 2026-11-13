@@ -239,6 +239,7 @@ const view = $('#view');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
 const hrs = n => `${+num(n).toFixed(2)} h`;
+const shortDay = iso => new Date(iso + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const fmtDate = iso => iso ? new Date(iso.length === 10 ? iso + 'T00:00' : iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 const getPath = (obj, path) => path.split('.').reduce((o, k) => o?.[k], obj);
 function setPath(obj, path, value) {
@@ -581,20 +582,53 @@ function showBoard() {
       ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
         <h2><span>${name}</span><span>${inStage(key, list).length}</span></h2>${inStage(key, list).map(jobCard).join('')}</section>`).join('')}
     </div>`;
+  // On a phone the board's five wide columns show little, so it becomes a compact list instead: a strip
+  // of phase counts, then one row per project, grouped by phase, with empty phases left out. Each row
+  // shows the name, who it's for, its status, value and the next date it's due. CSS picks which of the
+  // two layouts shows, so turning the phone or resizing a window needs no redraw.
+  const today = ymd(new Date());
+  const nextDue = p => isBatch(p) && p.data.due_date ? ['Ship by', p.data.due_date]
+    : stageDue(p, stageOf(p)) ? [`${STAGE_NAME[stageOf(p)]} due`, stageDue(p, stageOf(p))]
+    : p.data.due_date ? ['Target', p.data.due_date] : null;
+  const dueLine = p => {
+    const due = nextDue(p);
+    if (!due) return '<span class="muted">No date set</span>';
+    const n = Math.round((+new Date(due[1] + 'T00:00') - +new Date(today + 'T00:00')) / 86400000);
+    const left = n < 0 ? `${-n}d late` : n === 0 ? 'today' : `${n}d`;
+    return `<span class="${n < 0 ? 'late' : n <= 7 ? 'soon' : ''}">${due[0]} ${esc(shortDay(due[1]))} &middot; ${left}</span>`;
+  };
+  const who = p => isClient(p) ? esc([p.data.client_name || 'No client yet', p.quote_number].filter(Boolean).join(' \u00b7 '))
+    : isBatch(p) ? 'Small batch' : esc([TYPES[p.data.spec?.type]?.name, p.data.spec?.species].filter(Boolean).join(' \u00b7 ') || STREAM_NAME[streamOf(p)]);
+  const byDue = (a, b) => (nextDue(a)?.[1] || '9999').localeCompare(nextDue(b)?.[1] || '9999') || b.updated_at.localeCompare(a.updated_at);
+  const listRow = p => `<a class="prow" href="#/p/${p.id}">
+      <span class="pmain"><b>${esc(projectName(p))}</b><span class="muted">${who(p)}</span></span>
+      <span class="pside"><span class="amt">${money(valueOf(p))}</span><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></span>
+      <span class="pdue">${dueLine(p)}<span class="muted">${hrs(shopHours(p))}</span></span>
+    </a>`;
+  const listHtml = (list = shown) => {
+    const counts = STAGES.map(([key, name]) => [key, name, inStage(key, list).length]);
+    const open = counts.reduce((n, c) => n + c[2], 0);
+    return `<div class="plist s-${tab}">
+      <div class="pstrip">${counts.map(([key, name, n]) => `<span class="${n ? '' : 'zero'}"><i class="st-${key}"></i>${name} <b>${n}</b></span>`).join('')}</div>
+      ${open ? counts.filter(c => c[2]).map(([key, name, n]) => `<div class="pgroup">
+        <h3><i class="st-${key}"></i>${name} <span>${n}</span></h3>${inStage(key, list).sort(byDue).map(listRow).join('')}</div>`).join('')
+        : '<p class="muted pnone">Nothing in the works.</p>'}
+    </div>`;
+  };
   // "All projects" shows each stream as its own section, one above the other. Every section keeps its
   // columns, even when empty, so a card can be dragged into another stream.
   const lanes = () => STREAMS.map(([key, name]) => {
     const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
     return `<section class="lane ${key}" data-stream="${key}">
       <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open ${name.toLowerCase()} &rarr;</a></div>
-      ${boardHtml(list)}
+      ${boardHtml(list)}${listHtml(list)}
     </section>`;
   }).join('');
   view.innerHTML = `
     ${head}
     ${quick}
     <div class="stats">${stats}</div>
-    <div class="boards">${tab === 'all' ? lanes() : boardHtml()}</div>
+    <div class="boards">${tab === 'all' ? lanes() : boardHtml() + listHtml()}</div>
     ${archive.length ? `<div class="card" style="margin-top:20px"><h2>Archive</h2><table class="list">
       <tr><th>Project</th><th>${tab === 'client' ? 'Client' : tab === 'all' ? 'Stream' : ''}</th><th>${tab === 'client' ? 'Quote' : ''}</th><th>${tab === 'gallery' ? 'Cost' : 'Total'}</th><th>Status</th></tr>
       ${archive.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a></td>
