@@ -111,6 +111,60 @@ table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .cal .bar.gap { visibility: hidden; }
 .cal .bar.past { opacity: .45; }
 .st-ideation { background: #2f7d4f; } .st-design { background: #2c5f9e; } .st-build { background: #c2610c; } .st-finishing { background: #b3261e; } .st-ready { background: #6f42a3; }
+/* month grid: the first day of a new phase is set apart by a white notch */
+.cal .bar.turn { box-shadow: inset 3px 0 0 #fff; position: relative; z-index: 1; }
+/* calendar view switch */
+.seg { display: inline-flex; border: 1px solid #dccfbb; border-radius: 8px; overflow: hidden; margin-right: 6px; }
+.seg button { font: inherit; font-weight: 600; font-size: 14px; border: 0; background: #fffdf8; color: var(--muted); padding: 8px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid #dccfbb; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+/* timeline: one row per project, a chevron per phase */
+.tl { padding: 12px 16px 6px; }
+.tl-days, .tl-track, .tl-marks { display: grid; grid-template-columns: repeat(var(--days, 30), minmax(0, 1fr)); }
+.tl-days { position: sticky; top: 0; z-index: 2; background: var(--card); border-bottom: 1px solid var(--line); padding-bottom: 4px; font-size: 12px; color: var(--muted); }
+.tl-days span { text-align: center; line-height: 1.15; font-weight: 600; }
+.tl-days small { display: block; font-size: 10px; font-weight: 500; opacity: .75; }
+.tl-days .wkend { color: #b3a596; }
+.tl-days .today { color: var(--accent); }
+.tl-row { padding: 10px 0 8px; border-bottom: 1px solid var(--line); }
+.tl-row:last-child { border-bottom: 0; }
+.tl-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-bottom: 6px; }
+.tl-name > a { font-weight: 700; color: var(--ink); text-decoration: none; }
+.tl-name > a:hover { color: var(--accent); }
+.tl-now { font-size: 13px; color: var(--muted); }
+.stagechip { display: inline-block; color: #fff; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 99px; }
+.tl-track { position: relative; height: 26px; background: #f6eee1; border-radius: 6px; }
+.tl-wkend { grid-row: 1; background: #efe4d3; }
+.tl-wkend:first-child { border-radius: 6px 0 0 6px; }
+.tl-seg { grid-row: 1; position: relative; display: flex; align-items: center; min-width: 0; color: #fff; text-decoration: none; font-size: 12px; font-weight: 700;
+  padding: 0 4px 0 14px; margin-left: -9px;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%); }
+.tl-seg span { overflow: hidden; white-space: nowrap; text-overflow: clip; }
+.tl-seg.first { margin-left: 0; padding-left: 7px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); border-radius: 6px 0 0 6px; }
+.tl-seg.last { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 9px 50%); border-radius: 0 6px 6px 0; }
+.tl-seg.first.last { clip-path: none; border-radius: 6px; }
+.tl-seg.past { opacity: .4; }
+.tl-seg:hover { filter: brightness(1.1); }
+.tl-today { position: absolute; top: -4px; bottom: -4px; z-index: 1; pointer-events: none; display: flex; justify-content: center; }
+/* Today shows as a dark tick above and below the bar, joined by a faint line through it so the phase name stays readable. */
+.tl-today::before { content: ""; width: 2px; border-radius: 2px;
+  background: linear-gradient(var(--ink) 0 6px, rgba(255, 253, 248, .6) 6px calc(100% - 6px), var(--ink) calc(100% - 6px)); }
+.tl-todaykey { background: var(--ink); width: 3px; }
+.tl-marks { margin-top: 3px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.tl-marks { overflow: hidden; }
+.tl-mark { grid-row: 1; white-space: nowrap; border-left: 2px solid currentColor; padding-left: 4px; line-height: 1.2; }
+.tl-mark.end { border-left: 0; border-right: 2px solid currentColor; padding: 0 4px 0 0; text-align: right; }
+@media (max-width: 600px) {
+  .tl { padding: 10px 10px 4px; }
+  .tl-days span { font-size: 11px; }
+  .tl-days span:not(.key) { font-size: 0; }
+  .tl-days span:not(.key) small { display: none; }
+  .tl-marks { display: none; }   /* the row's "next" line already gives the date */
+  .tl-seg { font-size: 11px; padding-left: 12px; }
+  .tl-name { gap: 2px 8px; }
+  .tl-now { flex-basis: 100%; }
+  .seg button { padding: 7px 9px; font-size: 13px; }
+}
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 10px 2px 0; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 .late { color: var(--bad); font-weight: 600; }

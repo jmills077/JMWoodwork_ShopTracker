@@ -671,6 +671,20 @@ function showCalendar(month) {
     return { p, segs, start, end: segs.at(-1).to };
   }).sort((a, b) => a.start.localeCompare(b.start));
 
+  // What each job should be doing today going by its phase dates, the phase it's marked at on the
+  // board, and the next phase change still to come.
+  const plan = j => {
+    const seg = j.segs.find(x => today >= x.from && today <= x.to);
+    const expected = seg ? seg.key : today < j.start ? '' : j.segs.at(-1).key;
+    const marked = stageOf(j.p);
+    const behind = !!expected && STAGES.findIndex(([k]) => k === marked) < STAGES.findIndex(([k]) => k === expected);
+    const next = j.segs.find(x => x.from > today);
+    return { expected, marked, behind, next, late: today > j.end };
+  };
+  const shortDate = date => new Date(date + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+  if (calView === 'timeline') return showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink });
+
   let cells = '';
   const day = new Date(year, mon - 1, 1);
   day.setDate(1 - day.getDay());   // back up to the Sunday that starts the first week
@@ -684,8 +698,9 @@ function showCalendar(month) {
         if (key < j.start || key > j.end) return '<span class="bar gap"></span>';
         const seg = j.segs.find(x => key >= x.from && key <= x.to);
         const named = key === seg.from || d.getDay() === 0, due = key === stageDue(j.p, seg.key) || key === j.p.data.due_date;
-        const text = named ? `${projectName(j.p)} \u00b7 ${STAGE_NAME[seg.key]}${due ? ' (due)' : ''}` : due ? 'Due' : '';
-        return `<a class="bar st-${seg.key} ${seg.past ? 'past' : ''} ${named ? 'label' : ''} ${key === j.start ? 's' : ''} ${key === j.end ? 'e' : ''}" href="#/p/${j.p.id}"
+        const text = key === seg.from && key !== j.start ? `\u25b8 ${STAGE_NAME[seg.key]} starts \u00b7 ${projectName(j.p)}` : named ? `${projectName(j.p)} \u00b7 ${STAGE_NAME[seg.key]}${due ? ' (due)' : ''}` : due ? 'Due' : '';
+        const turn = key === seg.from && key !== j.start;
+        return `<a class="bar st-${seg.key} ${seg.past ? 'past' : ''} ${named ? 'label' : ''} ${turn ? 'turn' : ''} ${key === j.start ? 's' : ''} ${key === j.end ? 'e' : ''}" href="#/p/${j.p.id}"
           title="${esc(projectName(j.p))} \u2013 ${esc(isClient(j.p) ? j.p.data.client_name || STREAM_NAME.client : STREAM_NAME[streamOf(j.p)])}">${esc(text)}</a>`;
       }).join('')}</div>`;
     }
@@ -701,18 +716,92 @@ function showCalendar(month) {
   view.innerHTML = `
     <div class="pagehead">
       <h1>${new Date(year, mon - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h1><span class="spacer"></span>
-      <a class="btn" href="${monthLink(-1)}" aria-label="Previous month">&larr;</a>
-      <a class="btn" href="#/calendar">Today</a>
-      <a class="btn" href="${monthLink(1)}" aria-label="Next month">&rarr;</a>
+      ${calHeadButtons(monthLink)}
     </div>
     <div class="cal">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(n => `<div class="dow">${n}</div>`).join('')}${cells}</div>
     <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}</div>
     <div class="card" style="margin-top:16px"><h2>Scheduled projects</h2>
-      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client or stream</th><th>Phase</th><th>Phase due</th><th>Target completion</th></tr>
-        ${jobs.map(j => `<tr><td><span class="swatch st-${stageOf(j.p)}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
-          <td>${isClient(j.p) ? esc(j.p.data.client_name) : STREAM_NAME[streamOf(j.p)]}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${dueText(j, stageDue(j.p, stageOf(j.p)))}</td><td>${dueText(j, j.p.data.due_date)}</td></tr>`).join('')}</table>`
+      ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client or stream</th><th>Should be in</th><th>Marked</th><th>Phase due</th><th>Target completion</th></tr>
+        ${jobs.map(j => `<tr><td><span class="swatch st-${plan(j).expected || stageOf(j.p)}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
+          <td>${isClient(j.p) ? esc(j.p.data.client_name) : STREAM_NAME[streamOf(j.p)]}</td><td>${shouldBe(plan(j))}</td><td>${STAGE_NAME[stageOf(j.p)]}</td><td>${dueText(j, stageDue(j.p, stageOf(j.p)))}</td><td>${dueText(j, j.p.data.due_date)}</td></tr>`).join('')}</table>`
         : '<p class="muted" style="margin:0">Nothing is scheduled. A project appears here once its quote is marked accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
     </div>`;
+}
+
+// The calendar opens on the timeline (one row per project) unless Month was picked last time.
+let calView = (() => { try { return localStorage.getItem('calView') || 'timeline'; } catch { return 'timeline'; } })();
+document.addEventListener('click', e => {
+  const b = (e.target as Element).closest('[data-calview]') as HTMLElement | null;
+  if (!b) return;
+  calView = b.dataset.calview;
+  try { localStorage.setItem('calView', calView); } catch {}
+  route();
+});
+const calHeadButtons = monthLink => `
+      <span class="seg" role="group" aria-label="Calendar view">
+        <button type="button" class="${calView === 'timeline' ? 'on' : ''}" data-calview="timeline">Timeline</button><button type="button" class="${calView === 'month' ? 'on' : ''}" data-calview="month">Month</button>
+      </span>
+      <a class="btn" href="${monthLink(-1)}" aria-label="Previous month">&larr;</a>
+      <a class="btn" href="#/calendar">Today</a>
+      <a class="btn" href="${monthLink(1)}" aria-label="Next month">&rarr;</a>`;
+// "Build", or "Build — still marked Design" in red when the board is behind the dates.
+const shouldBe = pl => !pl.expected ? '<span class="muted">Not started yet</span>'
+  : `<span class="stagechip st-${pl.expected}">${STAGE_NAME[pl.expected]}</span>${pl.late ? ' <span class="late">past target date</span>' : pl.behind ? ` <span class="late">still marked ${STAGE_NAME[pl.marked]}</span>` : ''}`;
+
+// Timeline: each project on its own row across the month, its bar split into one chevron per phase,
+// so a phase change shows as a step from one color to the next with the new phase's start date. A
+// line marks today, and each row says which phase the project should be in now and what comes next.
+function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
+  const first = ymd(new Date(year, mon - 1, 1)), last = ymd(new Date(year, mon, 0));
+  const days = new Date(year, mon, 0).getDate();
+  const col = date => Number(date.slice(8, 10));   // day of month, within this month
+  const shown = jobs.filter(j => j.start <= last && j.end >= first);
+  const todayCol = today >= first && today <= last ? col(today) : 0;
+  const todayLine = todayCol ? `<span class="tl-today" style="left:calc(${todayCol - 1} * 100% / ${days});width:calc(100% / ${days})"></span>` : '';
+  const weekends = Array.from({ length: days }, (_, i) => new Date(year, mon - 1, i + 1).getDay() % 6 === 0
+    ? `<span class="tl-wkend" style="grid-column:${i + 1}"></span>` : '').join('');
+
+  const row = j => {
+    const pl = plan(j);
+    const segs = j.segs.filter(x => x.from <= last && x.to >= first);
+    const bars = segs.map((x, i) => {
+      const a = x.from < first ? 1 : col(x.from), b = x.to > last ? days : col(x.to);
+      const cls = [`st-${x.key}`, x.past ? 'past' : '', x === j.segs[0] && x.from >= first ? 'first' : '', x === j.segs.at(-1) && x.to <= last ? 'last' : '',
+        today >= x.from && today <= x.to ? 'now' : ''].join(' ');
+      return `<a class="tl-seg ${cls}" href="#/p/${j.p.id}" style="grid-column:${a} / ${b + 1}"
+        title="${esc(STAGE_NAME[x.key])}: ${esc(fmtDate(x.from))} \u2013 ${esc(fmtDate(x.to))}"><span>${STAGE_NAME[x.key]}</span></a>`;
+    }).join('');
+    const marks = segs.filter(x => x !== j.segs[0] && x.from >= first)
+      // A label near the month's end sits to the left of its line so it stays on the page.
+      .map(x => { const c = col(x.from), text = `${STAGE_NAME[x.key]} from ${esc(shortDate(x.from).replace(/,.*$/, ''))} ${c}`;
+        return c > days - 6 ? `<span class="tl-mark end" style="grid-column:${Math.max(1, c - 7)} / ${c}">${text}</span>`
+          : `<span class="tl-mark" style="grid-column:${c} / span 7">${text}</span>`; }).join('');
+    const nextText = pl.next ? `${STAGE_NAME[pl.next.key]} from ${esc(shortDate(pl.next.from))}`
+      : `Due ${esc(shortDate(j.end))}`;
+    return `<div class="tl-row">
+      <div class="tl-name"><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a>
+        <span class="tl-now">${pl.expected ? 'Now:' : ''} ${shouldBe(pl)} <span class="muted">\u00b7 ${pl.expected || !pl.next ? nextText : `Starts ${esc(shortDate(j.start))}`}</span></span></div>
+      <div class="tl-track">${weekends}${bars}${todayLine}</div>
+      ${marks ? `<div class="tl-marks">${marks}</div>` : ''}
+    </div>`;
+  };
+
+  const dayNums = Array.from({ length: days }, (_, i) => {
+    const d = new Date(year, mon - 1, i + 1), wk = d.getDay();
+    return `<span class="${i + 1 === todayCol ? 'today' : ''} ${wk % 6 === 0 ? 'wkend' : ''} ${wk === 0 || i === 0 || i + 1 === todayCol ? 'key' : ''}">${i + 1}<small>${'SMTWTFS'[wk]}</small></span>`;
+  }).join('');
+
+  view.innerHTML = `
+    <div class="pagehead">
+      <h1>${new Date(year, mon - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h1><span class="spacer"></span>
+      ${calHeadButtons(monthLink)}
+    </div>
+    <div class="tl card">
+      <div class="tl-days" style="--days:${days}">${dayNums}</div>
+      ${shown.length ? shown.map(row).join('') : '<p class="muted" style="margin:12px 0 0">Nothing is scheduled this month. A project appears once its quote is accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
+    </div>
+    <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}<span><span class="swatch tl-todaykey"></span>Today</span></div>`;
+  view.querySelectorAll('.tl-track, .tl-marks').forEach(t => t.style.setProperty('--days', days));
 }
 
 // ---------- type-ahead dropdowns ----------
