@@ -199,6 +199,34 @@ header.top .signout:hover { color: #fff; text-decoration: underline; }
 .qty .btn.small { padding: 4px 0; font-size: 16px; line-height: 1.2; }
 #quickBatch { margin-bottom: 20px; }
 
+/* to-do lists */
+.taskgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.taskgrid .card + .card { margin-top: 0; }
+.taskproj { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; }
+.taskproj:hover { border-color: var(--accent); }
+.taskproj .name { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.progress { height: 6px; background: #efe6d6; border-radius: 99px; overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--good); }
+.addtask { display: flex; gap: 8px; margin-bottom: 6px; }
+.addtask input { flex: 1; }
+ul.tasks { list-style: none; margin: 0; padding: 0; }
+ul.tasks li.none { padding: 10px 2px; font-size: 14px; }
+/* No text selection or iPhone callout menu, so a long press can pick a task up. */
+li.task { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); background: var(--card); cursor: pointer;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+li.task input[type=checkbox] { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--good); cursor: pointer; }
+li.task .text { flex: 1; overflow-wrap: anywhere; }
+li.task.done .text { text-decoration: line-through; color: var(--muted); }
+li.task.done { opacity: .6; }
+li.task .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+li.task .x { background: none; border: 0; font: inherit; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 4px; }
+li.task .x:hover { color: var(--bad); }
+li.task.lifted { opacity: 1; background: #fff; border-radius: 8px; box-shadow: 0 6px 18px rgba(46, 35, 32, .22); position: relative; z-index: 2; cursor: grabbing; }
+.hint { font-size: 12px; margin: 10px 0 0; }
+.tasklog { max-height: 360px; overflow-y: auto; }
+.tasklog li { gap: 12px; }
+.tasklog li span:last-child { white-space: nowrap; }
+
 /* phones, and the home-screen app (manifest.webmanifest). The header runs under the iPhone's
    status bar there, so it pads itself by the screen's safe areas. */
 header.top { padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
@@ -209,6 +237,7 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   header.top .brand { flex: 1; }
   header.top nav { order: 3; flex: 1 0 100%; justify-content: space-between; gap: 2px; }
   header.top nav a { padding: 7px 8px; font-size: 14px; white-space: nowrap; }
+  header.top .widenav { display: none; }   /* "New project" is just "New", to fit five links */
   #syncState { font-size: 12px; }
   main { padding: 16px max(12px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
   /* iPhone zooms the page into any box with text under 16px when it's tapped. */

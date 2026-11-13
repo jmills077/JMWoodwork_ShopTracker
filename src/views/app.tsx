@@ -12,7 +12,8 @@ export const AppPage = ({ state }: { state: unknown }) => (
       <nav>
         <a href="#/" data-nav="board">Projects</a>
         <a href="#/calendar" data-nav="calendar">Calendar</a>
-        <a href="#/new" data-nav="new">New project</a>
+        <a href="#/tasks" data-nav="tasks">Tasks</a>
+        <a href="#/new" data-nav="new">New<span class="widenav"> project</span></a>
         <a href="#/settings" data-nav="settings">Settings</a>
       </nav>
       <span id="syncState"></span>

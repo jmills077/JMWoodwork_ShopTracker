@@ -99,6 +99,14 @@ scripts/             Seed script
   Unfreezing puts it back where it was, unarchives the Todoist project (catching a batch run up on
   any edits) and offers to push its due dates back by the time it spent frozen. No migration: it's
   part of the project's data.
+- **Tasks.** Every project gets its own to-do list and lumber store shopping list the moment it is
+  created (`data.todo`: `items`, `lumber` and a `log` of everything added, checked off, unchecked or
+  removed). The Tasks page (`#/tasks`) lists the active projects; each opens its list at
+  `#/tasks/<id>`, also linked as a tab on the project's page. Checked-off items stay on the list, struck
+  through, with the date they were done. Press and hold an item to drag it up or down. When a client
+  job is marked Delivered & paid, or one of the shop's own pieces Complete, everything still open is
+  checked off. Projects from before this got a list on first load. No migration: it's part of the
+  project's data. The Todoist hand-off is unchanged and separate.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and
