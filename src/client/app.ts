@@ -1362,11 +1362,11 @@ view.addEventListener('click', e => {
 // created and kept in its data as data.todo = { items, lumber, log }. Each entry is { id, text, done_at }
 // (done_at is null while open); the log records every task added, checked off, unchecked or removed.
 // Checked-off tasks stay where they are, struck through, so they can be unchecked later. When a project
-// is finished (a client job delivered, or one of the shop's own pieces complete) everything is checked off.
+// is finished (marked Complete, or for a client job Delivered & paid if it skipped Complete) everything is checked off.
 const TODO_LISTS = { items: 'To-do list', lumber: 'Shopping list' };
 let taskSeq = 0;
 const newTask = (text, extra = {}) => ({ id: `t${Date.now().toString(36)}${(taskSeq++).toString(36)}`, text, done_at: null, ...extra });
-const isFinished = p => isClient(p) ? p.status === 'delivered' : p.status === 'complete';
+const isFinished = p => p.status === 'complete' || (isClient(p) && p.status === 'delivered');
 
 // The shopping list's first line: the lumber to buy, worked out from the project's size and species.
 function lumberLine(p) {

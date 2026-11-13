@@ -104,8 +104,8 @@ scripts/             Seed script
   removed). The Tasks page (`#/tasks`) lists the active projects, then the frozen and finished ones; each opens its list at
   `#/tasks/<id>`, also linked as a tab on the project's page. Checked-off items stay on the list, struck
   through, with the date they were done. Press and hold an item to drag it up or down. Pasting several lines into the add box adds
-  one item per line (bullets, numbers and checkboxes are stripped; a single line splits on semicolons). When a client
-  job is marked Delivered & paid, or one of the shop's own pieces Complete, everything still open is
+  one item per line (bullets, numbers and checkboxes are stripped; a single line splits on semicolons). When a project
+  is marked Complete (or a client job goes straight to Delivered & paid), everything still open is
   checked off. Projects from before this got a list on first load. No migration: it's part of the
   project's data. The Todoist hand-off is unchanged and separate.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
