@@ -120,6 +120,16 @@ table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
 /* timeline: one row per project, a chevron per phase */
 .tl { padding: 12px 16px 6px; }
+/* phone: the timeline scrolls sideways; names stay put while the bars move under them */
+.tl.swipe { padding-left: 0; padding-right: 0; overflow: hidden; }
+.tl.swipe .tl-scroll { overflow-x: auto; overscroll-behavior-x: none; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.tl.swipe .tl-scroll::-webkit-scrollbar { display: none; }
+.tl.swipe .tl-canvas { padding: 0 10px; box-sizing: border-box; will-change: transform; }
+.tl.swipe .tl-name { position: sticky; left: 10px; width: calc(var(--view) - 20px); box-sizing: border-box; }
+.tl-canvas.bump-l { animation: tl-bump-l .4s ease-out; }
+.tl-canvas.bump-r { animation: tl-bump-r .4s ease-out; }
+@keyframes tl-bump-l { 40% { transform: translateX(14px); } }
+@keyframes tl-bump-r { 40% { transform: translateX(-14px); } }
 .tl-weeks, .tl-days, .tl-track, .tl-marks { display: grid; grid-template-columns: repeat(var(--days, 30), minmax(0, 1fr)); }
 .tl-head { position: relative; padding-top: 22px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .tl-weeks { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
