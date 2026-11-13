@@ -761,6 +761,8 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
   const weekends = Array.from({ length: days }, (_, i) => new Date(year, mon - 1, i + 1).getDay() % 6 === 0
     ? `<span class="tl-wkend" style="grid-column:${i + 1}"></span>` : '').join('');
 
+  const weekLines = Array.from({ length: days }, (_, i) => i > 0 && new Date(year, mon - 1, i + 1).getDay() === 0
+    ? `<span class="tl-wkline" style="grid-column:${i + 1}"></span>` : '').join('');
   const row = j => {
     const pl = plan(j);
     const segs = j.segs.filter(x => x.from <= last && x.to >= first);
@@ -781,15 +783,23 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
     return `<div class="tl-row">
       <div class="tl-name"><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a>
         <span class="tl-now">${pl.expected ? 'Now:' : ''} ${shouldBe(pl)} <span class="muted">\u00b7 ${pl.expected || !pl.next ? nextText : `Starts ${esc(shortDate(j.start))}`}</span></span></div>
-      <div class="tl-track">${weekends}${bars}${todayLine}</div>
+      <div class="tl-track">${weekends}${weekLines}${bars}${todayLine}</div>
       ${marks ? `<div class="tl-marks">${marks}</div>` : ''}
     </div>`;
   };
 
   const dayNums = Array.from({ length: days }, (_, i) => {
     const d = new Date(year, mon - 1, i + 1), wk = d.getDay();
-    return `<span class="${i + 1 === todayCol ? 'today' : ''} ${wk % 6 === 0 ? 'wkend' : ''} ${wk === 0 || i === 0 || i + 1 === todayCol ? 'key' : ''}">${i + 1}<small>${'SMTWTFS'[wk]}</small></span>`;
+    return `<span class="${i + 1 === todayCol ? 'today' : ''} ${wk % 6 === 0 ? 'wkend' : ''}">${i + 1}<small>${'SMTWTFS'[wk]}</small></span>`;
   }).join('');
+  // Above the days: each week labeled by the date it starts ("Nov 8"), and a "Today" tag over today.
+  const monShort = new Date(year, mon - 1, 1).toLocaleDateString(undefined, { month: 'short' });
+  const weekStarts = Array.from({ length: days }, (_, i) => i + 1).filter(n => n === 1 || new Date(year, mon - 1, n).getDay() === 0);
+  const weekLabels = weekStarts.map((n, i) => {
+    const end = weekStarts[i + 1] || days + 1;   // a stub of a week at the month's end just gets the number
+    return `<span style="grid-column:${n} / ${end}">${end - n < 3 ? n : `${monShort} ${n}`}</span>`;
+  }).join('');
+  const todayTag = todayCol ? `<span class="tl-todaytag" style="left:calc(${todayCol - 0.5} * 100% / ${days})">Today</span>` : '';
 
   view.innerHTML = `
     <div class="pagehead">
@@ -797,7 +807,8 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
       ${calHeadButtons(monthLink)}
     </div>
     <div class="tl card">
-      <div class="tl-days" style="--days:${days}">${dayNums}</div>
+      <div class="tl-head">${todayTag}<div class="tl-weeks" style="--days:${days}">${weekLabels}</div>
+      <div class="tl-days" style="--days:${days}">${dayNums}</div></div>
       ${shown.length ? shown.map(row).join('') : '<p class="muted" style="margin:12px 0 0">Nothing is scheduled this month. A project appears once its quote is accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
     </div>
     <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}<span><span class="swatch tl-todaykey"></span>Today</span></div>`;
