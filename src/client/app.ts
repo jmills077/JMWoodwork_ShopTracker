@@ -501,7 +501,7 @@ function route() {
   else if (parts[0] === 'tasks') {
     nav = 'tasks';
     const listed = store.projects.find(p => p.id === Number(parts[1]));
-    if (listed) showTodo(listed); else showTasks();
+    if (parts[1] === 'shopping') showShopping(); else if (listed) showTodo(listed); else showTasks();
   }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
@@ -1463,7 +1463,7 @@ function showTasks() {
     </a>`;
   };
   const shownFinished = showAllFinished ? finished : finished.slice(0, FINISHED_SHOWN);
-  view.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>
+  view.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>${tasksTabs('projects')}
     ${active.length ? `<div class="taskgrid">${active.map(p => card(p)).join('')}</div>`
       : `<div class="card empty"><p class="muted" style="margin:0">No active projects. Every new project gets its own to-do list as soon as it's created.</p></div>`}
     ${frozen.length ? `<section class="tasksection"><h2>Frozen projects <span>${frozen.length}</span></h2>
@@ -1594,6 +1594,87 @@ function showTodo(p) {
     });
   });
   redraw();
+}
+
+// The two tabs at the top of the Tasks page.
+const tasksTabs = on => `<nav class="tabs">
+  <a href="#/tasks" class="${on === 'projects' ? 'on' : ''}">Projects</a>
+  <a href="#/tasks/shopping" class="${on === 'shopping' ? 'on' : ''}">Shopping list <small>${
+    store.projects.filter(p => !archived(p) && !isFrozen(p)).reduce((n, p) => n + (p.data.todo?.lumber || []).filter(t => !t.done_at).length, 0) || ''}</small></a>
+</nav>`;
+
+// Every active project's lumber store shopping list in one place, grouped by project, to take to the
+// store and check off. Checking an item here checks it off on the project's own list (and logs it there).
+// Items checked in the last week stay visible, struck through, so a mis-tap can be undone; older ones
+// are only on the project's own page. Frozen and finished projects are left out.
+const SHOPPING_KEEP_DAYS = 7;
+function showShopping() {
+  const since = new Date(Date.now() - SHOPPING_KEEP_DAYS * 86400000).toISOString();
+  const projects = store.projects.filter(p => !archived(p) && !isFrozen(p))
+    .sort((a, b) => (a.data.due_date || '9999').localeCompare(b.data.due_date || '9999') || a.id - b.id);
+  const shown = t => !t.done_at || t.done_at >= since;
+  const draw = () => {
+    let open = 0, withItems = 0;
+    const groups = projects.map(p => {
+      const lumber = p.data.todo?.lumber || [];
+      for (const t of lumber) if (t.auto && !t.done_at) t.text = lumberLine(p);   // follows the estimate, as on the project's page
+      const items = lumber.filter(shown), left = lumber.filter(t => !t.done_at).length;
+      open += left;
+      if (left) withItems++;
+      return `<section class="card shopgroup" data-project="${p.id}">
+        <div class="shophead"><a href="#/tasks/${p.id}"><b>${esc(projectName(p))}</b></a>
+          <span class="muted">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}${left ? ` &middot; ${left} to buy` : ''}</span></div>
+        <ul class="tasks">${items.map(t => `<li class="task ${t.done_at ? 'done' : ''}" data-id="${esc(t.id)}">
+          <input type="checkbox" ${t.done_at ? 'checked' : ''} aria-label="${esc(t.text)}"><span class="text">${esc(t.text)}</span>
+          ${t.done_at ? `<span class="when">Done ${esc(fmtDate(t.done_at))}</span>` : ''}</li>`).join('')
+          || '<li class="none muted">Nothing to buy.</li>'}</ul>
+        <form class="addtask" autocomplete="off"><input placeholder="Add something to buy" aria-label="Add to ${esc(projectName(p))}'s shopping list"><button class="btn small">Add</button></form>
+      </section>`;
+    });
+    box.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>${tasksTabs('shopping')}
+      <p class="muted shopsum">${open ? `${open} item${open === 1 ? '' : 's'} to buy for ${withItems} project${withItems === 1 ? '' : 's'}.` : 'Nothing left to buy.'}
+        Checking an item off here checks it off on that project's list too. Paste a list into a box to add several items at once.</p>
+      ${projects.length ? `<div class="shopgrid">${groups.join('')}</div>` : '<div class="card empty"><p class="muted" style="margin:0">No active projects.</p></div>'}`;
+  };
+  // The page is drawn into its own box, so its handlers go away with it when another page is shown.
+  view.innerHTML = '<div id="shopping"></div>';
+  const box = $('#shopping');
+  draw();
+  const projectOf = el => store.projects.find(p => p.id === Number(el.closest('[data-project]')?.dataset.project));
+  const add = (p, texts) => {
+    p.data.todo ??= defaultTodo(p);
+    for (const text of texts) {
+      p.data.todo.lumber.push(newTask(text));
+      p.data.todo.log.push({ at: new Date().toISOString(), what: 'added', text, list: 'lumber' });
+    }
+    todoChanged(p);
+    draw();
+    $(`[data-project="${p.id}"] form input`, box)?.focus();
+  };
+  box.addEventListener('click', e => {
+    const li = (e.target as Element).closest<HTMLElement>('li.task'), p = li && projectOf(li);
+    if (!p) return;
+    if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
+    const t = p.data.todo.lumber.find(x => x.id === li.dataset.id);
+    if (!t) return;
+    t.done_at = t.done_at ? null : new Date().toISOString();
+    if (t.done_at) delete t.auto;
+    todoChanged(p, { what: t.done_at ? 'done' : 'undone', text: t.text, list: 'lumber' });
+    draw();
+  });
+  box.addEventListener('submit', e => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement, input = form.querySelector('input'), p = projectOf(form), text = input.value.trim();
+    if (p && text) add(p, [text]);
+  });
+  box.addEventListener('paste', (e: ClipboardEvent) => {
+    const input = (e.target as Element).closest?.('form.addtask input'), p = input && projectOf(input);
+    const items = p ? splitPasted(e.clipboardData?.getData('text/plain') || '') : [];
+    if (items.length < 2) return;
+    e.preventDefault();
+    add(p, items);
+    toast(`Added ${items.length} items to ${projectName(p)}'s shopping list.`);
+  });
 }
 
 // Turns pasted text into list items: one per line (or per semicolon, or per bullet when they all came
