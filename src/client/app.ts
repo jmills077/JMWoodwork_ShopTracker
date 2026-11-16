@@ -1800,11 +1800,13 @@ const tasksTabs = on => `<nav class="tabs">
     store.projects.filter(p => !archived(p) && !isFrozen(p)).reduce((n, p) => n + (p.data.todo?.lumber || []).filter(t => !t.done_at).length, 0) || ''}</small></a>
 </nav>`;
 
-// Every active project's lumber store shopping list in one place, grouped by project, to take to the
-// store and check off. Checking an item here checks it off on the project's own list (and logs it there).
+// Every active project's lumber store shopping list in one place, to take to the store and check off.
+// It opens sorted by wood species, as a clean checklist of thickness, width, length and how many (read
+// from each item's wording, see readLumber); "By project" shows each project's list as written. Checking an item here checks it off on the project's own list (and logs it there).
 // Items checked in the last week stay visible, struck through, so a mis-tap can be undone; older ones
 // are only on the project's own page. Frozen and finished projects are left out.
 const SHOPPING_KEEP_DAYS = 7;
+let shoppingBy = 'species';   // opens by species every time
 function showShopping() {
   const since = new Date(Date.now() - SHOPPING_KEEP_DAYS * 86400000).toISOString();
   const projects = store.projects.filter(p => !archived(p) && !isFrozen(p))
@@ -1828,10 +1830,43 @@ function showShopping() {
         <form class="addtask" autocomplete="off"><input placeholder="Add something to buy" aria-label="Add to ${esc(projectName(p))}'s shopping list"><button class="btn small">Add</button></form>
       </section>`;
     });
+    const toggle = `<div class="seg" role="tablist" aria-label="Sort the shopping list">
+      <button type="button" data-by="species" class="${shoppingBy === 'species' ? 'on' : ''}" aria-selected="${shoppingBy === 'species'}">By species</button>
+      <button type="button" data-by="project" class="${shoppingBy === 'project' ? 'on' : ''}" aria-selected="${shoppingBy === 'project'}">By project</button></div>`;
     box.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>${tasksTabs('shopping')}
-      <p class="muted shopsum">${open ? `${open} item${open === 1 ? '' : 's'} to buy for ${withItems} project${withItems === 1 ? '' : 's'}.` : 'Nothing left to buy.'}
-        Checking an item off here checks it off on that project's list too. Paste a list into a box to add several items at once.</p>
-      ${projects.length ? `<div class="shopgrid">${groups.join('')}</div>` : '<div class="card empty"><p class="muted" style="margin:0">No active projects.</p></div>'}`;
+      <div class="shoptop">${toggle}<p class="muted shopsum">${open ? `${open} item${open === 1 ? '' : 's'} to buy for ${withItems} project${withItems === 1 ? '' : 's'}.` : 'Nothing left to buy.'}
+        Checking an item off here checks it off on that project's list too.${shoppingBy === 'project' ? ' Paste a list into a box to add several items at once.' : ''}</p></div>
+      ${!projects.length ? '<div class="card empty"><p class="muted" style="margin:0">No active projects.</p></div>'
+        : shoppingBy === 'species' ? bySpecies() : `<div class="shopgrid">${groups.join('')}</div>`}`;
+  };
+  // Every item still to buy (and any checked this week), as one checklist per species, thickest first.
+  const bySpecies = () => {
+    const rows = projects.flatMap(p => (p.data.todo?.lumber || []).filter(shown).map(t => ({ p, t, l: readLumber(t.text, t.auto ? p.data.spec?.species : '') })));
+    const groups = new Map();
+    for (const r of rows) {
+      const key = r.l.species || (r.l.lumber ? 'Species not given' : 'Other supplies');
+      groups.set(key, [...(groups.get(key) || []), r]);
+    }
+    const order = k => k === 'Other supplies' ? 2 : k === 'Species not given' ? 1 : 0;
+    const keys = [...groups.keys()].sort((a, b) => order(a) - order(b) || a.localeCompare(b));
+    if (!keys.length) return '<div class="card empty"><p class="muted" style="margin:0">Nothing on any shopping list. Add items from a project\'s list, or switch to By project.</p></div>';
+    const dash = '<span class="muted">&ndash;</span>';
+    return `<div class="species">${keys.map(k => {
+      const list = groups.get(k).sort((a, b) => (+!!a.t.done_at - +!!b.t.done_at) || (b.l.q || 0) - (a.l.q || 0) || (b.l.w || 0) - (a.l.w || 0));
+      const left = list.filter(r => !r.t.done_at).length, other = k === 'Other supplies';
+      return `<section class="card spgroup">
+        <h3>${esc(k)} <span class="muted">${left ? `${left} to buy` : 'all bought'}</span></h3>
+        ${other ? '' : '<div class="sphead" aria-hidden="true"><span></span><span>Thickness</span><span>Width</span><span>Length</span><span>How many</span></div>'}
+        <ul class="tasks sprows">${list.map(({ p, t, l }) => `<li class="task ${t.done_at ? 'done' : ''} ${other ? 'other' : ''}" data-id="${esc(t.id)}" data-project="${p.id}">
+          <input type="checkbox" ${t.done_at ? 'checked' : ''} aria-label="${esc(t.text)}">
+          ${other ? `<span class="text">${esc(t.text)}</span>`
+            : `<span class="dim">${l.thick ? esc(l.thick) : dash}</span><span class="dim">${l.width ? esc(l.width) : dash}</span>
+               <span class="dim">${l.length ? esc(l.length) : dash}</span><span class="dim">${l.count ? esc(l.count) : dash}</span>`}
+          <span class="for muted">${esc(projectName(p))}${!other && l.note ? ` &middot; ${esc(l.note)}` : ''}${t.done_at ? ` &middot; bought ${esc(fmtDate(t.done_at))}` : ''}</span>
+        </li>`).join('')}</ul>
+      </section>`;
+    }).join('')}</div>
+    <p class="muted hint">Species and sizes are read from how each item is written, such as "2 &times; 8/4 walnut, 7&quot; wide, 10 ft". To add items, use By project or the project's own list.</p>`;
   };
   // The page is drawn into its own box, so its handlers go away with it when another page is shown.
   view.innerHTML = '<div id="shopping"></div>';
@@ -1849,6 +1884,8 @@ function showShopping() {
     $(`[data-project="${p.id}"] form input`, box)?.focus();
   };
   box.addEventListener('click', e => {
+    const by = (e.target as Element).closest<HTMLElement>('[data-by]');
+    if (by) { shoppingBy = by.dataset.by; draw(); return; }
     const li = (e.target as Element).closest<HTMLElement>('li.task'), p = li && projectOf(li);
     if (!p) return;
     if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
@@ -1872,6 +1909,47 @@ function showShopping() {
     add(p, items);
     toast(`Added ${items.length} items to ${projectName(p)}'s shopping list.`);
   });
+}
+
+// Reads a shopping-list line for what the lumber store needs: species, thickness, width, length and how
+// many. It understands the wording the lumber pickup line uses ("90 linear ft of 8/4 Walnut, 7" wide (9 ×
+// 10 ft boards)") and the usual shorthand ("2x 8/4 walnut 7\" wide 10'", "3/4\" maple ply", "20 bf cherry").
+// Anything it can't read is left blank, and a line with no wood in it counts as other supplies.
+const EXTRA_SPECIES = ['Black walnut:Walnut', 'Walnut', 'Cherry', 'Maple:Hard maple', 'Soft maple', 'White oak', 'Red oak', 'Oak',
+  'Ash', 'Poplar', 'Pine', 'Hickory', 'Teak', 'Mahogany', 'Sapele', 'Padauk', 'Purpleheart', 'Birch', 'Beech', 'Alder', 'Cedar',
+  'Douglas fir', 'Fir', 'Basswood', 'Butternut', 'Wenge', 'Zebrawood', 'Bubinga', 'Jatoba', 'Cypress', 'Spruce'];
+function readLumber(text, fallbackSpecies = '') {
+  const s = ` ${String(text).replace(/[\u201c\u201d\u2033]/g, '"').replace(/[\u2018\u2019\u2032]/g, "'")} `, low = s.toLowerCase();
+  const names = [...store.settings.species.map(x => [x.name, x.name]), ...EXTRA_SPECIES.map(x => { const [a, b] = x.split(':'); return [a, b || a]; })]
+    .sort((a, b) => b[0].length - a[0].length);
+  const hit = names.find(([n]) => new RegExp(`[^a-z]${n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}s?[^a-z]`).test(low));
+  // Sheet goods are grouped as "<species> plywood" (or just "Plywood"), apart from solid boards.
+  const sheet = /[^a-z](?:ply|plywood|mdf|sheets?)[^a-z]/.test(low);
+  let species = hit ? hit[1] : fallbackSpecies || '';
+  if (sheet) species = /mdf/.test(low) && !hit ? 'MDF' : hit ? `${hit[0]} plywood` : 'Plywood';
+  species = species ? species[0].toUpperCase() + species.slice(1) : '';
+  const num = '(\\d+(?:\\.\\d+)?(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+)';
+  const m = re => s.match(new RegExp(re, 'i'));
+  const quarters = m('(\\d{1,2})\\/4(?![\\d"])(?!\\s*(?:"|in\\b|inch))');
+  const thickIn = m(`${num}\\s*(?:"|in\\b|inch(?:es)?)\\s*thick`) || (sheet ? m(`${num}\\s*(?:"|in\\b|inch(?:es)?)(?!\\s*(?:wide|long|w\\b|l\\b))`) : null);
+  const width = m(`${num}\\s*(?:"|in\\b|inch(?:es)?)\\s*(?:wide|w\\b)`) || m(`(?:wide|width)\\s*:?\\s*${num}\\s*(?:"|in\\b)?`);
+  const boards = m(`(\\d+)\\s*(?:\\u00d7|x)\\s*${num}\\s*(?:ft|feet|foot|')\\s*boards?`);
+  const linear = m(`${num}\\s*(?:linear|lin\\.?)\\s*(?:ft|feet)`);
+  const len = m(`${num}\\s*(?:ft|feet|foot|')(?![a-z])`) || m(`${num}\\s*(?:"|in\\b)\\s*(?:long|l\\b)`);
+  const bf = m(`${num}\\s*(?:board\\s*f(?:ee|oo)t|bd\\.?\\s*ft|bf)\\b`);
+  const count = m('^\\s*(\\d+)\\s*(?:\\u00d7|x(?=\\s)|pcs?\\b|pieces?\\b|boards?\\b|sheets?\\b)') || m('(?:\\u00d7|\\bx)\\s*(\\d+)\\s*$');
+  const r: any = { species };
+  if (quarters) { r.thick = `${quarters[1]}/4`; r.q = +quarters[1]; }
+  else if (thickIn) { r.thick = `${thickIn[1]}"`; r.q = parseFloat(thickIn[1]) * 4 || 0; }
+  if (width) { r.width = `${width[1]}"`; r.w = parseFloat(width[1]) || 0; }
+  if (boards) { r.length = `${boards[2]} ft`; r.count = `${boards[1]} board${boards[1] === '1' ? '' : 's'}`; if (linear) r.note = `${linear[1]} linear ft`; }
+  else if (linear) r.length = `${linear[1]} linear ft`;
+  else if (len) r.length = len[0].trim().replace(/\s*(feet|foot|')$/i, ' ft').replace(/\s*(?:"|in)\s*(?:long|l)$/i, '"');
+  if (!r.count && count) r.count = count[1];
+  if (bf) r.count = r.count ? `${r.count} (${bf[1]} bf)` : `${bf[1]} bf`;
+  r.lumber = !!(hit || sheet || r.thick || r.width || bf || boards || linear);
+  if (!r.lumber) r.species = '';
+  return r;
 }
 
 // Turns pasted text into list items: one per line (or per semicolon, or per bullet when they all came
