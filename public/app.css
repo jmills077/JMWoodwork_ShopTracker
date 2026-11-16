@@ -401,3 +401,5 @@ ul.sprows li.task.done .dim { text-decoration: line-through; color: var(--muted)
   .sphead, ul.sprows li.task:not(.other) { grid-template-columns: 22px 0.8fr 0.8fr 1fr 1.2fr; gap: 2px 6px; }
   .seg { width: 100%; } .seg button { flex: 1; }
 }
+/* A sheet good with no thickness written: flagged so it gets filled in before the trip to the store. */
+ul.sprows .need { color: var(--bad); font-weight: 700; }

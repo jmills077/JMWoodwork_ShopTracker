@@ -1860,13 +1860,13 @@ function showShopping() {
         <ul class="tasks sprows">${list.map(({ p, t, l }) => `<li class="task ${t.done_at ? 'done' : ''} ${other ? 'other' : ''}" data-id="${esc(t.id)}" data-project="${p.id}">
           <input type="checkbox" ${t.done_at ? 'checked' : ''} aria-label="${esc(t.text)}">
           ${other ? `<span class="text">${esc(t.text)}</span>`
-            : `<span class="dim">${l.thick ? esc(l.thick) : dash}</span><span class="dim">${l.width ? esc(l.width) : dash}</span>
+            : `<span class="dim">${l.thick ? esc(l.thick) : l.thickMissing ? '<span class="need" title="Thickness not given">?</span>' : dash}</span><span class="dim">${l.width ? esc(l.width) : dash}</span>
                <span class="dim">${l.length ? esc(l.length) : dash}</span><span class="dim">${l.count ? esc(l.count) : dash}</span>`}
-          <span class="for muted">${esc(projectName(p))}${!other && l.note ? ` &middot; ${esc(l.note)}` : ''}${t.done_at ? ` &middot; bought ${esc(fmtDate(t.done_at))}` : ''}</span>
+          <span class="for muted">${esc(projectName(p))}${!other && l.note ? ` &middot; ${esc(l.note)}` : ''}${!other && l.thickMissing && !t.done_at ? ' &middot; <span class="need">thickness not given</span>' : ''}${t.done_at ? ` &middot; bought ${esc(fmtDate(t.done_at))}` : ''}</span>
         </li>`).join('')}</ul>
       </section>`;
     }).join('')}</div>
-    <p class="muted hint">Species and sizes are read from how each item is written, such as "2 &times; 8/4 walnut, 7&quot; wide, 10 ft". To add items, use By project or the project's own list.</p>`;
+    <p class="muted hint">Species and sizes are read from how each item is written, such as "2 &times; 8/4 walnut, 7&quot; wide, 10 ft" or "2 sheets 3/4&quot; birch ply, 4x8". To add items, use By project or the project's own list.</p>`;
   };
   // The page is drawn into its own box, so its handlers go away with it when another page is shown.
   view.innerHTML = '<div id="shopping"></div>';
@@ -1916,17 +1916,31 @@ function showShopping() {
 // 10 ft boards)") and the usual shorthand ("2x 8/4 walnut 7\" wide 10'", "3/4\" maple ply", "20 bf cherry").
 // Anything it can't read is left blank, and a line with no wood in it counts as other supplies.
 const EXTRA_SPECIES = ['Black walnut:Walnut', 'Walnut', 'Cherry', 'Maple:Hard maple', 'Soft maple', 'White oak', 'Red oak', 'Oak',
-  'Ash', 'Poplar', 'Pine', 'Hickory', 'Teak', 'Mahogany', 'Sapele', 'Padauk', 'Purpleheart', 'Birch', 'Beech', 'Alder', 'Cedar',
+  'Baltic birch:Birch', 'Ash', 'Poplar', 'Pine', 'Hickory', 'Teak', 'Mahogany', 'Sapele', 'Padauk', 'Purpleheart', 'Birch', 'Beech', 'Alder', 'Cedar',
   'Douglas fir', 'Fir', 'Basswood', 'Butternut', 'Wenge', 'Zebrawood', 'Bubinga', 'Jatoba', 'Cypress', 'Spruce'];
+// Sheet goods that aren't plywood keep their own name; [pattern, group name].
+const SHEET_KINDS = [['mdf', 'MDF'], ['osb', 'OSB'], ['melamine', 'Melamine'], ['hardboard', 'Hardboard'], ['masonite', 'Hardboard'],
+  ['particle ?board', 'Particleboard']];
+// Thicknesses written out in words on sheet goods. "three quarter" is checked before "quarter".
+const THICK_WORDS = [['three[- ]?quarters?', '3/4'], ['half', '1/2'], ['quarter', '1/4']];
+// Typed fractions (¾) become 3/4 so they read like everything else; inches() turns "1 1/4", "3/4" or ".75" into a number.
+const VULGAR = { '¼': '1/4', '½': '1/2', '¾': '3/4', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8' };
+const inches = v => {
+  const m = String(v).trim().match(/^(?:(\d+)\s+)?(\d+)\/(\d+)$/);
+  return m ? (+(m[1] || 0) + +m[2] / +m[3]) || 0 : parseFloat(v) || 0;
+};
 function readLumber(text, fallbackSpecies = '') {
-  const s = ` ${String(text).replace(/[\u201c\u201d\u2033]/g, '"').replace(/[\u2018\u2019\u2032]/g, "'")} `, low = s.toLowerCase();
+  const s = ` ${String(text).replace(/[\u201c\u201d\u2033]/g, '"').replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/(\d?)\s*([\u00bc\u00bd\u00be\u215b\u215c\u215d\u215e])/g, (_, w, f) => `${w ? `${w} ` : ' '}${VULGAR[f]}`)} `, low = s.toLowerCase();
   const names = [...store.settings.species.map(x => [x.name, x.name]), ...EXTRA_SPECIES.map(x => { const [a, b] = x.split(':'); return [a, b || a]; })]
     .sort((a, b) => b[0].length - a[0].length);
   const hit = names.find(([n]) => new RegExp(`[^a-z]${n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}s?[^a-z]`).test(low));
-  // Sheet goods are grouped as "<species> plywood" (or just "Plywood"), apart from solid boards.
-  const sheet = /[^a-z](?:ply|plywood|mdf|sheets?)[^a-z]/.test(low);
+  // Sheet goods are grouped as "<species> plywood" (or "Plywood", "MDF", "OSB" and so on), apart from solid boards.
+  // Baltic birch only comes in sheets, so it counts as one even when the line doesn't say ply.
+  const kind = SHEET_KINDS.find(([k]) => new RegExp(`[^a-z]${k}s?[^a-z]`).test(low));
+  const sheet = !!kind || /[^a-z](?:ply|plywood|sheets?|baltic)[^a-z]/.test(low);
   let species = hit ? hit[1] : fallbackSpecies || '';
-  if (sheet) species = /mdf/.test(low) && !hit ? 'MDF' : hit ? `${hit[0]} plywood` : 'Plywood';
+  if (sheet) species = kind && !hit ? kind[1] : hit ? `${hit[0]} plywood` : 'Plywood';
   species = species ? species[0].toUpperCase() + species.slice(1) : '';
   const num = '(\\d+(?:\\.\\d+)?(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+)';
   const m = re => s.match(new RegExp(re, 'i'));
@@ -1938,13 +1952,36 @@ function readLumber(text, fallbackSpecies = '') {
   const len = m(`${num}\\s*(?:ft|feet|foot|')(?![a-z])`) || m(`${num}\\s*(?:"|in\\b)\\s*(?:long|l\\b)`);
   const bf = m(`${num}\\s*(?:board\\s*f(?:ee|oo)t|bd\\.?\\s*ft|bf)\\b`);
   const count = m('^\\s*(\\d+)\\s*(?:\\u00d7|x(?=\\s)|pcs?\\b|pieces?\\b|boards?\\b|sheets?\\b)') || m('(?:\\u00d7|\\bx)\\s*(\\d+)\\s*$');
-  const r: any = { species };
-  if (quarters) { r.thick = `${quarters[1]}/4`; r.q = +quarters[1]; }
-  else if (thickIn) { r.thick = `${thickIn[1]}"`; r.q = parseFloat(thickIn[1]) * 4 || 0; }
-  if (width) { r.width = `${width[1]}"`; r.w = parseFloat(width[1]) || 0; }
+  const r: any = { species, sheet };
+  if (sheet) {
+    // Sheet goods are bought by thickness, so it is read however it's written: 3/4", 3/4 in, 3/4-inch, a bare
+    // 3/4 or ½, .75", or 18mm. "1/2 sheet" is half a sheet, not a thickness. "2 3/4" ply" is two sheets of 3/4".
+    const mm = m('(\\d+(?:\\.\\d+)?)\\s*mm\\b');
+    const inch = m(`(\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d*\\.\\d+|\\d+)[\\s-]*(?:"|in\\b\\.?|inch(?:es)?)(?![\\s-]*(?:wide|long|w\\b|l\\b))`);
+    const bare = m('(?<![\\d/.])(\\d{1,2}\\/\\d{1,2})(?![\\d/]|\\s*(?:\'|ft\\b|feet|foot|wide|long|sheets?\\b))');
+    if (mm) { r.thick = `${mm[1]} mm`; r.q = parseFloat(mm[1]) / 25.4 * 4; }
+    else if (inch || bare) {
+      let t = (inch || bare)[1].trim();
+      const mixed = t.match(/^(\d+)\s+(\d+\/\d+)$/);
+      if (mixed && +mixed[1] >= 2) { r.count = mixed[1]; t = mixed[2]; }   // "2 3/4" ply": a count, then the thickness
+      r.thick = `${t}"`; r.q = inches(t) * 4;
+    } else {
+      const word = THICK_WORDS.find(([w]) => new RegExp(`[^a-z]${w}[- ]?inch`).test(low));
+      if (word) { r.thick = `${word[1]}"`; r.q = inches(word[1]) * 4; }
+      else r.thickMissing = true;
+    }
+    // A sheet size such as 4x8, 4' x 8', 4 by 8 or 5×5 fills the width and length columns.
+    const size = m('(?<![\\d/.])(\\d{1,2})\\s*\'?\\s*(?:[x\\u00d7]|by)\\s*(\\d{1,2})\\s*\'?(?![\\d/x\\u00d7"])');
+    if (size) { r.width = `${size[1]} ft`; r.length = `${size[2]} ft`; }
+    const part = m('(?<![\\d/.])(\\d{1,2}\\/\\d{1,2})\\s*sheet');
+    if (part && !r.count) r.count = `${part[1]} sheet`;
+  }
+  else if (quarters) { r.thick = `${quarters[1]}/4`; r.q = +quarters[1]; }
+  else if (thickIn) { r.thick = `${thickIn[1]}"`; r.q = inches(thickIn[1]) * 4; }
+  if (width) { r.width = `${width[1]}"`; r.w = inches(width[1]); }
   if (boards) { r.length = `${boards[2]} ft`; r.count = `${boards[1]} board${boards[1] === '1' ? '' : 's'}`; if (linear) r.note = `${linear[1]} linear ft`; }
   else if (linear) r.length = `${linear[1]} linear ft`;
-  else if (len) r.length = len[0].trim().replace(/\s*(feet|foot|')$/i, ' ft').replace(/\s*(?:"|in)\s*(?:long|l)$/i, '"');
+  else if (len && !r.length) r.length = len[0].trim().replace(/\s*(feet|foot|')$/i, ' ft').replace(/\s*(?:"|in)\s*(?:long|l)$/i, '"');
   if (!r.count && count) r.count = count[1];
   if (bf) r.count = r.count ? `${r.count} (${bf[1]} bf)` : `${bf[1]} bf`;
   r.lumber = !!(hit || sheet || r.thick || r.width || bf || boards || linear);
