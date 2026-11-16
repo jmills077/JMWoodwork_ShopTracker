@@ -1918,6 +1918,11 @@ function showShopping() {
 const EXTRA_SPECIES = ['Black walnut:Walnut', 'Walnut', 'Cherry', 'Maple:Hard maple', 'Soft maple', 'White oak', 'Red oak', 'Oak',
   'Baltic birch:Birch', 'Ash', 'Poplar', 'Pine', 'Hickory', 'Teak', 'Mahogany', 'Sapele', 'Padauk', 'Purpleheart', 'Birch', 'Beech', 'Alder', 'Cedar',
   'Douglas fir', 'Fir', 'Basswood', 'Butternut', 'Wenge', 'Zebrawood', 'Bubinga', 'Jatoba', 'Cypress', 'Spruce'];
+// Sheet goods that aren't plywood keep their own name; [pattern, group name].
+const SHEET_KINDS = [['mdf', 'MDF'], ['osb', 'OSB'], ['melamine', 'Melamine'], ['hardboard', 'Hardboard'], ['masonite', 'Hardboard'],
+  ['particle ?board', 'Particleboard']];
+// Thicknesses written out in words on sheet goods. "three quarter" is checked before "quarter".
+const THICK_WORDS = [['three[- ]?quarters?', '3/4'], ['half', '1/2'], ['quarter', '1/4']];
 // Typed fractions (¾) become 3/4 so they read like everything else; inches() turns "1 1/4", "3/4" or ".75" into a number.
 const VULGAR = { '¼': '1/4', '½': '1/2', '¾': '3/4', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8' };
 const inches = v => {
@@ -1930,10 +1935,12 @@ function readLumber(text, fallbackSpecies = '') {
   const names = [...store.settings.species.map(x => [x.name, x.name]), ...EXTRA_SPECIES.map(x => { const [a, b] = x.split(':'); return [a, b || a]; })]
     .sort((a, b) => b[0].length - a[0].length);
   const hit = names.find(([n]) => new RegExp(`[^a-z]${n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}s?[^a-z]`).test(low));
-  // Sheet goods are grouped as "<species> plywood" (or just "Plywood"), apart from solid boards.
-  const sheet = /[^a-z](?:ply|plywood|mdf|sheets?)[^a-z]/.test(low);
+  // Sheet goods are grouped as "<species> plywood" (or "Plywood", "MDF", "OSB" and so on), apart from solid boards.
+  // Baltic birch only comes in sheets, so it counts as one even when the line doesn't say ply.
+  const kind = SHEET_KINDS.find(([k]) => new RegExp(`[^a-z]${k}s?[^a-z]`).test(low));
+  const sheet = !!kind || /[^a-z](?:ply|plywood|sheets?|baltic)[^a-z]/.test(low);
   let species = hit ? hit[1] : fallbackSpecies || '';
-  if (sheet) species = /mdf/.test(low) && !hit ? 'MDF' : hit ? `${hit[0]} plywood` : 'Plywood';
+  if (sheet) species = kind && !hit ? kind[1] : hit ? `${hit[0]} plywood` : 'Plywood';
   species = species ? species[0].toUpperCase() + species.slice(1) : '';
   const num = '(\\d+(?:\\.\\d+)?(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+)';
   const m = re => s.match(new RegExp(re, 'i'));
@@ -1958,9 +1965,13 @@ function readLumber(text, fallbackSpecies = '') {
       const mixed = t.match(/^(\d+)\s+(\d+\/\d+)$/);
       if (mixed && +mixed[1] >= 2) { r.count = mixed[1]; t = mixed[2]; }   // "2 3/4" ply": a count, then the thickness
       r.thick = `${t}"`; r.q = inches(t) * 4;
-    } else r.thickMissing = true;
-    // A sheet size such as 4x8, 4' x 8' or 5×5 fills the width and length columns.
-    const size = m('(?<![\\d/.])(\\d{1,2})\\s*\'?\\s*[x\\u00d7]\\s*(\\d{1,2})\\s*\'?(?![\\d/x\\u00d7"])');
+    } else {
+      const word = THICK_WORDS.find(([w]) => new RegExp(`[^a-z]${w}[- ]?inch`).test(low));
+      if (word) { r.thick = `${word[1]}"`; r.q = inches(word[1]) * 4; }
+      else r.thickMissing = true;
+    }
+    // A sheet size such as 4x8, 4' x 8', 4 by 8 or 5×5 fills the width and length columns.
+    const size = m('(?<![\\d/.])(\\d{1,2})\\s*\'?\\s*(?:[x\\u00d7]|by)\\s*(\\d{1,2})\\s*\'?(?![\\d/x\\u00d7"])');
     if (size) { r.width = `${size[1]} ft`; r.length = `${size[2]} ft`; }
     const part = m('(?<![\\d/.])(\\d{1,2}\\/\\d{1,2})\\s*sheet');
     if (part && !r.count) r.count = `${part[1]} sheet`;
