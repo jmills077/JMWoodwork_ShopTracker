@@ -102,7 +102,7 @@ scripts/             Seed script
 - **Tasks.** Every project gets its own to-do list and lumber store shopping list the moment it is
   created (`data.todo`: `items`, `lumber` and a `log` of everything added, checked off, unchecked or
   removed). The Tasks page (`#/tasks`) lists the active projects, then the frozen and finished ones; its **Shopping list** tab (`#/tasks/shopping`) gathers every
-  active project's shopping list in one place to check off (checking there checks the project's own list); each project opens its list at
+  active project's shopping list in one place to check off (checking there checks the project's own list). It opens **By species**: lumber grouped by wood species with thickness, width, length and how many read from how each item is written (a dash when it isn't given), and everything else under Other supplies; **By project** shows each project's list and is where items are added; each project opens its list at
   `#/tasks/<id>`, also linked as a tab on the project's page. Checked-off items stay on the list, struck
   through, with the date they were done. Press and hold an item to drag it up or down. Pasting several lines into the add box adds
   one item per line (bullets, numbers and checkboxes are stripped; a single line splits on semicolons). When a project
