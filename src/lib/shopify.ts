@@ -69,3 +69,26 @@ export async function readOpenOrders(env: Env): Promise<OpenOrder[]> {
     }))
     .filter((o: OpenOrder) => o.items.length);
 }
+
+/** The shop's latest orders, newest first, for the notification bell: what was bought, for how much,
+ *  and a link to the order in Shopify. Cancelled orders are left out. */
+export interface RecentOrder {
+  id: string; name: string; created_at: string; total: number; fulfillment: string;
+  items: { title: string; variant: string; qty: number }[];
+}
+
+export async function readRecentOrders(env: Env): Promise<RecentOrder[]> {
+  const data = await admin<any>(env, `{ orders(first: 25, sortKey: CREATED_AT, reverse: true) {
+    nodes { legacyResourceId name createdAt cancelledAt displayFulfillmentStatus totalPriceSet { shopMoney { amount } }
+      lineItems(first: 20) { nodes { title variantTitle quantity } } } } }`);
+  return data.orders.nodes
+    .filter((o: any) => !o.cancelledAt)
+    .map((o: any) => ({
+      id: String(o.legacyResourceId), name: o.name, created_at: o.createdAt,
+      total: Number(o.totalPriceSet?.shopMoney?.amount) || 0, fulfillment: o.displayFulfillmentStatus || '',
+      items: o.lineItems.nodes.map((i: any) => ({ title: i.title, variant: variantName(i.variantTitle), qty: i.quantity })),
+    }));
+}
+
+/** The order's page in the Shopify admin. */
+export const orderAdminUrl = (id: string) => `https://admin.shopify.com/store/${STORE.split('.')[0]}/orders/${id}`;
