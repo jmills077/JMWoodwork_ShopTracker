@@ -6,6 +6,8 @@
   "name": "jmwoodwork-shoptracker",
   "main": "src/index.tsx",
   "compatibility_date": "2026-10-01",
+  // The jmwood.work Cloudflare account, so wrangler doesn't have to ask when a login sees more than one.
+  "account_id": "a8394270fff8df4bb9a6c767515fdb23",
   "observability": { "enabled": true },
 
   // Builds the browser script into public/ before every `wrangler dev` / `wrangler deploy`.
@@ -25,6 +27,10 @@
       "migrations_dir": "migrations"
     }
   ],
+
+  // Workers AI, for reading receipt photos. Even under `npm run dev` this runs on Cloudflare
+  // (so it needs `npx wrangler login`); everything else stays local.
+  "ai": { "binding": "AI", "remote": true },
 
   // Weekly supplier price check: Mondays, about 5 am Eastern.
   "triggers": { "crons": ["17 9 * * 1"] }

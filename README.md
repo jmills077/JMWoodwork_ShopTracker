@@ -61,10 +61,11 @@ The manifest and icons are in `public/`. The icons are the "J.M." from the J.M. 
 ```
 src/
   index.tsx          Hono app: sign-in, the app page, the JSON API, the weekly cron
-  env.ts             Worker bindings (DB, ASSETS) and secrets
+  env.ts             Worker bindings (DB, ASSETS, AI) and secrets
   lib/auth.ts        Single-password sign-in with a signed session cookie
   lib/db.ts          D1 reads and writes
   lib/prices.ts      Reads Parkerville's price lists (runs from the cron)
+  lib/receipts.ts    Reads a receipt photo into line items (Workers AI)
   views/             Page templates (Hono JSX): the app page, sign-in
   client/app.ts      The app in the browser: every screen, the estimating model, Todoist sync
   shared/types.ts    Shapes shared by the server and the browser
@@ -109,6 +110,17 @@ scripts/             Seed script
   is marked Complete (or a client job goes straight to Delivered & paid), everything still open is
   checked off. Projects from before this got a list on first load. No migration: it's part of the
   project's data. The Todoist hand-off is unchanged and separate.
+- **Receipts and material purchases.** **Scan a receipt** (on the Projects page, or on a project's
+  Material purchases box) takes a photo with the phone's camera or picks one from the library. The
+  browser shrinks it and sends it to `POST /api/receipts/scan`, which reads it with a vision model on
+  Workers AI (`src/lib/receipts.ts`, the `AI` binding: no API key, billed to the Cloudflare account
+  under the Workers AI free allowance). The lines come back to check over: fix a name or price, untick
+  what isn't for this job, pick the project, and the ticked lines (sales tax is a line of its own) are
+  added to its `data.purchases`. Lines left over can go to another project from the same receipt. A
+  project's page lists what was bought, the total spent and how it compares with the estimated lumber
+  and hardware. Purchases don't change a quote or price. The photo isn't kept. No migration: it's
+  part of the project's data. Under `npm run dev` the `AI` binding still runs on Cloudflare, so it
+  needs `npx wrangler login`.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and

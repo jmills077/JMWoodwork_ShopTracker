@@ -499,6 +499,7 @@ function route() {
   else if (parts[0] === 'products') { nav = 'settings'; showProducts(); }
   else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
   else if (parts[0] === 'frozen') showFrozen();
+  else if (parts[0] === 'receipt') showReceipt(Number(parts[1]) || null);
   else if (parts[0] === 'tasks') {
     nav = 'tasks';
     const listed = store.projects.find(p => p.id === Number(parts[1]));
@@ -542,7 +543,7 @@ function showBoard() {
       <small>${store.projects.filter(p => key === 'all' || streamOf(p) === key).filter(p => !archived(p) && !isFrozen(p)).length}</small></a>`).join('')}
     <span class="spacer"></span><a href="#/frozen" class="frozenlink">Frozen <small>${frozenCount}</small></a></nav>`;
   const newLabel = tab === 'client' ? 'New quote' : 'New project';
-  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn primary" href="${newLink()}">${newLabel}</a></div>${tabs}`;
+  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn" href="#/receipt">Scan a receipt</a><a class="btn primary" href="${newLink()}">${newLabel}</a></div>${tabs}`;
   const quick = tab === 'product' ? '<div class="card" id="quickBatch"></div>' : '';
   if (!shown.length) {
     view.innerHTML = `${head}${quick}<div class="card empty"><h1>Nothing here yet</h1>
@@ -1113,7 +1114,7 @@ function showEditor(project, newStream = 'client') {
           <p id="lumberOut" style="margin:12px 0 0"></p>
           ${project ? '<div class="actions" style="margin-top:12px"><button type="button" class="btn" id="lumberSend">Send to Todoist</button><span class="muted" id="lumberSent" style="font-size:13px"></span></div>' : ''}
         </div>
-        ${project ? '<div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>' : ''}
+        ${project ? '<div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>' : ''}
         ${project ? '<p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this project</button></p>' : ''}
       </aside>
     </div>`;
@@ -1193,6 +1194,7 @@ function showEditor(project, newStream = 'client') {
     renderTodoistCard();
   }
   renderPanel();
+  if (project) renderPurchasesCard(project);
 }
 
 function changed() {
@@ -2260,7 +2262,7 @@ function showBatch(p) {
         </div>
       </div>
       <aside>
-        <div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>
+        <div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>
         <p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this run</button></p>
       </aside>
     </div>`;
@@ -2336,6 +2338,7 @@ function showBatch(p) {
   renderStages();
   renderStatusCard();
   renderTodoistCard();
+  renderPurchasesCard(p);
 }
 
 // ---------- product catalog (for batch runs) ----------
@@ -2478,6 +2481,214 @@ async function syncRunsWithOrders(orders) {
   if (ed?.project && touched.includes(ed.project) && ed.redraw) ed.redraw();
   else if (!ed && (currentHash === '#/' || currentHash.startsWith('#/s/') || currentHash.startsWith('#/calendar'))) route();
 }
+
+// ---------- receipts: material purchases ----------
+// A photo of a store receipt is read on the server (Workers AI, see src/lib/receipts.ts) into line
+// items. They're shown here to check over: fix a description or price, untick what isn't for this job,
+// pick the project, and the ticked items are added to that project's material purchases
+// (data.purchases: [{ id, date, store, item, qty, amount, receipt }]). Items left over can then go to
+// another project from the same receipt. The photo itself isn't kept.
+const SCAN_MAX_SIDE = 1600;   // long side of the photo sent to the server, in pixels: plenty to read a receipt
+let scan = null;              // the receipt being checked over: { id, store, date, total, lines: [{ description, qty, amount, on, added }] }
+let scanProjectId = null;     // the project picked to add items to
+let purchaseSeq = 0;
+
+const purchasesOf = p => (p.data.purchases ||= []);
+const spentOn = p => cents((p.data.purchases || []).reduce((n, x) => n + num(x.amount), 0));
+// What the project expected to spend on materials: lumber and hardware for a piece, materials for a batch run.
+const budgetFor = p => isBatch(p) ? num(p.calc.materials_est) : num(p.calc.materials_est) + num(p.calc.other_costs);
+// Projects that can take purchases, most recently touched first.
+const purchaseProjects = () => store.projects.filter(p => !archived(p) || p.id === scanProjectId).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+
+// Shrinks a phone photo (often 4000+ px) to a JPEG data URL small enough to send quickly.
+async function shrinkPhoto(file: File) {
+  // createImageBitmap turns the photo upright from its camera orientation, as it's shown on screen.
+  const img = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => { throw new Error("That file couldn't be opened as a photo."); });
+  const scale = Math.min(1, SCAN_MAX_SIDE / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff';   // a transparent PNG would otherwise turn black as a JPEG
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.close();
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+async function readReceipt(file: File) {
+  const box = $('#scanBox');
+  box.innerHTML = '<p class="scanning">Reading the receipt&hellip; <span class="muted">this takes a few seconds</span></p>';
+  try {
+    const image = await shrinkPhoto(file);
+    box.insertAdjacentHTML('afterbegin', `<img class="receiptimg" src="${image}" alt="The receipt photo">`);
+    const r = await api('/api/receipts/scan', { image });
+    if (r.error) throw new Error(r.error);
+    if (!r.items.length) throw new Error("No items could be read from that photo. Try again with the whole receipt flat, in good light.");
+    scan = {
+      id: `r${Date.now().toString(36)}`, store: r.store, date: r.date || ymd(new Date()), total: r.total,
+      lines: [...r.items.map(i => ({ description: i.description, qty: i.quantity, amount: i.amount, on: true })),
+        ...(r.tax ? [{ description: 'Sales tax', qty: 1, amount: r.tax, on: true, tax: true }] : [])],
+    };
+    renderScan();
+  } catch (error) {
+    // The server's own explanation reads better than "The server returned 400: {...}".
+    const said = String(error.message).match(/"error":"([^"]+)"/)?.[1];
+    box.innerHTML = `<p class="note err">${esc(said || error.message)}</p>`;
+  }
+}
+
+function showReceipt(projectId) {
+  if (projectId) scanProjectId = projectId;
+  const from = store.projects.find(p => p.id === projectId);
+  view.innerHTML = `
+    <a href="${from ? `#/p/${from.id}` : boardLink()}" class="back">&larr; ${from ? esc(projectName(from)) : 'Projects'}</a>
+    <div class="pagehead"><h1>Scan a receipt</h1></div>
+    <div class="card receipt">
+      <div class="actions">
+        <label class="btn primary">Take a photo<input type="file" accept="image/*" capture="environment" data-photo hidden></label>
+        <label class="btn">Choose a photo<input type="file" accept="image/*" data-photo hidden></label>
+        <span class="muted" style="font-size:13px">Lay the receipt flat in good light, with the whole thing in the picture.</span>
+      </div>
+      <div id="scanBox"></div>
+    </div>`;
+  view.querySelectorAll('[data-photo]').forEach((input: HTMLInputElement) => input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) readReceipt(file);
+  }));
+  if (scan) renderScan();
+}
+
+function renderScan() {
+  const box = $('#scanBox');
+  if (!box || !scan) return;
+  const picked = scan.lines.filter(l => l.on && !l.added);
+  const pickedSum = cents(picked.reduce((n, l) => n + num(l.amount), 0));
+  const allSum = cents(scan.lines.reduce((n, l) => n + num(l.amount), 0));
+  const left = scan.lines.filter(l => !l.added);
+  const projects = purchaseProjects();
+  if (!projects.some(p => p.id === scanProjectId)) scanProjectId = projects[0]?.id ?? null;
+  const img = $('.receiptimg', box)?.outerHTML || '';
+  box.innerHTML = `${img}
+    <div class="grid" style="margin-top:14px">
+      <label class="f w3"><span>Store</span><input data-scan="store" value="${esc(scan.store)}"></label>
+      <label class="f"><span>Date</span><input type="date" data-scan="date" value="${esc(scan.date)}"></label>
+    </div>
+    <div class="scanhead">
+      <h2>Items on the receipt</h2>
+      ${left.length ? `<span class="muted" style="font-size:13px"><button type="button" class="link" data-all="1">Tick all</button> &middot; <button type="button" class="link" data-all="0">Untick all</button></span>` : ''}
+    </div>
+    <ul class="scanlines">${scan.lines.map((l, i) => `<li class="${l.added ? 'added' : l.on ? '' : 'off'}">
+      <input type="checkbox" data-i="${i}" data-k="on" ${l.on && !l.added ? 'checked' : ''} ${l.added ? 'disabled' : ''} aria-label="Include ${esc(l.description)}">
+      <input data-i="${i}" data-k="description" value="${esc(l.description)}" ${l.added ? 'disabled' : ''} aria-label="Item">
+      <input type="number" step="any" data-i="${i}" data-k="amount" value="${esc(l.amount)}" ${l.added ? 'disabled' : ''} aria-label="Price ($)">
+      ${l.added ? `<span class="addedto">Added to ${esc(l.added)}</span>` : `<button type="button" class="link" data-remove="${i}" aria-label="Remove this line">&times;</button>`}
+    </li>`).join('')}</ul>
+    <button type="button" class="link" data-addline>+ Add a line that was missed</button>
+    <hr class="rule">
+    ${scan.total && Math.abs(allSum - scan.total) >= 0.01 ? `<p class="note">The lines add up to ${money(allSum)}, but the receipt total reads ${money(scan.total)}. Check for a missed or misread line.</p>` : ''}
+    ${left.length ? `<div class="grid">
+      <label class="f w4"><span>Add the ticked items to</span><select id="scanProject">${projects.map(p =>
+        `<option value="${p.id}" ${p.id === scanProjectId ? 'selected' : ''}>${esc(projectName(p))}${isClient(p) ? ` (${esc(p.data.client_name || p.quote_number)})` : ''}</option>`).join('')}</select></label>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button type="button" class="btn primary" id="scanAdd" ${picked.length && scanProjectId ? '' : 'disabled'}>Add ${picked.length} item${picked.length === 1 ? '' : 's'} (${money(pickedSum)}) to material costs</button>
+    </div>` : `<p class="note ok">Every item on this receipt has been added.</p>`}
+    <p style="margin-top:14px"><button type="button" class="link" data-new>Done with this receipt &middot; scan another</button></p>`;
+  const sel = $('#scanProject', box);
+  if (sel) typeAhead(sel);
+}
+
+// One listener on the page for the whole check-over form, so redraws don't stack up handlers.
+function scanEvents(e: Event) {
+  const el = e.target as any;
+  if (!scan || !el.closest?.('#scanBox')) return;
+  if (e.type === 'input' || e.type === 'change') {
+    if (el.dataset.scan) { scan[el.dataset.scan] = el.value; return; }
+    if (el.id === 'scanProject') { scanProjectId = Number(el.value); if (e.type === 'change') renderScan(); return; }
+    const line = scan.lines[el.dataset.i];
+    if (!line) return;
+    if (el.dataset.k === 'on') line.on = el.checked;
+    else if (el.dataset.k === 'amount') line.amount = el.value === '' ? '' : cents(num(el.value));
+    else line.description = el.value;
+    if (e.type !== 'change') return;
+    if (el.dataset.k === 'on') return renderScan();
+    // Redraw once focus has moved on, then put it back where it went (as the labor panel does).
+    setTimeout(() => {
+      const f = (document.activeElement as HTMLElement)?.dataset;
+      renderScan();
+      if (f?.i !== undefined && f.k) $(`#scanBox [data-i="${f.i}"][data-k="${f.k}"]`)?.focus();
+    });
+    return;
+  }
+  const btn = el.closest('button');
+  if (!btn) return;
+  if (btn.dataset.all) scan.lines.forEach(l => { if (!l.added) l.on = btn.dataset.all === '1'; });
+  else if (btn.dataset.remove) scan.lines.splice(Number(btn.dataset.remove), 1);
+  else if (btn.dataset.addline !== undefined) {
+    scan.lines.push({ description: '', qty: 1, amount: '', on: true });
+    renderScan();
+    $(`#scanBox [data-i="${scan.lines.length - 1}"][data-k="description"]`)?.focus();
+    return;
+  } else if (btn.dataset.new !== undefined) {
+    if (scan.lines.some(l => l.on && !l.added) && !confirm('Some ticked items haven\'t been added to a project yet. Start over anyway?')) return;
+    scan = null;
+    $('#scanBox').innerHTML = '';
+    return;
+  } else if (btn.id === 'scanAdd') return addScanned();
+  renderScan();
+}
+view.addEventListener('click', scanEvents);
+view.addEventListener('input', scanEvents);
+view.addEventListener('change', scanEvents);
+
+function addScanned() {
+  const p = store.projects.find(x => x.id === scanProjectId);
+  const lines = scan.lines.filter(l => l.on && !l.added && String(l.description).trim());
+  if (!p || !lines.length) return;
+  for (const l of lines) {
+    purchasesOf(p).push({ id: `m${Date.now().toString(36)}${(purchaseSeq++).toString(36)}`, date: scan.date, store: scan.store.trim(),
+      item: String(l.description).trim(), qty: l.qty || 1, amount: cents(num(l.amount)), receipt: scan.id });
+    l.added = projectName(p);
+    l.on = false;
+  }
+  p.updated_at = new Date().toISOString();
+  persist();
+  toast(`Added ${lines.length} item${lines.length === 1 ? '' : 's'} to ${projectName(p)}. Spent on materials so far: ${money(spentOn(p))}`);
+  renderScan();
+}
+
+// The "Material purchases" card on a project's page.
+function renderPurchasesCard(p) {
+  const card = $('#purchasesCard');
+  if (!card) return;
+  const list = [...(p.data.purchases || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const spent = spentOn(p), budget = budgetFor(p);
+  card.innerHTML = `<h2>Material purchases</h2>
+    ${list.length ? `<ul class="purchases">${list.map(x => `<li>
+      <span>${esc(x.item)}<br><small class="muted">${[x.store, x.date && shortDay(x.date)].filter(Boolean).map(esc).join(' &middot; ')}</small></span>
+      <span class="amt">${money(x.amount)}</span>
+      <button type="button" class="link" data-unpurchase="${esc(x.id)}" aria-label="Remove ${esc(x.item)}">&times;</button>
+    </li>`).join('')}</ul>
+    <hr class="rule">
+    <div class="tot"><b>Spent on materials</b><b>${money(spent)}</b></div>
+    ${budget ? `<div class="tot"><span class="muted">Estimated <small>${isBatch(p) ? 'materials' : 'lumber and hardware'}</small></span><span class="muted">${money(budget)}</span></div>
+    <div class="tot"><span class="${spent > budget ? 'over' : 'muted'}">${spent > budget ? 'Over the estimate' : 'Left in the estimate'}</span><span class="${spent > budget ? 'over' : 'muted'}">${money(Math.abs(budget - spent))}</span></div>` : ''}`
+    : '<p class="muted" style="margin:0 0 10px;font-size:14px">Nothing bought for this project yet.</p>'}
+    <div class="actions" style="margin-top:10px"><a class="btn small" href="#/receipt/${p.id}">Scan a receipt</a></div>`;
+}
+view.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-unpurchase]');
+  const p = ed?.project;
+  if (!btn || !p) return;
+  const item = (p.data.purchases || []).find(x => x.id === btn.dataset.unpurchase);
+  if (!item || !confirm(`Remove ${item.item} (${money(item.amount)}) from this project's purchases?`)) return;
+  p.data.purchases = p.data.purchases.filter(x => x !== item);
+  p.updated_at = new Date().toISOString();
+  persist();
+  renderPurchasesCard(p);
+});
 
 // ---------- design notes (internal; never shown on the client quote) ----------
 const NOTE_KINDS = ['Client call', 'Site visit', 'Email or message', 'Research', 'Other'];

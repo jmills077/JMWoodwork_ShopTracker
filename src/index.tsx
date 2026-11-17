@@ -4,6 +4,7 @@
 //   /api/*                JSON the browser script saves and reloads through
 //   /api/shop-products    the jmwood.work shop's small-batch products and variants
 //   /api/shop-orders      its unfulfilled orders (with the Shopify app connected)
+//   /api/receipts/scan    reads a receipt photo into line items (Workers AI)
 //   /app.css, /app.js     static files from public/ (served by Workers Static Assets)
 //   cron (weekly)         refreshes the supplier price list
 import { Hono } from 'hono';
@@ -13,6 +14,7 @@ import type { App, Env } from './env';
 import { endSession, isSignedIn, passwordMatches, startSession } from './lib/auth';
 import { BadRequest, createProject, getPrices, getState, importBackup, replacePrices, saveChanges } from './lib/db';
 import { readPriceLists } from './lib/prices';
+import { ReceiptError, scanReceipt } from './lib/receipts';
 import { readOpenOrders, readProducts, shopifyConnected } from './lib/shopify';
 import { AppPage } from './views/app';
 import { LoginPage, SetupPage } from './views/login';
@@ -115,6 +117,20 @@ app.get('/api/shop-orders', async c => {
     return c.json({ connected: true, ...await cached(c.env.DB, 'shop_orders', 5 * 60 * 1000, async () => ({ orders: await readOpenOrders(c.env) })) });
   } catch (error) {
     return c.json({ connected: true, error: String(error) }, 502);
+  }
+});
+
+// ---------- receipts ----------
+// The browser sends a shrunken photo as a data URL; the line items come back for checking over.
+// Nothing is saved here: the items picked are added to a project's purchases by the browser.
+app.post('/api/receipts/scan', async c => {
+  const { image } = await c.req.json<{ image?: string }>();
+  try {
+    return c.json(await scanReceipt(c.env, String(image ?? '')));
+  } catch (error) {
+    if (error instanceof ReceiptError) return c.json({ error: error.message }, 400);
+    console.error(`Receipt scan failed: ${error}`);
+    return c.json({ error: "Couldn't read the receipt just now. Try again in a minute." }, 502);
   }
 });
 

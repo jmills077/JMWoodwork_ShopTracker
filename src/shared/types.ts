@@ -17,3 +17,10 @@ export interface Project {
 export interface PriceItem { id: string; list: string; species: string; size: string; wide: string; spec: string; price: number }
 /** The supplier price list, as the browser app has always read it. */
 export interface Prices { source: string; checked: string; items: PriceItem[] }
+
+/** What a receipt photo was read as (src/lib/receipts.ts). The browser lets you check items over before saving. */
+export interface ScannedReceipt {
+  store: string; date: string;        // date as YYYY-MM-DD, '' if it couldn't be read
+  items: { description: string; quantity: number; amount: number }[];
+  tax: number; total: number;
+}
