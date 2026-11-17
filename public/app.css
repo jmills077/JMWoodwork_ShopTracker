@@ -300,12 +300,43 @@ header.top .signout:hover { color: #fff; text-decoration: underline; }
 .qbv { display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; width: 170px; font-size: 13px; }
 .qbv span { font-weight: 600; color: var(--ink); }
 .qbv small { color: var(--muted); font-weight: 400; }
+.qbv .qbctl { display: flex; }
+.qbv .qbctl .btn, .qbgroup, .qbv .qshort { display: none; }
+/* Phone: the product picker and date full width, then one compact row per variant (name and price on the left,
+   - qty + on the right, like the run page's Units to make), grouped by their first option when they share one. */
+@media (max-width: 600px) {
+  #batchForm .f { grid-column: 1 / -1; }
+  .qbvariants { flex-direction: column; flex-wrap: nowrap; gap: 0; }
+  .qbgroup { display: block; margin: 10px 0 2px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+  .qbgroup:first-child { margin-top: 2px; }
+  .qbv { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; width: auto; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .qbv:last-child { border-bottom: 0; }
+  .qbv .qbname { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+  .qbv .qbname > span, .qbv .qbname small { font-weight: inherit; }
+  .qbv .qshort { display: inline; }
+  .qbv .qlong { display: none; }
+  .qbv small { font-size: 13px; }
+  .qbv .qbctl { display: grid; grid-template-columns: 40px 52px 40px; gap: 6px; }
+  .qbv .qbctl .btn { display: block; padding: 6px 0; font-size: 18px; line-height: 1.2; }
+  .qbv .qbctl input { text-align: center; padding: 6px 4px; }
+  .qbv.some .qbctl input { border-color: var(--accent); font-weight: 700; }
+  .qbsubmit { flex-direction: column; align-items: stretch; gap: 6px; }
+  .qbsubmit .btn { width: 100%; padding: 12px; font-size: 16px; }
+  .qbsubmit #qbTotal { text-align: center; order: -1; }
+}
 .cols > * { min-width: 0; }
 .qty { display: grid; grid-template-columns: minmax(0, 1fr) 36px 72px 36px 56px; gap: 6px; align-items: center; padding: 4px 0; }
 .qty input { text-align: center; }
 .qty .btn.small { padding: 4px 0; font-size: 16px; line-height: 1.2; }
 #units #addVariant { flex: 0 1 auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 #quickBatch { margin-bottom: 20px; }
+#quickBatch .qbhead { margin-bottom: 12px; }
+#quickBatch.closed .qbhead { margin-bottom: 0; }
+#quickBatch.closed > :not(.qbhead) { display: none; }
+.qbtoggle { font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; background: none; border: 0; padding: 4px 0; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.qbtoggle:hover { color: var(--ink); }
+.qbchev { display: inline-block; transition: transform .15s; }
+.qbtoggle[aria-expanded="true"] .qbchev { transform: rotate(90deg); }
 
 /* to-do lists */
 .taskgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
