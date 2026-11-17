@@ -78,11 +78,30 @@ const STATUS_IN_STREAM = {
   own: { draft: 'planned', sent: 'planned', declined: 'planned', accepted: 'planned', delivered: 'complete' },
 };
 // The phase of the work itself, tracked separately from the quote/job status above.
+// Client and gallery pieces go through all five phases. Product-line pieces are already designed, so they
+// go Building, Finishing, Packaging, and then Shipped, which closes the project out (status Complete).
 const STAGES = [['ideation', 'Ideation'], ['design', 'Design'], ['build', 'Build'], ['finishing', 'Finishing'], ['ready', 'Delivery']];
-const STAGE_NAME = Object.fromEntries(STAGES);
-const stageOf = p => STAGE_NAME[p.stage] ? p.stage : 'ideation';
-// Each phase after ideation has its own due date. The last phase's is the project's target completion date.
-const stageDue = (p, key) => (key === 'ready' ? p.data.due_date : key === 'ideation' ? '' : p.data.stage_due?.[key]) || '';
+const PRODUCT_STAGES = [['building', 'Building'], ['finishing', 'Finishing'], ['packaging', 'Packaging'], ['shipped', 'Shipped']];
+const STAGE_NAME = Object.fromEntries([...STAGES, ...PRODUCT_STAGES]);
+const isProduct = p => streamOf(p) === 'product';
+const stagesFor = p => isProduct(p) ? PRODUCT_STAGES : STAGES;
+// The phase whose due date is the project's target date: delivery, or for a product the ship-by date.
+const lastPhase = p => isProduct(p) ? 'packaging' : 'ready';
+// A phase from the other kind of stream, carried to the nearest one this stream has (old product-line
+// projects were in the five client phases, and a project can be moved between streams).
+const STAGE_IN_STREAM = {
+  product: { ideation: 'building', design: 'building', build: 'building', ready: 'packaging' },
+  other: { building: 'build', packaging: 'ready', shipped: 'ready' },
+};
+const stageOf = p => {
+  const list = stagesFor(p);
+  if (list.some(([key]) => key === p.stage)) return p.stage;
+  return STAGE_IN_STREAM[isProduct(p) ? 'product' : 'other'][p.stage] || list[0][0];
+};
+const stageIndex = p => stagesFor(p).findIndex(([key]) => key === stageOf(p));
+// Each phase after ideation has its own due date (Shipped has none: it is the ship-by date being met).
+// The last dated phase's is the project's target completion date.
+const stageDue = (p, key) => (key === lastPhase(p) ? p.data.due_date : key === 'ideation' || key === 'shipped' ? '' : p.data.stage_due?.[key]) || '';
 const NEXT_STEP = {
   draft: ['sent', 'Mark quote as sent'], sent: ['accepted', 'Quote accepted'], accepted: ['in_progress', 'Start work'],
   in_progress: ['complete', 'Mark complete'], complete: ['delivered', 'Delivered & paid'],
@@ -493,9 +512,12 @@ function showBoard() {
   let stats;
   if (tab === 'client' || tab === 'all') {
     const open = by('sent'), done = by('complete', 'delivered');
-    const booked = active.filter(isClient);
+    // Booked work: client quotes that were accepted (and not yet finished), plus everything sitting in a
+    // phase of the product line, at retail value. Gallery pieces aren't for sale, so they're left out.
+    const booked = active.filter(isClient), products = shown.filter(p => isProduct(p) && !archived(p));
+    const bookedNote = tab === 'all' ? `${booked.length} client \u00b7 ${products.length} product` : `${booked.length} active`;
     stats = stat('Quotes awaiting answer', money(sum(open, p => p.calc.total)), `${open.length} sent`)
-      + stat('Booked client work', money(sum(booked, p => p.calc.total)), `${booked.length} active`)
+      + stat(tab === 'all' ? 'Booked Work' : 'Booked client work', money(sum([...booked, ...products], valueOf)), bookedNote)
       + stat('Shop hours booked', hrs(sum(active, shopHours)), tab === 'all' ? 'all active work' : 'accepted + in progress')
       + (tab === 'all' ? stat('Completed', String(done.length), 'pieces finished')
         : stat('Completed', money(sum(done, p => p.calc.total)), `${done.length} finished`));
@@ -515,8 +537,13 @@ function showBoard() {
     </a>`;
   const archive = shown.filter(archived).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const inStage = (key, list = shown) => list.filter(p => !archived(p) && stageOf(p) === key).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  const boardHtml = (list = shown) => `<div class="board">
-      ${STAGES.map(([key, name]) => `<section class="col" data-stage="${key}">
+  // The product line's Shipped column is where a run goes once it's in the mail: dropping it there
+  // closes it out to the archive, so the column itself stays empty.
+  const boardStages = stream => stream === 'product' ? PRODUCT_STAGES : STAGES;
+  const boardHtml = (list = shown, stream = tab) => `<div class="board ${stream === 'product' ? 'b-product' : ''}">
+      ${boardStages(stream).map(([key, name]) => key === 'shipped'
+        ? `<section class="col shipcol" data-stage="${key}"><h2><span>${name}</span><span></span></h2><p class="muted">Drop a run here once it ships. It closes out and moves to the archive.</p></section>`
+        : `<section class="col" data-stage="${key}">
         <h2><span>${name}</span><span>${inStage(key, list).length}</span></h2>${inStage(key, list).map(jobCard).join('')}</section>`).join('')}
     </div>`;
   // On a phone the board's five wide columns show little, so it becomes a compact list instead: a strip
@@ -542,8 +569,8 @@ function showBoard() {
       <span class="pside"><span class="amt">${money(valueOf(p))}</span><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></span>
       <span class="pdue">${dueLine(p)}<span class="muted">${hrs(shopHours(p))}</span></span>
     </a>`;
-  const listHtml = (list = shown) => {
-    const counts = STAGES.map(([key, name]) => [key, name, inStage(key, list).length]);
+  const listHtml = (list = shown, stream = tab) => {
+    const counts = boardStages(stream).filter(([key]) => key !== 'shipped').map(([key, name]) => [key, name, inStage(key, list).length]);
     const open = counts.reduce((n, c) => n + c[2], 0);
     return `<div class="plist s-${tab}">
       <div class="pstrip">${counts.map(([key, name, n]) => `<span class="${n ? '' : 'zero'}"><i class="st-${key}"></i>${name} <b>${n}</b></span>`).join('')}</div>
@@ -558,7 +585,7 @@ function showBoard() {
     const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
     return `<section class="lane ${key}" data-stream="${key}">
       <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open ${name.toLowerCase()} &rarr;</a></div>
-      ${boardHtml(list)}${listHtml(list)}
+      ${boardHtml(list, key)}${listHtml(list, key)}
     </section>`;
   }).join('');
   view.innerHTML = `
@@ -606,9 +633,8 @@ function showBoard() {
     const p = dragged, stream = col.closest('.lane')?.dataset.stream;
     const move = stream && stream !== streamOf(p);
     if (move && !confirm(`Move ${projectName(p)} to ${STREAM_NAME[stream]}?`)) { clearOver(); return; }
-    setStage(p, col.dataset.stage);
-    if (move) setStream(p, stream);
-    else showBoard();
+    if (move) setStream(p, stream, col.dataset.stage);
+    else { setStage(p, col.dataset.stage); showBoard(); }
   });
 }
 
@@ -625,13 +651,14 @@ function showCalendar(month) {
   // Its bar is split at each phase's due date, one colored stretch per phase; phases already
   // finished are faded. With no phase dates it is one bar in the color of the current phase.
   const nextDay = date => { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + 1); return ymd(d); };
-  const jobs = store.projects.filter(p => !isFrozen(p) && ['accepted', 'in_progress', 'complete'].includes(p.status)).map(p => {
+  // A product run comes off as soon as it ships.
+  const jobs = store.projects.filter(p => !isFrozen(p) && ['accepted', 'in_progress', 'complete'].includes(p.status) && !(isProduct(p) && p.status === 'complete')).map(p => {
     const began = (isClient(p) && p.history.findLast(h => h.status === 'accepted')) || p.history.findLast(h => h.status === 'in_progress');
     const start = ymd(new Date(began?.at || p.updated_at));
-    const current = STAGES.findIndex(([key]) => key === stageOf(p));
-    const dated = STAGES.map(([key], i) => ({ key, i, due: stageDue(p, key) })).filter(x => x.due);
+    const current = stageIndex(p);
+    const dated = stagesFor(p).map(([key], i) => ({ key, i, due: stageDue(p, key) })).filter(x => x.due);
     let segs = [];
-    if (dated.some(x => x.key !== 'ready')) {
+    if (dated.some(x => x.key !== lastPhase(p))) {
       let from = start;
       for (const x of dated) {
         if (x.due < from) continue;   // already past when the job started, or dated out of order
@@ -649,7 +676,8 @@ function showCalendar(month) {
     const seg = j.segs.find(x => today >= x.from && today <= x.to);
     const expected = seg ? seg.key : today < j.start ? '' : j.segs.at(-1).key;
     const marked = stageOf(j.p);
-    const behind = !!expected && STAGES.findIndex(([k]) => k === marked) < STAGES.findIndex(([k]) => k === expected);
+    const order = stagesFor(j.p).map(([k]) => k);
+    const behind = !!expected && order.indexOf(marked) < order.indexOf(expected);
     const next = j.segs.find(x => x.from > today);
     return { expected, marked, behind, next, late: today > j.end };
   };
@@ -691,7 +719,7 @@ function showCalendar(month) {
       ${calHeadButtons(monthLink)}
     </div>
     <div class="cal">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(n => `<div class="dow">${n}</div>`).join('')}${cells}</div>
-    <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}</div>
+    <div class="legend">${calLegend(jobs)}</div>
     <div class="card" style="margin-top:16px"><h2>Scheduled projects</h2>
       ${jobs.length ? `<table class="list"><tr><th>Project</th><th>Client or stream</th><th>Should be in</th><th>Marked</th><th>Phase due</th><th>Target completion</th></tr>
         ${jobs.map(j => `<tr><td><span class="swatch st-${plan(j).expected || stageOf(j.p)}"></span><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a></td>
@@ -717,6 +745,9 @@ const calHeadButtons = monthLink => `
       ${monthLink ? `<a class="btn" href="${monthLink(-1)}" aria-label="Previous month">&larr;</a>` : ''}
       <a class="btn" href="#/calendar" data-caltoday>Today</a>
       ${monthLink ? `<a class="btn" href="${monthLink(1)}" aria-label="Next month">&rarr;</a>` : ''}`;
+// The calendar's color key: the client phases, plus the product line's when a product run is on it.
+const calLegend = jobs => [...STAGES.map(([key, name]) => key === 'build' && jobs.some(j => isProduct(j.p)) ? [key, 'Build / Building'] : [key, name]), ...(jobs.some(j => isProduct(j.p)) ? PRODUCT_STAGES.filter(([key]) => key === 'packaging') : [])]
+  .map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('');
 // "Build", or "Build — still marked Design" in red when the board is behind the dates.
 const shouldBe = pl => !pl.expected ? '<span class="muted">Not started yet</span>'
   : `<span class="stagechip st-${pl.expected}">${STAGE_NAME[pl.expected]}</span>${pl.late ? ' <span class="late">past target date</span>' : pl.behind ? ` <span class="late">still marked ${STAGE_NAME[pl.marked]}</span>` : ''}`;
@@ -793,7 +824,7 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
       ${shown.length ? shown.map(row).join('') : '<p class="muted" style="margin:12px 0 0">Nothing is scheduled this month. A project appears once its quote is accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
       </div></div>
     </div>
-    <div class="legend">${STAGES.map(([key, name]) => `<span><span class="swatch st-${key}"></span>${name}</span>`).join('')}<span><span class="swatch tl-todaykey"></span>Today</span></div>`;
+    <div class="legend">${calLegend(jobs)}<span><span class="swatch tl-todaykey"></span>Today</span></div>`;
   view.querySelector('.tl-canvas').style.setProperty('--days', days);
   if (swipe) swipeTimeline({ days, first, dateAt, col, todayCol, monthTitle });
 }
@@ -1209,7 +1240,7 @@ async function createProject() {
   if (stream !== 'client') Object.assign(ed.data, { client_name: '', client_email: '', client_phone: '', client_state: '', retainer: 0 });
   const draft = {
     stream, status,
-    stage: 'ideation', data: ed.data, calc: price(ed.data, stream), history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp,
+    stage: stream === 'product' ? 'building' : 'ideation', data: ed.data, calc: price(ed.data, stream), history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp,
   };
   // Every project gets its to-do list the moment it is created.
   draft.data.todo = defaultTodo(draft);
@@ -1226,7 +1257,9 @@ async function createProject() {
 }
 
 function renderStatusCard() {
-  const p = ed.project, client = isClient(p), next = (client ? NEXT_STEP : OWN_NEXT_STEP)[p.status];
+  const p = ed.project, client = isClient(p);
+  // A product run is finished when it ships, so its last step says so (and moves it to the Shipped phase).
+  const next = p.status === 'in_progress' && isProduct(p) ? ['complete', 'Mark shipped'] : (client ? NEXT_STEP : OWN_NEXT_STEP)[p.status];
   $('#statusPill').className = `pill ${p.status}`;
   $('#statusPill').textContent = STATUS_NAME[p.status];
   const card = $('#statusCard');
@@ -1251,47 +1284,55 @@ function renderStatusCard() {
 }
 
 // Moves a project to another stream, carrying its status over to the nearest one that stream has.
-function setStream(p, stream) {
+// Its phase carries over the same way, unless a board drop names the phase it lands in.
+function setStream(p, stream, stage = '') {
   if (stream === streamOf(p)) return;
   const status = STATUS_IN_STREAM[stream === 'client' ? 'client' : 'own'][p.status] || p.status;
   p.stream = stream;
+  const carried = stage || stageOf(p);
+  if (carried !== p.stage) { p.stage = carried; p.history.push({ stage: carried, at: new Date().toISOString() }); }
   p.calc = priceProject(p, stream);
   p.updated_at = new Date().toISOString();
   if (status !== p.status) { p.status = status; p.history.push({ status, at: p.updated_at }); }
+  // Landing in Shipped closes a product run, and a run moved out of Shipped is open again. A finished
+  // piece moved into the product line counts as shipped.
+  if (isProduct(p) && !stage && p.status === 'complete') p.stage = 'shipped';
+  else if (isProduct(p)) syncShipped(p);
   persist();
   toast(`Moved to ${STREAM_NAME[stream]}`);
   route();
 }
 
-const STAGE_SHORT = { ideation: 'Idea', design: 'Design', build: 'Build', finishing: 'Finish', ready: 'Deliver' };
+const STAGE_SHORT = { ideation: 'Idea', design: 'Design', build: 'Build', finishing: 'Finish', ready: 'Deliver', building: 'Build', packaging: 'Pack', shipped: 'Shipped' };
 let phaseDatesOpen = false;
 
 function renderStages() {
-  const p = ed.project, current = STAGES.findIndex(([key]) => key === stageOf(p)), today = ymd(new Date());
+  const p = ed.project, current = stageIndex(p), today = ymd(new Date()), stages = stagesFor(p), last = lastPhase(p);
+  const undated = key => key === 'ideation' || key === 'shipped';
   const el = $('#stages');
   const late = (key, i) => i === current && stageDue(p, key) && stageDue(p, key) < today;
   // Desktop: one button per phase with its due date under it.
-  const grid = STAGES.map(([key, name], i) => {
+  const grid = stages.map(([key, name], i) => {
     const due = stageDue(p, key);
     return `<div>
       <button type="button" data-stage="${key}" class="${i < current ? 'done' : i === current ? 'on' : ''}" ${i === current ? 'aria-current="step"' : ''}>${i < current ? '&#10003; ' : ''}${name}</button>
-      ${key === 'ideation' ? '' : `<label class="due ${late(key, i) ? 'late' : ''}"><span>${late(key, i) ? 'Overdue' : 'Due'}</span>
+      ${undated(key) ? '' : `<label class="due ${late(key, i) ? 'late' : ''}"><span>${late(key, i) ? 'Overdue' : 'Due'}</span>
         <input type="date" data-due="${key}" value="${esc(due)}" aria-label="${name} due date"></label>`}
     </div>`;
   }).join('');
   // Phone: a tap-to-set stepper, then the current phase's due date and delivery, other dates tucked away.
   const dateRow = (key, i, label) => `<label class="pdate ${late(key, i) ? 'late' : ''}"><span>${label}${late(key, i) ? ' <b>Overdue</b>' : ''}</span>
     <input type="date" data-due="${key}" value="${esc(stageDue(p, key))}" aria-label="${STAGE_NAME[key]} due date"></label>`;
-  const main = STAGES.map(([key], i) => ({ key, i })).filter(({ key, i }) => key !== 'ideation' && (i === current || key === 'ready'));
-  const rest = STAGES.map(([key], i) => ({ key, i })).filter(({ key }) => key !== 'ideation' && !main.some(m => m.key === key));
-  const phone = `<ol class="stepper">${STAGES.map(([key, name], i) => `<li class="${i < current ? 'done' : i === current ? 'on' : ''}">
+  const main = stages.map(([key], i) => ({ key, i })).filter(({ key, i }) => !undated(key) && (i === current || key === last));
+  const rest = stages.map(([key], i) => ({ key, i })).filter(({ key }) => !undated(key) && !main.some(m => m.key === key));
+  const phone = `<ol class="stepper" style="--steps:${stages.length}">${stages.map(([key, name], i) => `<li class="${i < current ? 'done' : i === current ? 'on' : ''}">
       <button type="button" data-stage="${key}" ${i === current ? 'aria-current="step"' : ''} aria-label="${name}"><span class="dot">${i < current ? '&#10003;' : i + 1}</span><span class="lbl">${STAGE_SHORT[key]}</span></button></li>`).join('')}</ol>
     <div class="pdates">
-      ${main.map(({ key, i }) => dateRow(key, i, i === current ? `${STAGE_NAME[key]} due` : 'Delivery due')).join('')}
+      ${main.map(({ key, i }) => dateRow(key, i, i === current && key !== last ? `${STAGE_NAME[key]} due` : isProduct(p) ? 'Ship by' : 'Delivery due')).join('')}
       ${rest.length ? `<details ${phaseDatesOpen ? 'open' : ''}><summary>Other phase dates${rest.some(({ key }) => stageDue(p, key)) ? '' : ' (none set)'}</summary>
         ${rest.map(({ key, i }) => dateRow(key, i, STAGE_NAME[key])).join('')}</details>` : ''}
     </div>`;
-  el.innerHTML = `<div class="stagegrid">${grid}</div><div class="phasem">${phone}</div>`;
+  el.innerHTML = `<div class="stagegrid" style="--steps:${stages.length}">${grid}</div><div class="phasem">${phone}</div>`;
   el.querySelector('details')?.addEventListener('toggle', e => { phaseDatesOpen = e.target.open; });
   el.querySelectorAll('button[data-stage]').forEach(b => b.addEventListener('click', () => {
     setStage(p, b.dataset.stage);
@@ -1299,7 +1340,7 @@ function renderStages() {
     renderStatusCard();
   }));
   el.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
-    if (input.dataset.due === 'ready') p.data.due_date = input.value;
+    if (input.dataset.due === last) p.data.due_date = input.value;
     else (p.data.stage_due ??= {})[input.dataset.due] = input.value;
     p.updated_at = new Date().toISOString();
     persist();
@@ -1312,7 +1353,23 @@ function setStage(p, stage) {
   p.stage = stage;
   p.updated_at = new Date().toISOString();
   p.history.push({ stage, at: p.updated_at });
+  if (isProduct(p)) syncShipped(p);
   persist();
+}
+
+// For the product line, Shipped and Complete are the same thing: reaching one sets the other, which
+// closes the run out to the archive. Taking a run back out of Shipped (or Complete) reopens it.
+function syncShipped(p) {
+  const at = p.updated_at || new Date().toISOString();
+  if (stageOf(p) === 'shipped' && p.status !== 'complete') {
+    p.status = 'complete';
+    p.history.push({ status: 'complete', at });
+    finishTodo(p);
+    toast(`${projectName(p)} shipped and closed out`);
+  } else if (stageOf(p) !== 'shipped' && p.status === 'complete') {
+    p.status = 'in_progress';
+    p.history.push({ status: 'in_progress', at });
+  }
 }
 
 async function setStatus(p, status) {
@@ -1320,6 +1377,10 @@ async function setStatus(p, status) {
   p.status = status;
   p.updated_at = new Date().toISOString();
   p.history.push({ status, at: p.updated_at });
+  if (isProduct(p) && (status === 'complete') !== (stageOf(p) === 'shipped')) {
+    p.stage = status === 'complete' ? 'shipped' : 'packaging';
+    p.history.push({ stage: p.stage, at: p.updated_at });
+  }
   if (isFinished(p)) finishTodo(p);
   persist();
   if (ed?.project === p) renderStatusCard();
@@ -2080,8 +2141,8 @@ async function createBatch(pr, qtys, ship, opts: { source?: string; quiet?: bool
     },
   };
   data.rates.hourly_rate = s.hourly_rate;
-  // Starts in Build and In progress: it is a real order, and materials can be bought straight away.
-  const draft = { stream: 'product', status, stage: 'build', data, calc: batchCalc(data), history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp };
+  // Starts in Building and In progress: it is a real order, and materials can be bought straight away.
+  const draft = { stream: 'product', status, stage: 'building', data, calc: batchCalc(data), history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp };
   (draft.data as any).todo = defaultTodo(draft);
   let project;
   try { project = await api('/api/projects', draft); }
