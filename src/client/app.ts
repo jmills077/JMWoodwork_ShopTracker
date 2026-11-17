@@ -1254,18 +1254,37 @@ function setStream(p, stream) {
   route();
 }
 
+const STAGE_SHORT = { ideation: 'Idea', design: 'Design', build: 'Build', finishing: 'Finish', ready: 'Deliver' };
+let phaseDatesOpen = false;
+
 function renderStages() {
   const p = ed.project, current = STAGES.findIndex(([key]) => key === stageOf(p)), today = ymd(new Date());
   const el = $('#stages');
-  el.innerHTML = STAGES.map(([key, name], i) => {
+  const late = (key, i) => i === current && stageDue(p, key) && stageDue(p, key) < today;
+  // Desktop: one button per phase with its due date under it.
+  const grid = STAGES.map(([key, name], i) => {
     const due = stageDue(p, key);
     return `<div>
       <button type="button" data-stage="${key}" class="${i < current ? 'done' : i === current ? 'on' : ''}" ${i === current ? 'aria-current="step"' : ''}>${i < current ? '&#10003; ' : ''}${name}</button>
-      ${key === 'ideation' ? '' : `<label class="due ${i === current && due && due < today ? 'late' : ''}"><span>${i === current && due && due < today ? 'Overdue' : 'Due'}</span>
+      ${key === 'ideation' ? '' : `<label class="due ${late(key, i) ? 'late' : ''}"><span>${late(key, i) ? 'Overdue' : 'Due'}</span>
         <input type="date" data-due="${key}" value="${esc(due)}" aria-label="${name} due date"></label>`}
     </div>`;
   }).join('');
-  el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+  // Phone: a tap-to-set stepper, then the current phase's due date and delivery, other dates tucked away.
+  const dateRow = (key, i, label) => `<label class="pdate ${late(key, i) ? 'late' : ''}"><span>${label}${late(key, i) ? ' <b>Overdue</b>' : ''}</span>
+    <input type="date" data-due="${key}" value="${esc(stageDue(p, key))}" aria-label="${STAGE_NAME[key]} due date"></label>`;
+  const main = STAGES.map(([key], i) => ({ key, i })).filter(({ key, i }) => key !== 'ideation' && (i === current || key === 'ready'));
+  const rest = STAGES.map(([key], i) => ({ key, i })).filter(({ key }) => key !== 'ideation' && !main.some(m => m.key === key));
+  const phone = `<ol class="stepper">${STAGES.map(([key, name], i) => `<li class="${i < current ? 'done' : i === current ? 'on' : ''}">
+      <button type="button" data-stage="${key}" ${i === current ? 'aria-current="step"' : ''} aria-label="${name}"><span class="dot">${i < current ? '&#10003;' : i + 1}</span><span class="lbl">${STAGE_SHORT[key]}</span></button></li>`).join('')}</ol>
+    <div class="pdates">
+      ${main.map(({ key, i }) => dateRow(key, i, i === current ? `${STAGE_NAME[key]} due` : 'Delivery due')).join('')}
+      ${rest.length ? `<details ${phaseDatesOpen ? 'open' : ''}><summary>Other phase dates${rest.some(({ key }) => stageDue(p, key)) ? '' : ' (none set)'}</summary>
+        ${rest.map(({ key, i }) => dateRow(key, i, STAGE_NAME[key])).join('')}</details>` : ''}
+    </div>`;
+  el.innerHTML = `<div class="stagegrid">${grid}</div><div class="phasem">${phone}</div>`;
+  el.querySelector('details')?.addEventListener('toggle', e => { phaseDatesOpen = e.target.open; });
+  el.querySelectorAll('button[data-stage]').forEach(b => b.addEventListener('click', () => {
     setStage(p, b.dataset.stage);
     renderStages();
     renderStatusCard();
