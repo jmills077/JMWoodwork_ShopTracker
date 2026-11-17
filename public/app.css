@@ -312,6 +312,8 @@ header.top .signout:hover { color: #fff; text-decoration: underline; }
 .progress span { display: block; height: 100%; background: var(--good); }
 .addtask { display: flex; gap: 8px; margin-bottom: 6px; }
 .addtask input { flex: 1; }
+.addtask textarea { flex: 1; min-height: 0; resize: none; overflow-y: auto; max-height: 40vh; line-height: 1.35; field-sizing: content; }
+.addtask .btn { align-self: flex-start; }
 ul.tasks { list-style: none; margin: 0; padding: 0; }
 ul.tasks li.none { padding: 10px 2px; font-size: 14px; }
 /* No text selection or iPhone callout menu, so a long press can pick a task up. */
