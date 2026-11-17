@@ -431,10 +431,12 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .prow .pdue { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line); margin-top: 5px; padding-top: 5px; }
   .prow .soon { color: #a35a00; font-weight: 600; }
   .pnone { margin: 0; font-size: 13px; }
-  /* On a phone each stream is a rounded panel; its color band pins under the status bar while you're in it. */
-  .lane { padding: 0 10px 12px; }
+  /* Each stream runs edge to edge on a phone; its color band pins under the status bar while you're in it. */
+  .lane { margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))); padding: 0 max(12px, env(safe-area-inset-left)) 16px;
+    border-radius: 0; border-width: 1px 0; }
   .lane + .lane { margin-top: 22px; }
-  .lanehead { top: env(safe-area-inset-top, 0px); margin: 0 -10px 12px; padding: 10px 14px; }
+  .lanehead { top: env(safe-area-inset-top, 0px); margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))) 12px;
+    padding: 10px max(14px, env(safe-area-inset-left)); border-radius: 0; }
   .lanehead h2 { font-size: 15px; }
   .lanehead .lopen { display: none; }
   .stats { margin-bottom: 14px; }
