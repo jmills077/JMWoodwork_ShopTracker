@@ -2,7 +2,7 @@
   "name": "shop-tracker",
   "version": "2.0.0",
   "private": true,
-  "description": "Quotes, scheduling and Todoist hand-off for a custom furniture shop. Runs on Cloudflare Workers + D1.",
+  "description": "Quotes, scheduling and to-do lists for a custom furniture shop. Runs on Cloudflare Workers + D1.",
   "type": "module",
   "scripts": {
     "build:client": "esbuild src/client/app.ts --bundle --minify --format=esm --target=es2022 --outfile=public/app.js",

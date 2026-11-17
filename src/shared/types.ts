@@ -9,7 +9,7 @@ export interface Project {
   status: string; stage: string;
   data: Record<string, unknown>;      // client, spec, rates, phases, lumber, design notes, due dates; `frozen` while on hold
   calc: Record<string, unknown>;      // priced totals
-  todoist: Record<string, unknown>;   // progress creating the job's Todoist project
+  todoist: Record<string, unknown>;   // left over from the old Todoist hand-off; no longer used, kept so old data isn't lost
   history: { status?: string; stage?: string; at: string }[];
   created_at: string; updated_at: string;
 }
