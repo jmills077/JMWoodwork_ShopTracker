@@ -330,6 +330,13 @@ header.top .signout:hover { color: #fff; text-decoration: underline; }
 .qty .btn.small { padding: 4px 0; font-size: 16px; line-height: 1.2; }
 #units #addVariant { flex: 0 1 auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 #quickBatch { margin-bottom: 20px; }
+#quickBatch .qbhead { margin-bottom: 12px; }
+#quickBatch.closed .qbhead { margin-bottom: 0; }
+#quickBatch.closed > :not(.qbhead) { display: none; }
+.qbtoggle { font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; background: none; border: 0; padding: 4px 0; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.qbtoggle:hover { color: var(--ink); }
+.qbchev { display: inline-block; transition: transform .15s; }
+.qbtoggle[aria-expanded="true"] .qbchev { transform: rotate(90deg); }
 
 /* to-do lists */
 .taskgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }

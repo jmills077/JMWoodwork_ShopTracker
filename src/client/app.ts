@@ -2084,7 +2084,9 @@ function qbGroup(name) {
   return parts.length > 1 ? { head: parts[0], rest: parts.slice(1).join(' / ') } : null;
 }
 
-// The quick form at the top of the Product line tab.
+// The quick form at the top of the Product line tab. It starts closed (just its header) each time the
+// app opens, stays open while you use it, and closes again once a run is added.
+let qbOpen = false;
 function renderQuickBatch() {
   const card = $('#quickBatch'), products = (store.settings.products || []).filter(x => x.listed !== false);
   if (!products.length) {
@@ -2100,7 +2102,8 @@ function renderQuickBatch() {
     // ("Wave"), so each row only needs the rest. Only when that actually groups something.
     const heads = variants.map(v => qbGroup(v.name)?.head);
     const groups = variants.length > 2 && heads.every(Boolean) && new Set(heads).size < variants.length;
-    card.innerHTML = `<div class="actions" style="margin-bottom:12px"><h2 style="margin:0">Quick batch run</h2><span style="flex:1"></span><a href="#/products" style="font-size:13px">Edit products</a></div>
+    card.classList.toggle('closed', !qbOpen);
+    card.innerHTML = `<div class="actions qbhead"><h2 style="margin:0"><button type="button" class="qbtoggle" aria-expanded="${qbOpen}"><span class="qbchev" aria-hidden="true">&#9656;</span> Quick batch run</button></h2><span style="flex:1"></span><a href="#/products" style="font-size:13px">Edit products</a></div>
       ${store.shopifyConnected ? '<p class="muted" style="margin:-4px 0 12px;font-size:13px">Your Shopify orders fill a run for each product on their own. Use this for anything extra, like stock for a market.</p>' : ''}
       <form id="batchForm" class="grid" autocomplete="off">
         <label class="f"><span>Product</span><select id="qbProduct">${products.map(x => `<option value="${esc(x.id)}" ${x.id === pr.id ? 'selected' : ''}>${esc(x.name || 'Unnamed product')}</option>`).join('')}</select></label>
@@ -2124,6 +2127,7 @@ function renderQuickBatch() {
       return units;
     };
     total();
+    $('.qbtoggle', card).addEventListener('click', () => { qbOpen = !qbOpen; draw(); });
     $('#qbProduct', card).addEventListener('change', e => { chosen = e.target.value; draw(); });
     form.addEventListener('input', total);
     // The phone's - / + buttons beside each variant.
@@ -2149,6 +2153,7 @@ function renderQuickBatch() {
       button.disabled = true;
       const made = await createBatch(pr, qtys(), ship);
       button.disabled = false;
+      if (made) qbOpen = false;
       if (made && location.hash.startsWith('#/s/product')) showBoard();
     });
   };
