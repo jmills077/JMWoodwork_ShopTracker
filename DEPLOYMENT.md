@@ -76,6 +76,13 @@ npm run deploy
 This applies any new files in `migrations/` to the Cloudflare database first, then deploys.
 `wrangler deploy` runs `npm run build:client` itself, so the browser script is always rebuilt.
 
+## Receipt scanning
+
+Reading receipt photos uses Workers AI through the `ai` binding in `wrangler.jsonc`. There's nothing
+to set up: it's turned on with the deploy, needs no secret, and is billed to the Cloudflare account
+(a shop's receipts fit well inside the daily free allowance). Usage shows in the dashboard under
+**AI → Workers AI**.
+
 ## The weekly price check
 
 The cron trigger in `wrangler.jsonc` (`17 9 * * 1`: Mondays at 09:17 UTC, about 5 am Eastern) is
