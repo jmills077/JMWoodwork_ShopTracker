@@ -35,5 +35,5 @@
   // Weekly supplier price check: Mondays, about 5 am Eastern.
   "triggers": { "crons": ["17 9 * * 1"] }
 
-  // Secrets (not in this file): APP_PASSWORD, TODOIST_TOKEN. Locally, put them in .dev.vars.
+  // Secrets (not in this file): APP_PASSWORD, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET. Locally, put them in .dev.vars.
 }

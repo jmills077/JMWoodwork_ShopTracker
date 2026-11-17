@@ -56,7 +56,7 @@ async function getSetting<T>(db: D1Database, key: string): Promise<T | null> {
   return row ? JSON.parse(row.value) : null;
 }
 
-/** Everything the browser app starts from, apart from whether Todoist is connected. */
+/** Everything the browser app starts from, apart from whether Shopify is connected. */
 export async function getState(db: D1Database) {
   const [saved, projects] = await Promise.all([
     getSetting<{ settings: Settings; updatedAt: string }>(db, 'settings'),
@@ -105,8 +105,6 @@ export async function createProject(db: D1Database, draft: unknown): Promise<Pro
 export async function importBackup(db: D1Database, backup: any) {
   if (!backup || !Array.isArray(backup.projects) || !backup.settings) throw new BadRequest('That file is not a Shop Tracker backup.');
   backup.projects.forEach((p: unknown) => checkProject(p));
-  // A Todoist sync the old app was in the middle of must be retryable.
-  for (const p of backup.projects as Project[]) delete p.todoist?.busy;
   await db.batch([
     db.prepare('DELETE FROM projects'),
     db.prepare("DELETE FROM settings WHERE key = 'settings'"),

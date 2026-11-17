@@ -27,7 +27,6 @@ the existing id:
 
 ```sh
 npx wrangler secret put APP_PASSWORD    # the sign-in password
-npx wrangler secret put TODOIST_TOKEN   # Todoist → Settings → Integrations → Developer → API token
 ```
 
 ### Shopify (optional: small-batch runs from orders)
@@ -43,9 +42,6 @@ npx wrangler secret put SHOPIFY_CLIENT_SECRET
 ```
 
 Without them, products still come from the shop's public storefront feed and runs are made by hand.
-
-To change the Todoist token later, run `npx wrangler secret put TODOIST_TOKEN` again. On a Worker
-that's already deployed, this publishes the change immediately. Without the secret, the app runs with Todoist turned off.
 
 Use a strong password for `APP_PASSWORD`. Anyone with the app's URL and this password can see and change all the
 shop's data. (If you'd rather sign in with Google or email codes, put the Worker behind
@@ -63,8 +59,7 @@ npm run deploy              # applies any new migrations, then deploys
 Wrangler prints the app's URL (`https://shop-tracker.<your-subdomain>.workers.dev`). Open it,
 sign in, then:
 
-1. **Settings → Todoist → Test connection** to check the token.
-2. **Settings → Backup → Import backup…**: import a backup exported from the old app (see the
+1. **Settings → Backup → Import backup…**: import a backup exported from the old app (see the
    README).
 
 ## Updating

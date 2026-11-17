@@ -20,15 +20,14 @@ import { orderAdminUrl, readOpenOrders, readProducts, readRecentOrders, shopifyC
 import { AppPage } from './views/app';
 import { LoginPage, SetupPage } from './views/login';
 
-const TODOIST_API = 'https://api.todoist.com/api/v1';
 // The products on the Small Batch Projects page of the shop (jmwood.work/pages/small-batch-projects),
 // from Shopify's public storefront feed. No sign-in is needed: it's what any visitor to the shop sees.
 const SHOP_PRODUCTS = 'https://jmwood.work/collections/all-products-collection/products.json?limit=250';
 
 const app = new Hono<App>();
 
-// The shop's data for the browser, plus whether the Todoist and Shopify secrets are set (never the secrets themselves).
-const appState = async (env: Env) => ({ ...await getState(env.DB), todoistConnected: !!env.TODOIST_TOKEN, shopifyConnected: shopifyConnected(env) });
+// The shop's data for the browser, plus whether the Shopify secrets are set (never the secrets themselves).
+const appState = async (env: Env) => ({ ...await getState(env.DB), shopifyConnected: shopifyConnected(env) });
 
 // Form posts must come from this site.
 app.use(csrf());
@@ -165,21 +164,6 @@ app.post('/api/receipts/scan', async c => {
     console.error(`Receipt scan failed: ${error}`);
     return c.json({ error: "Couldn't read the receipt just now. Try again in a minute." }, 502);
   }
-});
-
-// ---------- Todoist ----------
-// Passes the browser's Todoist requests on with the TODOIST_TOKEN secret, and Todoist's answers back as they are.
-app.all('/api/todoist/*', async c => {
-  const token = c.env.TODOIST_TOKEN;
-  if (!token) return c.text('The TODOIST_TOKEN secret is not set.', 401);
-  const url = new URL(c.req.url);
-  const body = ['GET', 'HEAD'].includes(c.req.method) ? undefined : await c.req.text();
-  const res = await fetch(TODOIST_API + url.pathname.slice('/api/todoist'.length) + url.search, {
-    method: c.req.method,
-    headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-    body,
-  });
-  return new Response(res.body, { status: res.status, headers: { 'Content-Type': res.headers.get('Content-Type') ?? 'text/plain' } });
 });
 
 app.onError((err, c) => {

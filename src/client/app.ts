@@ -67,8 +67,8 @@ const statusesFor = stream => stream === 'client' ? STATUSES : OWN_STATUSES;
 // Delivered and declined client projects, and finished product and gallery pieces, leave the board for the archive.
 const archived = p => isClient(p) ? ['delivered', 'declined'].includes(p.status) : p.status === 'complete';
 // A frozen project is on hold: the client went quiet but may come back, or the job hit a long delay.
-// It keeps its status, phase and dates, but leaves the board and calendar for the Frozen list, and
-// its Todoist project is archived, until it is unfrozen. data.frozen is { at, reason }.
+// It keeps its status, phase and dates, but leaves the board and calendar for the Frozen list
+// until it is unfrozen. data.frozen is { at, reason }.
 const isFrozen = p => !!p.data?.frozen;
 // A status from one stream carried over to another when a project changes stream.
 const STATUS_IN_STREAM = {
@@ -212,12 +212,9 @@ function price(data, stream = 'client') {
 let store = loadStore(JSON.parse(document.getElementById('initialState').textContent));
 
 function loadStore(saved: any) {
-  // A Todoist sync interrupted by closing the page must be retryable.
-  for (const p of saved.projects || []) delete p.todoist?.busy;
   return {
     settings: { ...structuredClone(DEFAULT_SETTINGS), ...(saved.settings || {}) },
     projects: Array.isArray(saved.projects) ? saved.projects : [],
-    todoistConnected: !!saved.todoistConnected,   // whether the server has a Todoist token (the TODOIST_TOKEN secret)
     shopifyConnected: !!saved.shopifyConnected,   // whether the server can read the shop's orders (the SHOPIFY_* secrets)
     settingsUpdatedAt: saved.settingsUpdatedAt || '',
   };
@@ -256,72 +253,6 @@ function toast(message) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
-}
-
-// ---------- Todoist ----------
-// Requests go through the server, which adds the API token (the TODOIST_TOKEN secret) and passes them on to Todoist.
-const TODOIST_API = '/api/todoist';
-
-async function todoist(method, path, body?) {
-  let res;
-  try {
-    res = await fetch(TODOIST_API + path, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    throw new Error('Could not reach Todoist. Check your internet connection.');
-  }
-  if (res.status === 401 || res.status === 403) throw new Error('Todoist rejected the API token. Check the TODOIST_TOKEN secret.');
-  if (!res.ok) throw Object.assign(new Error(`Todoist returned ${res.status}: ${(await res.text()).slice(0, 200)}`), { status: res.status });
-  return res.status === 204 ? {} : res.json();
-}
-
-// The task list created in Todoist when a quote is accepted.
-function todoistPlan(p) {
-  const { data, calc } = p;
-  const client = isClient(p);
-  const tasks = [
-    ...(client ? [{ content: `Collect deposit (${money(calc.deposit)})`, description: `Quote ${p.quote_number}, total ${money(calc.total)}` }] : []),
-    { content: 'Order lumber & hardware', description: `About ${calc.lumber?.feet ? lumberSummary(data, calc.lumber) : `${calc.board_feet} board feet of ${data.spec.species || 'lumber'}`}` },
-  ];
-  for (const phase of data.phases) {
-    if (pos(phase.hours) > 0 && phase.name) tasks.push({ content: phase.name, description: `Estimated ${hrs(phase.hours)}` });
-  }
-  if (client) tasks.push({ content: `Collect final payment (${money((calc.balance ?? calc.total) - calc.deposit)})`, description: '' });
-  const name = projectName(p) + (client && data.client_name ? ` - ${data.client_name}` : client ? '' : ` - ${STREAM_NAME[streamOf(p)]}`);
-  return { name: name.slice(0, 120), tasks };
-}
-
-// Creates the Todoist project and its tasks. Picks up where it left off if a previous attempt failed part-way.
-async function syncTodoist(p) {
-  const state = p.todoist;
-  if (state.synced || state.busy || isFrozen(p)) return;
-  if (!store.todoistConnected) { state.error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.'; persist(); return; }
-  if (!state.plan) { state.plan = todoistPlan(p); state.created = 0; }
-  state.busy = true;
-  try {
-    if (!state.project_id) {
-      const created = await todoist('POST', '/projects', { name: state.plan.name });
-      if (!created.id) throw new Error('Unexpected response from Todoist.');
-      state.project_id = String(created.id);
-      state.url = `https://app.todoist.com/app/project/${state.project_id}`;
-      persist();
-    }
-    while (state.created < state.plan.tasks.length) {
-      await todoist('POST', '/tasks', { ...state.plan.tasks[state.created], project_id: state.project_id });
-      state.created++;
-      persist();
-    }
-    state.synced = true;
-    state.error = null;
-  } catch (e) {
-    state.error = e.message;
-  }
-  delete state.busy;
-  p.updated_at = new Date().toISOString();
-  persist();
 }
 
 // ---------- supplier lumber prices ----------
@@ -459,8 +390,6 @@ async function save(keepalive = false) {
 
 // Pick up changes made on other devices.
 async function refresh() {
-  // Wait for a Todoist project that is mid-creation, so its progress isn't replaced underneath it.
-  if (store.projects.some(p => p.todoist.busy)) return;
   await save();
   const seq = changeSeq;
   let remote;
@@ -472,7 +401,6 @@ async function refresh() {
   // Something was edited while the request was out: leave it for the next refresh.
   if (seq !== changeSeq || saving || pendingChanges().any) return;
   const next = loadStore(remote);
-  store.todoistConnected = next.todoistConnected;
   store.shopifyConnected = next.shopifyConnected;
   if (JSON.stringify([next.settings, next.projects], unbusy) === JSON.stringify([store.settings, store.projects], unbusy)) return;
   store = next;
@@ -1112,9 +1040,8 @@ function showEditor(project, newStream = 'client') {
             <label class="f"><span>Board width (in)</span><input type="number" min="0" step="any" data-lumber="width" value="${esc(d.lumber.width)}"></label>
           </div>
           <p id="lumberOut" style="margin:12px 0 0"></p>
-          ${project ? '<div class="actions" style="margin-top:12px"><button type="button" class="btn" id="lumberSend">Send to Todoist</button><span class="muted" id="lumberSent" style="font-size:13px"></span></div>' : ''}
         </div>
-        ${project ? '<div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>' : ''}
+        ${project ? '<div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div>' : ''}
         ${project ? '<p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this project</button></p>' : ''}
       </aside>
     </div>`;
@@ -1174,24 +1101,16 @@ function showEditor(project, newStream = 'client') {
     d.lumber[e.target.dataset.lumber] = inputValue(e.target);
     changed();
   });
-  $('#lumberSend')?.addEventListener('click', async e => {
-    e.target.disabled = true;
-    await sendLumberTask(project);
-    e.target.disabled = false;
-  });
-
   if (project) {
     $('#delete').addEventListener('click', () => {
-      const synced = project.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
       const what = isClient(project) ? `${project.quote_number} (${projectName(project)})` : projectName(project);
-      if (!confirm(`Delete ${what}? This cannot be undone.${synced}`)) return;
+      if (!confirm(`Delete ${what}? This cannot be undone.`)) return;
       store.projects = store.projects.filter(p => p !== project);
       persist();
       location.hash = boardLink();
     });
     renderStages();
     renderStatusCard();
-    renderTodoistCard();
   }
   renderPanel();
   if (project) renderPurchasesCard(project);
@@ -1273,39 +1192,6 @@ function renderLumber(calc) {
     ? `<b>About ${esc(lumberSummary(d, n))}</b><br><span class="muted" style="font-size:13px">${+n.bf} board feet &times; 12 &divide; (${n.quarters / 4}" &times; ${+n.width}") = ${+n.exactFeet.toFixed(1)} ft,
         rounded up to full ${BOARD_LENGTH_FT} ft boards. That is ${+n.buyBf} board feet to buy, which the materials cost above is based on.</span>`
     : `<span class="muted">Enter the width of the boards available to see how many linear feet to buy, in full ${BOARD_LENGTH_FT} ft boards.</span>`;
-  if ($('#lumberSent')) $('#lumberSent').textContent = d.lumber.sent ? `Last sent: ${d.lumber.sent}` : '';
-}
-
-// Creates a pickup task in Todoist, or updates the one sent earlier if it is still open.
-async function sendLumberTask(p) {
-  const n = p.calc.lumber, lumber = p.data.lumber;
-  if (!n.feet) return toast('Enter the board width first.');
-  if (!store.todoistConnected) return toast('Todoist is not connected. Set the TODOIST_TOKEN secret first.');
-  const summary = lumberSummary(p.data, n);
-  const body = {
-    content: `Pick up about ${summary}`,
-    description: `${+n.bf} board feet for ${projectName(p)} (${isClient(p) ? p.quote_number : STREAM_NAME[streamOf(p)]}).`,
-  };
-  try {
-    let task = null, updated = false;
-    if (lumber.task_id) {
-      try { task = await todoist('POST', `/tasks/${lumber.task_id}`, body); } catch { task = null; }
-      updated = !!task?.id && !task.checked && !task.is_deleted;
-    }
-    if (!updated) {
-      const home = p.todoist.project_id ? { project_id: p.todoist.project_id } : {};   // the job's own list, else the Inbox
-      try { task = await todoist('POST', '/tasks', { ...body, ...home }); }
-      catch (e) { if (!home.project_id) throw e; task = await todoist('POST', '/tasks', body); }
-    }
-    lumber.task_id = String(task.id);
-    lumber.sent = summary;
-    p.updated_at = new Date().toISOString();
-    persist();
-    toast(updated ? 'Todoist task updated.' : 'Pickup task sent to Todoist.');
-  } catch (e) {
-    toast(`Todoist: ${e.message}`);
-  }
-  if (ed?.project === p) renderLumber(p.calc);
 }
 
 async function createProject() {
@@ -1314,7 +1200,7 @@ async function createProject() {
   if (stream !== 'client') Object.assign(ed.data, { client_name: '', client_email: '', client_phone: '', client_state: '', retainer: 0 });
   const draft = {
     stream, status,
-    stage: 'ideation', data: ed.data, calc: price(ed.data, stream), todoist: {}, history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp,
+    stage: 'ideation', data: ed.data, calc: price(ed.data, stream), history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp,
   };
   // Every project gets its to-do list the moment it is created.
   draft.data.todo = defaultTodo(draft);
@@ -1328,8 +1214,6 @@ async function createProject() {
   ed.dirty = false;
   toast(stream === 'client' ? `Saved as ${project.quote_number}` : 'Project saved');
   location.hash = `#/p/${project.id}`;
-  // A product-line piece gets its Todoist list right away, so materials can be bought as soon as it's ordered.
-  if (stream === 'product' && store.todoistConnected) runTodoistSync(project);
 }
 
 function renderStatusCard() {
@@ -1410,54 +1294,13 @@ async function setStatus(p, status) {
   p.history.push({ status, at: p.updated_at });
   if (isFinished(p)) finishTodo(p);
   persist();
-  if (ed?.project === p) { renderStatusCard(); renderTodoistCard(); }
+  if (ed?.project === p) renderStatusCard();
   else showBoard();
-  // Accepting a quote, or starting work on one of the shop's own pieces, opens the job in Todoist.
-  if (status === (isClient(p) ? 'accepted' : 'in_progress') && !p.todoist.synced && !p.todoist.busy) {
-    if (isFrozen(p)) toast('Its Todoist list will be made when you unfreeze it.');
-    else if (store.todoistConnected) await runTodoistSync(p);
-    else toast(`${isClient(p) ? 'Quote accepted' : 'Work started'}. Set the TODOIST_TOKEN secret to create its task list.`);
-  }
-}
-
-async function runTodoistSync(p) {
-  const first = !p.todoist.project_id;
-  const pending = isBatch(p) ? syncBatchTodoist(p) : syncTodoist(p);
-  if (ed?.project === p) renderTodoistCard();
-  await pending;
-  toast(p.todoist.error ? `Todoist: ${p.todoist.error}` : first ? 'Todoist project created.' : 'Todoist updated.');
-  if (ed?.project === p) renderTodoistCard();
-}
-
-function renderTodoistCard() {
-  const p = ed.project, t = p.todoist, card = $('#todoistCard');
-  if (!card) return;
-  const wanted = streamOf(p) === 'product' || ['accepted', 'in_progress', 'complete'].includes(p.status);
-  const when = isClient(p) ? 'this quote is accepted' : streamOf(p) === 'product' ? 'the project is created' : 'work starts';
-  let body;
-  if (t.archive_error) body = `<p class="note err">${esc(t.archive_error)}</p>
-    <div class="actions"><button class="btn primary" id="archiveRetry">Retry</button>${t.url ? `<a class="btn" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Todoist</a>` : ''}</div>`;
-  else if (isFrozen(p)) body = t.project_id
-    ? `<p class="muted">Its Todoist project is archived while the project is frozen. Unfreezing brings it back with its tasks as they were.</p>`
-    : '<p class="muted">Frozen. Any Todoist list is made once it is unfrozen.</p>';
-  else if (isBatch(p)) body = batchTodoistHtml(p);
-  else if (t.busy) body = '<p class="note">Creating the project and tasks in Todoist&hellip;</p>';
-  else if (t.synced) body = `<p class="note ok">Task list created (${t.plan.tasks.length} tasks).</p>
-    <a class="btn" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Todoist</a>`;
-  else if (t.error) body = `<p class="note err">${esc(t.error)}</p>
-    ${t.created ? `<p class="muted">${t.created} of ${t.plan.tasks.length} tasks were created. Retrying continues from there.</p>` : ''}
-    <div class="actions"><button class="btn primary" id="sync">Retry</button><a href="#/settings">Todoist settings</a></div>`;
-  else if (!store.todoistConnected) body = `<p class="muted">Connect Todoist (see <a href="#/settings">Settings</a>) and a project with a task list will be created when ${when}.</p>`;
-  else if (wanted) body = '<button class="btn primary" id="sync">Create Todoist project</button>';
-  else body = `<p class="muted">A Todoist project with one task per build phase will be created when ${when}.</p>`;
-  card.innerHTML = `<h2>Todoist</h2>${body}`;
-  $('#sync', card)?.addEventListener('click', () => runTodoistSync(p));
-  $('#archiveRetry', card)?.addEventListener('click', () => matchTodoistToFreeze(p));
 }
 
 // ---------- frozen projects ----------
 function freezeProject(p) {
-  const reason = prompt(`Freeze ${projectName(p)}? It leaves the board and calendar until you unfreeze it${p.todoist.project_id ? ', and its Todoist project is archived' : ''}.\n\nWhy is it on hold? (optional)`, '');
+  const reason = prompt(`Freeze ${projectName(p)}? It leaves the board and calendar until you unfreeze it.\n\nWhy is it on hold? (optional)`, '');
   if (reason === null) return;
   const at = new Date().toISOString();
   p.data.frozen = { at, reason: reason.trim() };
@@ -1466,7 +1309,6 @@ function freezeProject(p) {
   persist();
   toast(`${projectName(p)} is frozen. It's under Frozen on the Projects page.`);
   route();
-  matchTodoistToFreeze(p);
 }
 
 // Puts a frozen project back where it left off. The time it spent frozen can be added to its due dates.
@@ -1488,40 +1330,6 @@ function unfreezeProject(p) {
   persist();
   toast(`${projectName(p)} is back on the board.`);
   route();
-  matchTodoistToFreeze(p);
-}
-
-// Archives a frozen project's Todoist project, and brings it back (tasks and all) when it is unfrozen.
-// A batch run edited while frozen is then brought up to date, and a job that was accepted or started
-// while frozen gets the Todoist list it would have had.
-async function matchTodoistToFreeze(p) {
-  const t = p.todoist, frozen = isFrozen(p);
-  if (t.busy) { setTimeout(() => matchTodoistToFreeze(p), 1500); return; }
-  if (t.project_id && !!t.archived !== frozen) {
-    if (!store.todoistConnected) t.archive_error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.';
-    else {
-      try {
-        await todoist('POST', `/projects/${t.project_id}/${frozen ? 'archive' : 'unarchive'}`);
-        t.archived = frozen;
-        delete t.archive_error;
-      } catch (e) {
-        if (e.status === 404) t.archived = frozen;   // deleted in Todoist: nothing to archive or bring back
-        else t.archive_error = `Couldn't ${frozen ? 'archive' : 'bring back'} its Todoist project. ${e.message}`;
-      }
-    }
-    p.updated_at = new Date().toISOString();
-    persist();
-  } else if (t.archive_error) {
-    delete t.archive_error;
-    persist();
-  }
-  if (t.archive_error) toast(`Todoist: ${t.archive_error}`);
-  else if (!frozen && store.todoistConnected) {
-    if (isBatch(p) && t.project_id) await syncBatchTodoist(p);
-    else if (!t.project_id && !t.synced && p.status === (isClient(p) ? 'accepted' : 'in_progress')) await runTodoistSync(p);
-    else if (t.project_id) toast('Its Todoist project is back.');
-  }
-  if (ed?.project === p) renderTodoistCard();
 }
 
 // Every frozen project, to look over and unfreeze.
@@ -1534,8 +1342,8 @@ function showFrozen() {
   };
   view.innerHTML = `<a href="${boardLink()}" class="back">&larr; Projects</a>
     <div class="pagehead"><h1>Frozen projects</h1></div>
-    <p class="muted">Projects on hold: a client who's gone quiet but may come back, or a job with a long delay. They stay off the board and calendar,
-      and their Todoist projects are archived. Unfreezing one puts it back on the board where it left off and brings its Todoist project back.</p>
+    <p class="muted">Projects on hold: a client who's gone quiet but may come back, or a job with a long delay. They stay off the board and calendar.
+      Unfreezing one puts it back on the board where it left off.</p>
     ${list.length ? `<div class="card"><table class="list frozenlist">
       <tr><th>Project</th><th>Client or stream</th><th>Where it was</th><th>Frozen since</th><th>Why</th><th></th></tr>
       ${list.map(p => `<tr><td><a href="#/p/${p.id}">${esc(projectName(p))}</a>${isClient(p) ? `<br><small class="muted">${esc(p.quote_number)}</small>` : ''}</td>
@@ -2052,8 +1860,7 @@ function longPressReorder(ul, drop) {
 // A batch run is a product-line project made from one of the catalog's products (Settings → Products):
 // so many units, split by variant, to be in the mail by a ship-by date (the project's due date). The
 // product's per-unit price, cost, time and materials are copied in when the run is created, so later
-// catalog edits don't change runs already under way. Its Todoist project is created with the run and
-// kept up to date as units or the date change.
+// catalog edits don't change runs already under way.
 function isBatch(p) { return !!p.data.batch; }
 function batchUnits(b) { return b.variants.reduce((n, v) => n + pos(v.qty), 0); }
 const variantLabel = (b, v) => v.name ? `${b.product} (${v.name})` : b.product;
@@ -2070,103 +1877,6 @@ function batchCalc(data) {
   };
 }
 function priceProject(p, stream = streamOf(p)) { return isBatch(p) ? batchCalc(p.data) : price(p.data, stream); }
-
-// What the run's Todoist project should hold: buying materials first, a task per variant, and shipping.
-function batchTodoistPlan(p) {
-  const b = p.data.batch, units = batchUnits(b), ship = p.data.due_date || '';
-  const making = b.variants.filter(v => pos(v.qty) > 0);
-  const breakdown = making.map(v => `${pos(v.qty)} \u00d7 ${variantLabel(b, v)}`).join('\n');
-  const tasks = [
-    { key: 'materials', content: `Buy materials for ${units} \u00d7 ${b.product}`,
-      description: [b.materials ? `Per unit: ${b.materials}` : '', breakdown].filter(Boolean).join('\n\n'), due: ymd(new Date(p.created_at)) },
-    ...making.map(v => ({ key: `v:${v.id}`, content: `Make ${pos(v.qty)} \u00d7 ${variantLabel(b, v)}`, description: '', due: ship })),
-    { key: 'ship', content: `Ship ${units} \u00d7 ${b.product}`, description: breakdown, due: ship },
-  ];
-  const name = `${b.product} \u00d7 ${units}${ship ? ` - ship by ${fmtDate(ship)}` : ''}`;
-  return { name: name.slice(0, 120), tasks };
-}
-
-// Brings the run's Todoist project in line with the run: creates it the first time, then renames it and
-// adds, updates or deletes tasks as the units, variants and ship-by date change. Only tasks whose
-// wording or date changed are sent again, so it is safe to call after every edit.
-const batchSyncAgain = new Set();
-async function syncBatchTodoist(p) {
-  const t = p.todoist;
-  if (isFrozen(p)) return;   // caught up when it's unfrozen
-  if (t.busy) { batchSyncAgain.add(p.id); return; }
-  if (!store.todoistConnected) { t.error = 'No Todoist API token is set. Set the TODOIST_TOKEN secret, then retry.'; persist(); return; }
-  t.busy = true;
-  t.tasks ??= {};
-  const isMissing = e => e.status === 404 || e.status === 400;
-  try {
-    const plan = batchTodoistPlan(p);
-    if (!t.project_id) {
-      const created = await todoist('POST', '/projects', { name: plan.name });
-      if (!created.id) throw new Error('Unexpected response from Todoist.');
-      t.project_id = String(created.id);
-      t.url = `https://app.todoist.com/app/project/${t.project_id}`;
-      t.name = plan.name;
-      persist();
-    } else if (t.name !== plan.name) {
-      await todoist('POST', `/projects/${t.project_id}`, { name: plan.name });
-      t.name = plan.name;
-      persist();
-    }
-    for (const task of plan.tasks) {
-      const sig = JSON.stringify([task.content, task.description, task.due]), have = t.tasks[task.key];
-      if (have?.sig === sig) continue;
-      const body = { content: task.content, description: task.description };
-      let id = null;
-      if (have) {
-        try { id = (await todoist('POST', `/tasks/${have.id}`, { ...body, ...(task.due ? { due_date: task.due } : { due_string: 'no date' }) })).id; }
-        catch (e) { if (!isMissing(e)) throw e; }   // deleted in Todoist: make it again
-      }
-      if (!id) id = (await todoist('POST', '/tasks', { ...body, project_id: t.project_id, ...(task.due ? { due_date: task.due } : {}) })).id;
-      t.tasks[task.key] = { id: String(id), sig };
-      persist();
-    }
-    // A variant taken off the run (or down to zero units) takes its task with it.
-    for (const key of Object.keys(t.tasks)) {
-      if (plan.tasks.some(task => task.key === key)) continue;
-      try { await todoist('DELETE', `/tasks/${t.tasks[key].id}`); } catch (e) { if (!isMissing(e)) throw e; }
-      delete t.tasks[key];
-      persist();
-    }
-    t.plan = { name: plan.name, tasks: plan.tasks.map(({ content, description }) => ({ content, description })) };
-    t.synced = true;
-    t.synced_at = new Date().toISOString();
-    t.error = null;
-  } catch (e) {
-    t.error = e.message;
-  }
-  delete t.busy;
-  p.updated_at = new Date().toISOString();
-  persist();
-  if (ed?.project === p) renderTodoistCard();
-  if (batchSyncAgain.delete(p.id)) await syncBatchTodoist(store.projects.find(x => x.id === p.id) || p);
-}
-
-// Edits are sent to Todoist shortly after the last one, so clicking + five times makes one update.
-const batchSyncTimers = new Map();
-function scheduleBatchSync(p) {
-  if (!store.todoistConnected) return;
-  clearTimeout(batchSyncTimers.get(p.id));
-  batchSyncTimers.set(p.id, setTimeout(() => {
-    batchSyncTimers.delete(p.id);
-    const current = store.projects.find(x => x.id === p.id);
-    if (current) syncBatchTodoist(current);
-  }, 1500));
-}
-
-function batchTodoistHtml(p) {
-  const t = p.todoist;
-  if (!store.todoistConnected) return '<p class="muted">Connect Todoist (see <a href="#/settings">Settings</a>) to get a task list for this run that updates as you change it.</p>';
-  const open = t.url ? `<a class="btn" href="${esc(t.url)}" target="_blank" rel="noopener">Open in Todoist</a>` : '';
-  if (t.busy) return `<p class="note">Updating Todoist&hellip;</p>${open}`;
-  if (t.error) return `<p class="note err">${esc(t.error)}</p><div class="actions"><button class="btn primary" id="sync">Retry</button>${open}</div>`;
-  if (t.synced) return `<p class="note ok">Up to date in Todoist (${Object.keys(t.tasks || {}).length} tasks). Changes here are sent there automatically.</p><div class="actions">${open}</div>`;
-  return '<button class="btn primary" id="sync">Create Todoist project</button>';
-}
 
 // The quick form at the top of the Product line tab.
 function renderQuickBatch() {
@@ -2232,19 +1942,18 @@ async function createBatch(pr, qtys, ship, opts: { source?: string; quiet?: bool
   };
   data.rates.hourly_rate = s.hourly_rate;
   // Starts in Build and In progress: it is a real order, and materials can be bought straight away.
-  const draft = { stream: 'product', status, stage: 'build', data, calc: batchCalc(data), todoist: {}, history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp };
+  const draft = { stream: 'product', status, stage: 'build', data, calc: batchCalc(data), history: [{ status, at: stamp }], created_at: stamp, updated_at: stamp };
   (draft.data as any).todo = defaultTodo(draft);
   let project;
   try { project = await api('/api/projects', draft); }
   catch (e) { if (!opts.quiet) toast(`Not saved: ${e.message}`); return null; }
   store.projects.push(project);
   saved.projects.set(project.id, JSON.stringify(project, unbusy));
-  toast(`${opts.source === 'shopify' ? 'New Shopify orders: added' : 'Added'} ${projectName(project)}${store.todoistConnected ? '. Creating its Todoist list\u2026' : ''}`);
-  if (store.todoistConnected) runTodoistSync(project);
+  toast(`${opts.source === 'shopify' ? 'New Shopify orders: added' : 'Added'} ${projectName(project)}`);
   return project;
 }
 
-// A batch run's own page: units by variant with quick + / - buttons, the ship-by date, status and Todoist.
+// A batch run's own page: units by variant with quick + / - buttons, the ship-by date and status.
 function showBatch(p) {
   const b = p.data.batch;
   ed = { project: p, stream: streamOf(p), data: p.data, dirty: false };
@@ -2262,17 +1971,16 @@ function showBatch(p) {
         </div>
       </div>
       <aside>
-        <div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div><div class="card" id="todoistCard"></div>
+        <div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div>
         <p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this run</button></p>
       </aside>
     </div>`;
 
-  const touch = (todo = true) => {
+  const touch = () => {
     p.calc = batchCalc(p.data);
     p.updated_at = new Date().toISOString();
     $('#projTitle').textContent = projectName(p);
     persist();
-    if (todo) scheduleBatchSync(p);
   };
   const units = $('#units');
   const renderUnits = () => {
@@ -2323,21 +2031,19 @@ function showBatch(p) {
     renderUnits();
   });
   $('#shipBy').addEventListener('change', e => { p.data.due_date = e.target.value; b.ship_manual = true; touch(); renderStages(); });
-  $('#batchNotes').addEventListener('input', e => { p.data.notes = e.target.value; touch(false); });
+  $('#batchNotes').addEventListener('input', e => { p.data.notes = e.target.value; touch(); });
   $('#delete').addEventListener('click', () => {
-    const synced = p.todoist.project_id ? ' Its Todoist project will be left as it is.' : '';
-    if (!confirm(`Delete ${projectName(p)}? This cannot be undone.${synced}`)) return;
+    if (!confirm(`Delete ${projectName(p)}? This cannot be undone.`)) return;
     store.projects = store.projects.filter(x => x !== p);
     persist();
     location.hash = boardLink();
   });
   // The phase strip's last date is the ship-by date too, so keep the two in step.
-  $('#stages').addEventListener('change', () => { $('#shipBy').value = p.data.due_date || ''; b.ship_manual = true; scheduleBatchSync(p); });
+  $('#stages').addEventListener('change', () => { $('#shipBy').value = p.data.due_date || ''; b.ship_manual = true; });
   ed.redraw = () => { $('#shipBy').value = p.data.due_date || ''; renderUnits(); renderStages(); renderStatusCard(); $('#projTitle').textContent = projectName(p); };
   renderUnits();
   renderStages();
   renderStatusCard();
-  renderTodoistCard();
   renderPurchasesCard(p);
 }
 
@@ -2383,7 +2089,7 @@ function showProducts() {
   view.innerHTML = `<a href="#/s/product" class="back">&larr; Product line</a>
     <div class="pagehead"><h1>Products</h1><span class="spacer"></span><span class="muted">Changes save automatically</span></div>
     <p class="muted">Products, variants and prices come from the Small Batch Projects page on jmwood.work, so change them in Shopify.
-      Fill in what each unit takes to make here: it goes into a batch run's cost and its Todoist shopping task.
+      Fill in what each unit takes to make here: it goes into a batch run's cost and shows on the run's page.
       A run copies these numbers when it's created, so changing them later doesn't change runs already under way.</p>
     ${shopState === 'failed' ? '<p class="note err">The shop couldn\'t be reached just now, so this is the list as last loaded.</p>' : ''}
     ${products.length ? '' : `<div class="card"><p class="muted" style="margin:0">${shopState === 'loading' ? 'Loading products from jmwood.work&hellip;' : 'No products found.'}</p></div>`}
@@ -2394,7 +2100,7 @@ function showProducts() {
         <label class="f"><span>Materials cost per unit ($)</span><input data-k="unit_cost" type="number" min="0" step="any" value="${esc(pr.unit_cost)}"></label>
         <label class="f"><span>Shop hours per unit</span><input data-k="unit_hours" type="number" min="0" step="any" value="${esc(pr.unit_hours)}"></label>
         <label class="f"><span>Days from order to in the mail</span><input data-k="lead_days" type="number" min="0" step="1" value="${esc(pr.lead_days ?? DEFAULT_LEAD_DAYS)}"></label>
-        <label class="f w6"><span>Materials to buy per unit (goes on the Todoist shopping task)</span><input data-k="materials" value="${esc(pr.materials)}" placeholder="e.g. 1.5 bf walnut, 2 rubber feet"></label>
+        <label class="f w6"><span>Materials to buy per unit (shown on the run's page)</span><input data-k="materials" value="${esc(pr.materials)}" placeholder="e.g. 1.5 bf walnut, 2 rubber feet"></label>
       </div></div>`).join('')}</div>`;
   $('#productList').addEventListener('input', e => {
     const k = e.target.dataset.k, pr = s.products.find(x => x.id === e.target.closest('[data-id]')?.dataset.id);
@@ -2424,7 +2130,7 @@ const shipByFor = (pr, orders) => {
 
 let ordersBusy = false;
 async function loadShopOrders() {
-  if (!store.shopifyConnected || ordersBusy || store.projects.some(p => p.todoist.busy)) return;
+  if (!store.shopifyConnected || ordersBusy) return;
   ordersBusy = true;
   try {
     const res = await fetch('/api/shop-orders', { cache: 'no-store' });
@@ -2476,7 +2182,6 @@ async function syncRunsWithOrders(orders) {
   }
   if (!touched.length) return;
   persist();
-  for (const run of touched) if (run.status !== 'complete') scheduleBatchSync(run);
   // Show the new numbers on whatever page is open.
   if (ed?.project && touched.includes(ed.project) && ed.redraw) ed.redraw();
   else if (!ed && (currentHash === '#/' || currentHash.startsWith('#/s/') || currentHash.startsWith('#/calendar'))) route();
@@ -2832,13 +2537,6 @@ function showSettings() {
         ${store.shopifyConnected ? 'Shopify is connected: unfulfilled orders keep each product\'s run up to date.' : 'Connect the Shopify app (the <code>SHOPIFY_CLIENT_ID</code> and <code>SHOPIFY_CLIENT_SECRET</code> secrets, see DEPLOYMENT.md) to build runs from unfulfilled orders.'}</p>
       <a class="btn" href="#/products">Edit products</a>
     </div>
-    <div class="card"><h2>Todoist</h2>
-      <p id="todoistState"></p>
-      <div class="actions">
-        <button class="btn" id="testToken">Test connection</button>
-      </div>
-      <p class="muted" style="margin-bottom:0">The API token is set on the server as the <code>TODOIST_TOKEN</code> secret (see DEPLOYMENT.md). Find it in Todoist under Settings &rarr; Integrations &rarr; Developer. It is used for every device and sent only to todoist.com.</p>
-    </div>
     <div class="card"><h2>Backup</h2>
       <p class="muted">Projects and settings are stored on the server and shared by every device you sign in on. Export a backup now and then to keep a copy of your own.</p>
       <div class="actions"><button class="btn" id="export">Export backup</button>
@@ -2903,20 +2601,8 @@ function showSettings() {
     speciesTable.querySelector('tr:last-child input').focus();
   });
 
-  const renderTodoistState = () => {
-    $('#todoistState').innerHTML = store.todoistConnected
-      ? '<span class="pill accepted">Connected</span> A token is set. Accepted quotes will create a Todoist project.'
-      : '<span class="pill">Not connected</span> Set the <code>TODOIST_TOKEN</code> secret to create a Todoist project when a quote is accepted.';
-  };
-  renderTodoistState();
-  $('#testToken').addEventListener('click', async () => {
-    if (!store.todoistConnected) return toast('Set the TODOIST_TOKEN secret first.');
-    try { await todoist('GET', '/projects?limit=1'); toast('Connected to Todoist.'); }
-    catch (e) { toast(e.message); }
-  });
-
   $('#export').addEventListener('click', () => {
-    const { todoistConnected, shopifyConnected, ...backup } = store;
+    const { shopifyConnected, ...backup } = store;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
     a.download = `shop-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;

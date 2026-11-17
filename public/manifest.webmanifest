@@ -1,7 +1,7 @@
 {
   "name": "JM Woodwork Shop Tracker",
   "short_name": "Shop Tracker",
-  "description": "Quotes, scheduling and Todoist hand-off for JM Woodwork.",
+  "description": "Quotes, scheduling and to-do lists for JM Woodwork.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
