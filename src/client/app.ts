@@ -601,6 +601,7 @@ function showBoard() {
       </table></div>` : ''}`;
 
   tabInView();
+  requestAnimationFrame(markStuckBands);
   if (quick) renderQuickBatch();
   // Drag a card to another column to change its phase, or (on "All projects") into another stream's section.
   const board = $('.boards');
@@ -2969,6 +2970,19 @@ $('#bellPanel').addEventListener('click', e => { if ((e.target as Element).close
 document.addEventListener('click', e => { if (bell.open && !(e.target as Element).closest('#bellWrap')) setBell(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setBell(false); });
 window.addEventListener('hashchange', () => setBell(false));
+
+// On a phone app the stream band on the Projects page pins just under the status bar. While it's
+// pinned it gets the "stuck" class, which fills the status-bar strip above it in the stream's color,
+// so cards don't show through above the band as they scroll by.
+let stuckFrame = 0;
+const markStuckBands = () => {
+  stuckFrame = 0;
+  document.querySelectorAll<HTMLElement>('.lanehead').forEach(h => {
+    const top = parseFloat(getComputedStyle(h).top) || 0;
+    h.classList.toggle('stuck', top > 0 && h.getBoundingClientRect().top <= top + 0.5);
+  });
+};
+window.addEventListener('scroll', () => { if (!stuckFrame) stuckFrame = requestAnimationFrame(markStuckBands); }, { passive: true });
 
 backfillTodos();
 route();
