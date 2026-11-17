@@ -92,6 +92,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .lanehead a { font-size: 13px; }
 .lane .job { border-left: 3px solid var(--lane); }
 .tabs.streams small { font-weight: 600; color: var(--muted); margin-left: 4px; }
+.tabs.streams .tshort { display: none; }
 /* Frozen projects: the link beside the stream tabs, and the banner on a frozen project's page. */
 .tabs .frozenlink { color: #2b5a94; }
 .note.frozen { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #dde8f5; color: #23476f; margin: 0 0 14px; font-size: 14px; }
@@ -350,6 +351,20 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .stats .card { padding: 12px; }
   .stat b { font-size: 19px; }
+  /* Projects page: the stream tabs as one row of pills with short names. Swipes sideways if it can't fit. */
+  .tabs.streams { position: relative; flex-wrap: nowrap; gap: 6px; overflow-x: auto; border-bottom: 0; margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))) 14px; padding: 2px max(12px, env(safe-area-inset-left)); scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .tabs.streams::-webkit-scrollbar { display: none; }
+  /* A soft fade on the right edge hints that the row keeps going. */
+  .tabs.streams { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
+  .tabs.streams .spacer { display: none; }
+  .tabs.streams .tlong { display: none; }
+  .tabs.streams .tshort { display: inline; }
+  .tabs.streams a { flex: none; display: inline-flex; align-items: center; min-height: 38px; margin: 0; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--ink); font-size: 14px; white-space: nowrap; }
+  .tabs.streams a small { min-width: 20px; height: 20px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--line); color: var(--ink); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+  .tabs.streams a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .tabs.streams a.on small { background: rgba(255, 255, 255, .22); color: inherit; }
+  .tabs.streams a.frozenlink { margin-left: 4px; background: #eef3fa; border-color: #c9d8ec; color: #2b5a94; }
+  .tabs.streams a.frozenlink small { background: #d6e2f1; color: #23476f; }
   /* Projects page: a compact list per stream instead of the five-column board. */
   .board { display: none; }
   .plist { display: block; }

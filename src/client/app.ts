@@ -61,6 +61,8 @@ const STREAMS = [
   ['gallery', 'Gallery', 'A piece made for the business, not for sale.'],
 ];
 const STREAM_NAME = Object.fromEntries(STREAMS);
+// Shorter tab names for the Projects page on phones.
+const STREAM_SHORT = { all: 'All', client: 'Client', product: 'Product', gallery: 'Gallery' };
 const streamOf = p => STREAM_NAME[p.stream] ? p.stream : 'client';
 const isClient = p => streamOf(p) === 'client';
 const statusesFor = stream => stream === 'client' ? STATUSES : OWN_STATUSES;
@@ -466,10 +468,16 @@ function showBoard() {
   const by = (...statuses) => shown.filter(p => statuses.includes(p.status)).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const sum = (list, f) => list.reduce((total, p) => total + f(p), 0);
   const shopHours = p => p.calc.labor_hours + p.calc.contingency_hours;
+  // On phones the tabs are one row of pills with the short names; if they still don't fit, the row swipes sideways.
   const tabs = `<nav class="tabs streams">${[['all', 'All projects'], ...STREAMS].map(([key, name]) =>
-    `<a href="${key === 'all' ? '#/s/all' : `#/s/${key}`}" class="${key === tab ? 'on' : ''}">${name}
+    `<a href="${key === 'all' ? '#/s/all' : `#/s/${key}`}" class="${key === tab ? 'on' : ''}"${key === tab ? ' aria-current="page"' : ''}><span class="tlong">${name}</span><span class="tshort">${STREAM_SHORT[key]}</span>
       <small>${store.projects.filter(p => key === 'all' || streamOf(p) === key).filter(p => !archived(p) && !isFrozen(p)).length}</small></a>`).join('')}
     <span class="spacer"></span><a href="#/frozen" class="frozenlink">Frozen <small>${frozenCount}</small></a></nav>`;
+  // Keep the chosen pill in view when the phone row has to scroll.
+  const tabInView = () => {
+    const nav = $('.tabs.streams'), on = nav?.querySelector('a.on');
+    if (nav && on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2;
+  };
   const newLabel = tab === 'client' ? 'New quote' : 'New project';
   const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn" href="#/receipt">Scan a receipt</a><a class="btn primary" href="${newLink()}">${newLabel}</a></div>${tabs}`;
   const quick = tab === 'product' ? '<div class="card" id="quickBatch"></div>' : '';
@@ -565,6 +573,7 @@ function showBoard() {
         <td>${tab === 'client' ? esc(p.quote_number) : ''}</td><td>${money(valueOf(p))}</td><td><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></td></tr>`).join('')}
       </table></div>` : ''}`;
 
+  tabInView();
   if (quick) renderQuickBatch();
   // Drag a card to another column to change its phase, or (on "All projects") into another stream's section.
   const board = $('.boards');
