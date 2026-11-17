@@ -584,7 +584,7 @@ function showBoard() {
   const lanes = () => STREAMS.map(([key, name]) => {
     const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
     return `<section class="lane ${key}" data-stream="${key}">
-      <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open ${name.toLowerCase()} &rarr;</a></div>
+      <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open<span class="lopen"> ${name.toLowerCase()}</span> &rarr;</a></div>
       ${boardHtml(list, key)}${listHtml(list, key)}
     </section>`;
   }).join('');
