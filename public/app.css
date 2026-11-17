@@ -54,7 +54,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 @media (max-width: 600px) {
   .stagegrid { display: none; }
   .phasem { display: block; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px 4px; }
-  .stepper { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .stepper { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(var(--steps, 5), minmax(0, 1fr)); }
   .stepper li { position: relative; }
   .stepper li + li::before { content: ''; position: absolute; top: 14px; right: 50%; width: 100%; height: 2px; background: var(--line); }
   .stepper li.done + li::before, .stepper li.done + li.on::before { background: var(--accent); }
@@ -107,6 +107,9 @@ table.frozenlist td { vertical-align: top; }
 .stats .card { margin-top: 0; }
 .stat b { display: block; font-size: 22px; }
 .board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+.board.b-product { grid-template-columns: repeat(4, minmax(200px, 1fr)); }
+.col.shipcol { background: transparent; border: 2px dashed #d8cbb6; }
+.col.shipcol p { margin: 4px; font-size: 13px; }
 .col { background: #f1e7d6; border-radius: var(--radius); padding: 10px; min-height: 120px; }
 .col h2 { margin: 4px 4px 10px; display: flex; justify-content: space-between; }
 .job { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: inherit; }
@@ -142,6 +145,7 @@ table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .cal .bar.gap { visibility: hidden; }
 .cal .bar.past { opacity: .45; }
 .st-ideation { background: #2f7d4f; } .st-design { background: #2c5f9e; } .st-build { background: #c2610c; } .st-finishing { background: #b3261e; } .st-ready { background: #6f42a3; }
+.st-building { background: #c2610c; } .st-packaging { background: #0f7c80; } .st-shipped { background: #5b4a3f; }
 /* month grid: the first day of a new phase is set apart by a white notch */
 .cal .bar.turn { box-shadow: inset 3px 0 0 #fff; position: relative; z-index: 1; }
 /* calendar view switch */
@@ -219,7 +223,7 @@ table.list th { font-size: 12px; color: var(--muted); font-weight: 600; }
 
 /* editor */
 .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 16px; align-items: start; }
-@media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } .board { grid-template-columns: repeat(5, 240px); } }
+@media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } .board { grid-template-columns: repeat(5, 240px); } .board.b-product { grid-template-columns: repeat(4, 240px); } }
 fieldset { border: 0; padding: 0; margin: 0 0 22px; }
 fieldset:last-child { margin-bottom: 0; }
 .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
