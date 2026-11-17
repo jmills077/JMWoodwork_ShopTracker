@@ -2078,6 +2078,12 @@ function batchCalc(data) {
 }
 function priceProject(p, stream = streamOf(p)) { return isBatch(p) ? batchCalc(p.data) : price(p.data, stream); }
 
+// "Wave / Black Walnut / Silver/Blue" -> { head: 'Wave', rest: 'Black Walnut / Silver/Blue' }.
+function qbGroup(name) {
+  const parts = String(name || '').split(' / ');
+  return parts.length > 1 ? { head: parts[0], rest: parts.slice(1).join(' / ') } : null;
+}
+
 // The quick form at the top of the Product line tab.
 function renderQuickBatch() {
   const card = $('#quickBatch'), products = (store.settings.products || []).filter(x => x.listed !== false);
@@ -2090,15 +2096,25 @@ function renderQuickBatch() {
   const product = () => products.find(x => x.id === chosen) || products[0];
   const draw = () => {
     const pr = product(), variants = pr.variants.length ? pr.variants : [{ name: '', price: 0 }];
+    // On a phone, variants named like "Wave / Black Walnut / Silver/Blue" are grouped under their first option
+    // ("Wave"), so each row only needs the rest. Only when that actually groups something.
+    const heads = variants.map(v => qbGroup(v.name)?.head);
+    const groups = variants.length > 2 && heads.every(Boolean) && new Set(heads).size < variants.length;
     card.innerHTML = `<div class="actions" style="margin-bottom:12px"><h2 style="margin:0">Quick batch run</h2><span style="flex:1"></span><a href="#/products" style="font-size:13px">Edit products</a></div>
       ${store.shopifyConnected ? '<p class="muted" style="margin:-4px 0 12px;font-size:13px">Your Shopify orders fill a run for each product on their own. Use this for anything extra, like stock for a market.</p>' : ''}
       <form id="batchForm" class="grid" autocomplete="off">
         <label class="f"><span>Product</span><select id="qbProduct">${products.map(x => `<option value="${esc(x.id)}" ${x.id === pr.id ? 'selected' : ''}>${esc(x.name || 'Unnamed product')}</option>`).join('')}</select></label>
         <div class="f w6"><span>${variants.length > 1 ? 'How many of each variant' : 'How many'}</span><div class="qbvariants">
-          ${variants.map((v, i) => `<label class="qbv"><span title="${esc(v.name)}">${esc(v.name || 'Units')} <small>${money(v.price)}</small></span><input type="number" min="0" step="1" data-v="${i}" value="${variants.length === 1 ? 1 : ''}" placeholder="0"></label>`).join('')}
+          ${variants.map((v, i) => {
+            const g = groups && qbGroup(v.name), prev = groups && i > 0 && qbGroup(variants[i - 1].name);
+            return `${g && g.head !== prev?.head ? `<div class="qbgroup">${esc(g.head)}</div>` : ''}<label class="qbv">
+              <span class="qbname" title="${esc(v.name)}">${g ? `<span class="qlong">${esc(v.name)}</span><span class="qshort">${esc(g.rest)}</span>` : esc(v.name || 'Units')} <small>${money(v.price)}</small></span>
+              <span class="qbctl"><button type="button" class="btn small" data-step="-1" tabindex="-1" aria-label="One fewer">&minus;</button><input type="number" inputmode="numeric" min="0" step="1" data-v="${i}" value="${variants.length === 1 ? 1 : ''}" placeholder="0"><button type="button" class="btn small" data-step="1" tabindex="-1" aria-label="One more">+</button></span>
+            </label>`;
+          }).join('')}
         </div></div>
         <label class="f"><span>In the mail by</span><input type="date" id="qbShip" required></label>
-        <div class="f w6 actions"><button class="btn primary" type="submit">Add batch run</button><span class="muted" id="qbTotal"></span></div>
+        <div class="f w6 actions qbsubmit"><button class="btn primary" type="submit">Add batch run</button><span class="muted" id="qbTotal"></span></div>
       </form>`;
     const form = $('#batchForm', card);
     const qtys = () => [...form.querySelectorAll('[data-v]')].map(el => ({ ...variants[Number(el.dataset.v)], qty: Math.round(pos(el.value)) }));
@@ -2110,6 +2126,20 @@ function renderQuickBatch() {
     total();
     $('#qbProduct', card).addEventListener('change', e => { chosen = e.target.value; draw(); });
     form.addEventListener('input', total);
+    // The phone's - / + buttons beside each variant.
+    form.addEventListener('click', e => {
+      const step = (e.target as HTMLElement).closest('[data-step]') as HTMLElement;
+      if (!step) return;
+      e.preventDefault();
+      const input = step.parentElement.querySelector('input') as HTMLInputElement;
+      const n = Math.max(0, Math.round(pos(input.value)) + Number(step.dataset.step));
+      input.value = n ? String(n) : '';
+      mark();
+      total();
+    });
+    const mark = () => form.querySelectorAll('.qbv').forEach(row => row.classList.toggle('some', pos((row.querySelector('input') as HTMLInputElement).value) > 0));
+    form.addEventListener('input', mark);
+    mark();
     form.addEventListener('submit', async e => {
       e.preventDefault();
       if (!total()) return toast('Enter how many to make.');
