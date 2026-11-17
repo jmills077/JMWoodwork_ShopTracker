@@ -4,6 +4,7 @@
 //   /api/*                JSON the browser script saves and reloads through
 //   /api/shop-products    the jmwood.work shop's small-batch products and variants
 //   /api/shop-orders      its unfulfilled orders (with the Shopify app connected)
+//   /api/new-orders       orders placed since the bell was last opened (POST /seen marks them read)
 //   /api/receipts/scan    reads a receipt photo into line items (Workers AI)
 //   /app.css, /app.js     static files from public/ (served by Workers Static Assets)
 //   cron (weekly)         refreshes the supplier price list
@@ -15,7 +16,7 @@ import { endSession, isSignedIn, passwordMatches, startSession } from './lib/aut
 import { BadRequest, createProject, getPrices, getState, importBackup, replacePrices, saveChanges } from './lib/db';
 import { readPriceLists } from './lib/prices';
 import { ReceiptError, scanReceipt } from './lib/receipts';
-import { readOpenOrders, readProducts, shopifyConnected } from './lib/shopify';
+import { orderAdminUrl, readOpenOrders, readProducts, readRecentOrders, shopifyConnected } from './lib/shopify';
 import { AppPage } from './views/app';
 import { LoginPage, SetupPage } from './views/login';
 
@@ -118,6 +119,38 @@ app.get('/api/shop-orders', async c => {
   } catch (error) {
     return c.json({ connected: true, error: String(error) }, 502);
   }
+});
+
+// ---------- new-order bell ----------
+// The header's bell counts orders placed since it was last opened, on any device: the time of the newest
+// order seen is kept in the settings table as 'orders_seen'. The first time, it starts from now, so
+// orders from before the bell existed don't all show up as new.
+app.get('/api/new-orders', async c => {
+  if (!shopifyConnected(c.env)) return c.json({ connected: false, seen: '', orders: [] });
+  const db = c.env.DB;
+  let seen = (await db.prepare("SELECT value FROM settings WHERE key = 'orders_seen'").first<{ value: string }>())?.value;
+  if (!seen) {
+    seen = new Date().toISOString();
+    await db.prepare("INSERT INTO settings (key, value) VALUES ('orders_seen', ?) ON CONFLICT (key) DO NOTHING").bind(seen).run();
+  }
+  try {
+    const { orders, stale } = await cached(db, 'recent_orders', 2 * 60 * 1000, async () => ({ orders: await readRecentOrders(c.env) })) as any;
+    return c.json({
+      connected: true, seen, ...(stale ? { stale } : {}),
+      orders: orders.map((o: any) => ({ ...o, url: orderAdminUrl(o.id), new: Date.parse(o.created_at) > Date.parse(seen!) })),
+    });
+  } catch (error) {
+    return c.json({ connected: true, seen, error: String(error), orders: [] }, 502);
+  }
+});
+// Marks every order up to `upTo` (the newest one the bell showed) as seen. Never moves backwards,
+// so a phone that was open on an old list can't bring back orders already seen on the computer.
+app.post('/api/new-orders/seen', async c => {
+  const { upTo } = await c.req.json<{ upTo?: string }>();
+  if (typeof upTo !== 'string' || isNaN(Date.parse(upTo))) return c.json({ error: 'upTo must be a date' }, 400);
+  await c.env.DB.prepare(`INSERT INTO settings (key, value) VALUES ('orders_seen', ?)
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE excluded.value > settings.value`).bind(new Date(upTo).toISOString()).run();   // one format, so the text comparison above is by time
+  return c.json({ ok: true });
 });
 
 // ---------- receipts ----------

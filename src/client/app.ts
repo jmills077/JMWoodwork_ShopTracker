@@ -2946,13 +2946,97 @@ function showSettings() {
   });
 }
 
+// ---------- new-order bell ----------
+// The bell in the header counts Shopify orders placed since it was last opened (on any device).
+// Opening it lists the latest orders, with the new ones marked, and clears the count.
+let bell = { orders: [], open: false, busy: false };
+const ago = iso => {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  if (min < 24 * 60) return `${Math.round(min / 60)} h ago`;
+  const days = Math.round(min / 1440);
+  return days < 7 ? `${days} day${days === 1 ? '' : 's'} ago` : fmtDate(iso);
+};
+const FULFILLMENT = { UNFULFILLED: 'Unfulfilled', FULFILLED: 'Fulfilled', PARTIALLY_FULFILLED: 'Partly fulfilled', IN_PROGRESS: 'In progress', ON_HOLD: 'On hold', SCHEDULED: 'Scheduled' };
+
+function showBellCount() {
+  const n = bell.open ? 0 : bell.orders.filter(o => o.new).length;
+  const el = $('#bellCount');
+  el.hidden = !n;
+  el.textContent = n > 9 ? '9+' : String(n);
+  $('#bell').setAttribute('aria-label', n ? `${n} new order${n === 1 ? '' : 's'}` : 'Orders');
+  // On a home-screen app that is allowed to, the count shows on the app icon too.
+  try { n ? (navigator as any).setAppBadge?.(n) : (navigator as any).clearAppBadge?.(); } catch {}
+}
+
+function renderBellPanel(error = '') {
+  const fresh = bell.orders.filter(o => o.new), earlier = bell.orders.filter(o => !o.new).slice(0, Math.max(3, 8 - fresh.length));
+  const row = o => `<li class="${o.new ? 'new' : ''}"><a href="${esc(o.url)}" target="_blank" rel="noopener">
+      <span class="ohead"><b>${esc(o.name)}</b><span class="muted">${esc(ago(o.created_at))}</span><span class="amt">${money(o.total)}</span></span>
+      <span class="oitems">${o.items.map(i => `${esc(i.title)}${i.variant ? ` (${esc(i.variant)})` : ''} &times; ${i.qty}`).join(', ')}</span>
+      ${FULFILLMENT[o.fulfillment] ? `<span class="pill ${o.fulfillment === 'FULFILLED' ? 'accepted' : ''}">${FULFILLMENT[o.fulfillment]}</span>` : ''}
+    </a></li>`;
+  $('#bellPanel').innerHTML = `
+    <div class="bellhead"><b>Shop orders</b><button type="button" class="bellclose" aria-label="Close">&times;</button></div>
+    ${error ? `<p class="note err">${esc(error)}</p>` : ''}
+    ${fresh.length ? `<h4>New</h4><ul>${fresh.map(row).join('')}</ul>` : `<p class="muted bellnone">No new orders since you last looked.</p>`}
+    ${earlier.length ? `<h4>Earlier</h4><ul>${earlier.map(row).join('')}</ul>` : ''}
+    <a class="bellall" href="https://admin.shopify.com/store/vtza5i-0a/orders" target="_blank" rel="noopener">All orders in Shopify</a>`;
+}
+
+let bellError = '';
+async function loadNewOrders() {
+  if (!store.shopifyConnected || bell.busy) return;
+  bell.busy = true;
+  try {
+    const res = await fetch('/api/new-orders', { cache: 'no-store' });
+    const data = res.ok || res.status === 502 ? await res.json() : null;
+    if (data?.connected) {
+      $('#bellWrap').hidden = false;
+      bellError = data.error ? "Couldn't reach Shopify just now." : '';
+      if (!data.error) {
+        // Orders already shown as new in the open panel stay marked until it closes.
+        const shownNew = new Set(bell.open ? bell.orders.filter(o => o.new).map(o => o.id) : []);
+        bell.orders = data.orders.map(o => ({ ...o, new: o.new || shownNew.has(o.id) }));
+      }
+      showBellCount();
+      if (bell.open) { renderBellPanel(bellError); markOrdersSeen(); }
+    }
+  } catch {}
+  bell.busy = false;
+}
+
+function markOrdersSeen() {
+  const newest = bell.orders.find(o => o.new);   // newest first
+  if (newest) api('/api/new-orders/seen', { upTo: newest.created_at }).catch(() => {});
+}
+
+function setBell(open) {
+  if (bell.open === open) return;
+  bell.open = open;
+  $('#bellPanel').hidden = !open;
+  $('#bell').setAttribute('aria-expanded', String(open));
+  if (open) { renderBellPanel(bellError); markOrdersSeen(); loadNewOrders(); }
+  else bell.orders.forEach(o => { o.new = false; });
+  showBellCount();
+}
+$('#bell').addEventListener('click', () => setBell(!bell.open));
+$('#bellPanel').addEventListener('click', e => { if ((e.target as Element).closest('.bellclose')) setBell(false); });
+document.addEventListener('click', e => { if (bell.open && !(e.target as Element).closest('#bellWrap')) setBell(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setBell(false); });
+window.addEventListener('hashchange', () => setBell(false));
+
 backfillTodos();
 route();
 loadPrices();
+loadNewOrders();
 loadShopProducts().then(loadShopOrders);
 // While the page is open, check for new and fulfilled orders every few minutes.
 setInterval(() => { if (document.visibilityState === 'visible') loadShopOrders(); }, 5 * 60 * 1000);
+// and for the bell every couple of minutes.
+setInterval(() => { if (document.visibilityState === 'visible') loadNewOrders(); }, 2 * 60 * 1000);
 // Pick up other devices' changes when coming back to this tab, and send pending ones when leaving it.
-document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' ? save(true) : refresh().then(loadShopOrders));
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' ? save(true) : (loadNewOrders(), refresh().then(loadShopOrders)));
 window.addEventListener('pagehide', () => save(true));
 window.addEventListener('online', () => save());
