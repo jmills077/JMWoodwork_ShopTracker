@@ -1598,14 +1598,14 @@ function showTodo(p) {
     <div class="cols">
       <div class="card">
         <h2>To-do list</h2>
-        <form class="addtask" data-list="items" autocomplete="off"><input placeholder="Add a task" aria-label="New task"><button class="btn primary">Add</button></form>
+        <form class="addtask" data-list="items" autocomplete="off"><textarea rows="1" enterkeyhint="done" placeholder="Add a task, or paste a list" aria-label="New task"></textarea><button class="btn primary">Add</button></form>
         <ul class="tasks" data-list="items"></ul>
-        <p class="muted hint">Press and hold a task to move it up or down the list.</p>
+        <p class="muted hint">Paste a block of tasks (one per line) to add each line as its own task. Press and hold a task to move it up or down the list.</p>
       </div>
       <aside>
         <div class="card">
           <h2>Lumber store shopping list</h2>
-          <form class="addtask" data-list="lumber" autocomplete="off"><input placeholder="Add something to buy" aria-label="New shopping list item"><button class="btn primary">Add</button></form>
+          <form class="addtask" data-list="lumber" autocomplete="off"><textarea rows="1" enterkeyhint="done" placeholder="Add something to buy" aria-label="New shopping list item"></textarea><button class="btn primary">Add</button></form>
           <ul class="tasks" data-list="lumber"></ul>
           <p class="muted hint">Paste a list (one item per line) to add every item at once.</p>
         </div>
@@ -1644,31 +1644,49 @@ function showTodo(p) {
     redraw();
   };
 
-  // Pasting several lines (a list from Notes, a text message, an email) adds each line as its own item.
-  view.querySelectorAll('form.addtask input').forEach(input => input.addEventListener('paste', e => {
-    const items = splitPasted(e.clipboardData?.getData('text/plain') || '');
-    if (items.length < 2) return;   // one item: paste it into the box as usual
-    e.preventDefault();
-    const list = input.closest('form').dataset.list;
-    for (const text of items) {
-      todo[list].push(newTask(text));
-      todo.log.push({ at: new Date().toISOString(), what: 'added', text, list });
+  // Adds each line of a pasted or typed block as its own item, without the bullets, numbers or checkboxes
+  // it was written with. A single typed line is added just as it was typed.
+  const linesOf = text => /\n/.test(text) ? splitPasted(text) : [text.replace(/\s+/g, ' ').trim()].filter(Boolean);
+  const addLines = (list, items) => {
+    if (!items.length) return 0;
+    for (const t of items) {
+      todo[list].push(newTask(t));
+      todo.log.push({ at: new Date().toISOString(), what: 'added', text: t, list });
     }
     todoChanged(p);
     redraw();
-    toast(`Added ${items.length} items to the ${TODO_LISTS[list].toLowerCase()}.`);
-  }));
+    if (items.length > 1) toast(`Added ${items.length} items to the ${TODO_LISTS[list].toLowerCase()}.`);
+    return items.length;
+  };
+  // The add box grows with what's in it, so a pasted block shows every line until it's added.
+  const fit = box => { box.style.height = 'auto'; box.style.height = `${box.scrollHeight + 2}px`; };
 
-  view.querySelectorAll('form.addtask').forEach(form => form.addEventListener('submit', e => {
-    e.preventDefault();
-    const input = form.querySelector('input'), text = input.value.trim(), list = form.dataset.list;
-    if (!text) return input.focus();
-    todo[list].push(newTask(text));
-    todoChanged(p, { what: 'added', text, list });
-    input.value = '';
-    redraw();
-    input.focus();
-  }));
+  view.querySelectorAll('form.addtask').forEach(form => {
+    const box = form.querySelector('textarea'), list = form.dataset.list;
+    // Pasting a block (a list from Notes, a text message, an email) adds each line straight away.
+    // What's already typed in the box is kept and added first.
+    box.addEventListener('paste', e => {
+      const pasted = e.clipboardData?.getData('text/plain') || '';
+      if (splitPasted(pasted).length < 2) return;   // one item: paste it into the box as usual
+      e.preventDefault();
+      const before = box.value.slice(0, box.selectionStart), after = box.value.slice(box.selectionEnd);
+      addLines(list, [...linesOf(before), ...splitPasted(pasted), ...linesOf(after)]);
+      box.value = '';
+      fit(box);
+    });
+    box.addEventListener('input', () => fit(box));
+    // Return adds what's in the box (Shift+Return starts a new line, to type several tasks at once).
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    });
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      if (!addLines(list, linesOf(box.value))) return box.focus();
+      box.value = '';
+      fit(box);
+      box.focus();
+    });
+  });
 
   view.querySelectorAll('ul.tasks').forEach(ul => {
     const list = ul.dataset.list;
