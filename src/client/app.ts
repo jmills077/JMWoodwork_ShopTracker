@@ -431,7 +431,7 @@ function route() {
   else if (parts[0] === 'tasks') {
     nav = 'tasks';
     const listed = store.projects.find(p => p.id === Number(parts[1]));
-    if (parts[1] === 'shopping') showShopping(); else if (listed) showTodo(listed); else showTasks();
+    if (parts[1] === 'shopping') showShopping(); else if (parts[1] === 'todos') showAllTodos(); else if (listed) showTodo(listed); else showTasks();
   }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
@@ -1451,9 +1451,31 @@ const todoCounts = p => {
 // first; the older ones are behind a "Show all" button so the page stays short).
 let showAllFinished = false;
 const finishedAt = p => [...p.history].reverse().find(h => h.status === p.status)?.at || p.updated_at;
+
+// Active projects in priority order. By default the nearest due date comes first. Once projects have
+// been moved by hand that order is kept (in the settings, so every device shares it), and a project
+// that isn't in it yet (new, or back from frozen) slots in by its due date.
+const dueKey = p => p.data.due_date || '9999';
+function prioritized() {
+  const active = store.projects.filter(p => !archived(p) && !isFrozen(p))
+    .sort((a, b) => dueKey(a).localeCompare(dueKey(b)) || a.id - b.id);
+  const saved = Array.isArray(store.settings.task_order) ? store.settings.task_order : [];
+  const ranked = saved.map(id => active.find(p => p.id === id)).filter(Boolean);
+  for (const p of active) {
+    if (ranked.includes(p)) continue;
+    const i = ranked.findIndex(q => dueKey(q) > dueKey(p));
+    ranked.splice(i < 0 ? ranked.length : i, 0, p);
+  }
+  return ranked;
+}
+const manualOrder = () => Array.isArray(store.settings.task_order) && store.settings.task_order.length > 0;
+function setTaskOrder(ids) {
+  store.settings.task_order = ids;
+  settingsChanged();
+}
+
 function showTasks() {
-  const byDue = (a, b) => (a.data.due_date || '9999').localeCompare(b.data.due_date || '9999') || b.updated_at.localeCompare(a.updated_at);
-  const active = store.projects.filter(p => !archived(p) && !isFrozen(p)).sort(byDue);
+  const active = prioritized();
   const frozen = store.projects.filter(isFrozen).sort((a, b) => b.data.frozen.at.localeCompare(a.data.frozen.at));
   const finished = store.projects.filter(p => archived(p) && !isFrozen(p)).sort((a, b) => finishedAt(b).localeCompare(finishedAt(a)));
   const today = ymd(new Date()), FINISHED_SHOWN = 9;
@@ -1462,7 +1484,7 @@ function showTasks() {
     const note = kind === 'frozen' ? `frozen since ${esc(fmtDate(p.data.frozen.at))}`
       : kind === 'finished' ? `${p.status === 'declined' ? 'declined' : 'finished'} ${esc(fmtDate(finishedAt(p)))}`
       : due ? `<span class="${due < today ? 'late' : ''}">due ${esc(fmtDate(due))}</span>` : '';
-    return `<a class="card taskproj ${kind}" href="#/tasks/${p.id}">
+    return `<a class="card taskproj ${kind}" href="#/tasks/${p.id}"${kind === 'active' ? ` data-id="${p.id}" draggable="false"` : ''}>
       <div class="name"><b>${esc(projectName(p))}</b><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></div>
       <span class="muted" style="font-size:13px">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}${note ? ` &middot; ${note}` : ''}</span>
       <div class="progress" aria-hidden="true"><span style="width:${c.total ? Math.round(c.done / c.total * 100) : 0}%"></span></div>
@@ -1471,7 +1493,10 @@ function showTasks() {
   };
   const shownFinished = showAllFinished ? finished : finished.slice(0, FINISHED_SHOWN);
   view.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>${tasksTabs('projects')}
-    ${active.length ? `<div class="taskgrid">${active.map(p => card(p)).join('')}</div>`
+    ${active.length ? `<div class="taskgrid reorder" id="activeTasks">${active.map(p => card(p)).join('')}</div>
+      <p class="muted hint orderhint">${active.length > 1 ? 'Press and hold a project to move it up or down. ' : ''}${manualOrder()
+        ? 'In your own order; new projects slot in by due date. <button type="button" class="link" id="orderByDue">Sort by due date</button>'
+        : 'Nearest due date first.'}</p>`
       : `<div class="card empty"><p class="muted" style="margin:0">No active projects. Every new project gets its own to-do list as soon as it's created.</p></div>`}
     ${frozen.length ? `<section class="tasksection"><h2>Frozen projects <span>${frozen.length}</span></h2>
       <div class="taskgrid">${frozen.map(p => card(p, 'frozen')).join('')}</div></section>` : ''}
@@ -1479,6 +1504,68 @@ function showTasks() {
       <div class="taskgrid">${shownFinished.map(p => card(p, 'finished')).join('')}</div>
       ${finished.length > FINISHED_SHOWN ? `<p><button type="button" class="link" id="allFinished">${showAllFinished ? 'Show fewer' : `Show all ${finished.length}`}</button></p>` : ''}</section>` : ''}`;
   $('#allFinished')?.addEventListener('click', () => { showAllFinished = !showAllFinished; showTasks(); });
+  $('#orderByDue')?.addEventListener('click', () => { setTaskOrder([]); showTasks(); });
+  const grid = $('#activeTasks');
+  if (!grid) return;
+  const press = longPressReorder(grid, ids => { setTaskOrder(ids.map(Number)); showTasks(); }, 'a.taskproj');
+  // Letting go after a move is not a tap that opens the project.
+  grid.addEventListener('click', e => { if (press.justMoved()) e.preventDefault(); }, true);
+  // From the keyboard: Alt + up / down arrow moves the focused project.
+  grid.addEventListener('keydown', e => {
+    const a = (e.target as Element).closest<HTMLElement>('a.taskproj');
+    if (!a || !e.altKey || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault();
+    const ids = active.map(p => p.id), i = ids.indexOf(Number(a.dataset.id)), j = i + (e.key === 'ArrowUp' ? -1 : 1);
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setTaskOrder(ids);
+    showTasks();
+    ($(`#activeTasks a[data-id="${ids[j]}"]`) as HTMLElement)?.focus();
+  });
+}
+
+// Every open item on every active project's to-do list, as one list in the same order as the
+// Projects tab (highest priority first), each project's items in its own list's order. Checking an
+// item here checks it off on the project's list. Items checked this week stay, struck through, so a
+// mis-tap can be undone. Projects with nothing left to do are left out.
+const TODOS_KEEP_DAYS = 7;
+function showAllTodos() {
+  const since = new Date(Date.now() - TODOS_KEEP_DAYS * 86400000).toISOString(), today = ymd(new Date());
+  const shown = t => !t.done_at || t.done_at >= since;
+  const draw = () => {
+    let open = 0;
+    const groups = prioritized().map(p => {
+      const all = p.data.todo?.items || [], items = all.filter(shown), left = all.filter(t => !t.done_at).length;
+      if (!left) return '';
+      open += left;
+      const due = p.data.due_date;
+      return `<section class="card todogroup" data-project="${p.id}">
+        <div class="shophead"><a href="#/tasks/${p.id}"><b>${esc(projectName(p))}</b></a>
+          <span class="muted">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}${due ? ` &middot; <span class="${due < today ? 'late' : ''}">due ${esc(fmtDate(due))}</span>` : ''} &middot; ${left} to do</span></div>
+        <ul class="tasks">${items.map(t => `<li class="task ${t.done_at ? 'done' : ''}" data-id="${esc(t.id)}">
+          <input type="checkbox" ${t.done_at ? 'checked' : ''} aria-label="${esc(t.text)}"><span class="text">${esc(t.text)}</span>
+          ${t.done_at ? `<span class="when">Done ${esc(fmtDate(t.done_at))}</span>` : ''}</li>`).join('')}</ul>
+      </section>`;
+    }).filter(Boolean);
+    box.innerHTML = `<div class="pagehead"><h1>Tasks</h1></div>${tasksTabs('todos')}
+      <p class="muted shopsum">${open ? `${open} thing${open === 1 ? '' : 's'} to do across ${groups.length} project${groups.length === 1 ? '' : 's'}, in the order of the Projects tab.` : 'Nothing left to do.'}
+        Checking an item off here checks it off on that project's list too.</p>
+      ${groups.length ? `<div class="todoall">${groups.join('')}</div>`
+        : '<div class="card empty"><p class="muted" style="margin:0">Every active project\'s to-do list is done.</p></div>'}`;
+  };
+  view.innerHTML = '<div id="alltodos"></div>';
+  const box = $('#alltodos');
+  draw();
+  box.addEventListener('click', e => {
+    const li = (e.target as Element).closest<HTMLElement>('li.task');
+    const p = li && store.projects.find(x => x.id === Number(li.closest<HTMLElement>('[data-project]')?.dataset.project));
+    const t = p?.data.todo?.items.find(x => x.id === li.dataset.id);
+    if (!t) return;
+    if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
+    t.done_at = t.done_at ? null : new Date().toISOString();
+    todoChanged(p, { what: t.done_at ? 'done' : 'undone', text: t.text, list: 'items' });
+    draw();
+  });
 }
 
 // One project's to-do list, its lumber store shopping list and the log of everything done.
@@ -1606,6 +1693,8 @@ function showTodo(p) {
 // The two tabs at the top of the Tasks page.
 const tasksTabs = on => `<nav class="tabs">
   <a href="#/tasks" class="${on === 'projects' ? 'on' : ''}">Projects</a>
+  <a href="#/tasks/todos" class="${on === 'todos' ? 'on' : ''}">All to-dos <small>${
+    store.projects.filter(p => !archived(p) && !isFrozen(p)).reduce((n, p) => n + (p.data.todo?.items || []).filter(t => !t.done_at).length, 0) || ''}</small></a>
   <a href="#/tasks/shopping" class="${on === 'shopping' ? 'on' : ''}">Shopping list <small>${
     store.projects.filter(p => !archived(p) && !isFrozen(p)).reduce((n, p) => n + (p.data.todo?.lumber || []).filter(t => !t.done_at).length, 0) || ''}</small></a>
 </nav>`;
@@ -1619,8 +1708,7 @@ const SHOPPING_KEEP_DAYS = 7;
 let shoppingBy = 'species';   // opens by species every time
 function showShopping() {
   const since = new Date(Date.now() - SHOPPING_KEEP_DAYS * 86400000).toISOString();
-  const projects = store.projects.filter(p => !archived(p) && !isFrozen(p))
-    .sort((a, b) => (a.data.due_date || '9999').localeCompare(b.data.due_date || '9999') || a.id - b.id);
+  const projects = prioritized();
   const shown = t => !t.done_at || t.done_at >= since;
   const draw = () => {
     let open = 0, withItems = 0;
@@ -1811,22 +1899,23 @@ function splitPasted(text) {
 }
 
 // Press and hold an item to pick it up, then drag it up or down the list and let go. A quick swipe
-// still scrolls the page; only a steady press lifts the item. `drop` gets the new order of ids.
-function longPressReorder(ul, drop) {
+// still scrolls the page; only a steady press lifts the item. `drop` gets the new order of ids (each
+// item's data-id). Works for a single column and for a grid of cards (left to right, then down).
+function longPressReorder(ul, drop, item = 'li.task') {
   let timer = null, lifted = null, startX = 0, startY = 0, movedUntil = 0, pointer = null, order = '';
   const cancelPress = () => { clearTimeout(timer); timer = null; };
-  ul.addEventListener('contextmenu', e => { if (e.target.closest('li.task')) e.preventDefault(); });
+  ul.addEventListener('contextmenu', e => { if (e.target.closest(item)) e.preventDefault(); });
   // While an item is lifted, a finger moving on the screen drags it instead of scrolling the page.
   ul.addEventListener('touchmove', e => { if (lifted) e.preventDefault(); }, { passive: false });
   ul.addEventListener('pointerdown', e => {
-    const li = e.target.closest('li.task');
+    const li = e.target.closest(item);
     if (!li || e.button > 0 || e.target.closest('.x')) return;
     startX = e.clientX; startY = e.clientY; pointer = e.pointerId;
     cancelPress();
     timer = setTimeout(() => {
       timer = null;
       lifted = li;
-      order = [...ul.querySelectorAll('li.task')].map(x => x.dataset.id).join();
+      order = [...ul.querySelectorAll(item)].map(x => x.dataset.id).join();
       li.classList.add('lifted');
       try { li.setPointerCapture(pointer); } catch {}
       navigator.vibrate?.(15);
@@ -1838,8 +1927,12 @@ function longPressReorder(ul, drop) {
       return;
     }
     e.preventDefault();
-    const others = [...ul.querySelectorAll('li.task')].filter(x => x !== lifted);
-    const before = others.find(x => { const r = x.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    const others = [...ul.querySelectorAll(item)].filter(x => x !== lifted);
+    const rects = others.map(x => x.getBoundingClientRect()), oneColumn = rects.every(r => r.left === rects[0]?.left);
+    const before = others.find((x, i) => {
+      const r = rects[i];
+      return oneColumn ? e.clientY < r.top + r.height / 2 : e.clientY < r.top || (e.clientY <= r.bottom && e.clientX < r.left + r.width / 2);
+    });
     if ((before || null) !== lifted.nextElementSibling) ul.insertBefore(lifted, before || null);
   });
   const end = () => {
@@ -1848,7 +1941,7 @@ function longPressReorder(ul, drop) {
     lifted.classList.remove('lifted');
     lifted = null;
     movedUntil = Date.now() + 400;   // the click that follows letting go is not a tap on the task
-    const ids = [...ul.querySelectorAll('li.task')].map(x => x.dataset.id);
+    const ids = [...ul.querySelectorAll(item)].map(x => x.dataset.id);
     if (ids.join() !== order) drop(ids);
   };
   ul.addEventListener('pointerup', end);

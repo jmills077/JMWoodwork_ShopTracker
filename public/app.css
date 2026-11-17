@@ -377,6 +377,13 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
 .taskproj.frozen { border-left: 3px solid #2b5a94; }
 .taskproj.finished { opacity: .8; }
 .taskproj.finished .progress span { background: #8a9a8e; }
+/* Active projects can be pressed and held to move them; no link preview or text selection gets in the way. */
+.taskgrid.reorder .taskproj { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.taskproj.lifted { position: relative; z-index: 2; border-color: var(--accent); box-shadow: 0 8px 22px rgba(46, 35, 32, .25); transform: scale(1.02); cursor: grabbing; }
+.orderhint { margin-top: 10px; }
+.orderhint .link { font-size: inherit; }
+.todoall { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
+.todoall .card + .card { margin-top: 0; }
 /* Tasks page: the combined shopping list tab. */
 .shopsum { margin: 0 0 14px; font-size: 14px; }
 .shopgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
