@@ -438,9 +438,10 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .lanehead { top: env(safe-area-inset-top, 0px); margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))) 12px;
     padding: 10px max(14px, env(safe-area-inset-left)); border-radius: 0; }
   .lanehead h2 { font-size: 15px; }
-  /* While pinned, a strip of the band's color fills the space under the status bar above it. */
-  .lanehead.stuck::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: calc(env(safe-area-inset-top, 0px) + 1px); background: var(--lane); }
   .lanehead.stuck { box-shadow: 0 3px 8px rgba(46, 35, 32, .18); }
+  /* A solid bar behind the status bar, colored for the stream at the top of the screen (see markStuckBands),
+     so cards and the outgoing band slide underneath it instead of showing behind the clock. */
+  #statusCover { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 30; pointer-events: none; }
   .lanehead .lopen { display: none; }
   .stats { margin-bottom: 14px; }
   .stats .card { padding: 9px 12px; }
