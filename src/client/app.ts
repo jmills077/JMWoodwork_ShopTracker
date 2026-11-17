@@ -884,17 +884,25 @@ function swipeTimeline({ days, first, dateAt, col, todayCol, monthTitle }) {
 // ---------- type-ahead dropdowns ----------
 // Replaces a <select> with a box you can type in to narrow the choices. The select stays in the
 // page, hidden, as the value the form reads, and gets an "input" event when the choice changes.
-// The list floats over the page (so a scrolling table can't clip it) and closes if the page scrolls.
-let comboCount = 0, closeOpenCombo = null;
+// While open, the list sits on the page body (so a scrolling table can't clip it), placed in page
+// coordinates right under the box. On a phone the keyboard shrinks the visible area without changing
+// the layout, so the room around the box is measured against what's actually on screen, and the list
+// follows the box when the page scrolls or the keyboard moves things. Scrolling a table closes it.
+let comboCount = 0, closeOpenCombo = null, placeOpenCombo = null;
 window.addEventListener('scroll', e => {
-  if (closeOpenCombo && !(e.target instanceof Element && e.target.closest('.combo ul'))) closeOpenCombo();
+  if (!closeOpenCombo) return;
+  if (e.target === document || e.target === document.documentElement) placeOpenCombo?.();
+  else if (!(e.target instanceof Element && e.target.closest('.combo-list'))) closeOpenCombo();
 }, true);
+window.addEventListener('resize', () => placeOpenCombo?.());
+window.visualViewport?.addEventListener('resize', () => placeOpenCombo?.());
+window.visualViewport?.addEventListener('scroll', () => placeOpenCombo?.());
 
 function typeAhead(select, minWidth = 0) {
   const id = `combo${++comboCount}`;
   const wrap = document.createElement('div');
   wrap.className = 'combo';
-  wrap.innerHTML = `<input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"><ul id="${id}" role="listbox" hidden></ul>`;
+  wrap.innerHTML = `<input type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"><ul id="${id}" class="combo-list" role="listbox" hidden></ul>`;
   wrap.style.minWidth = select.style.minWidth;
   select.hidden = true;
   select.before(wrap);
@@ -920,24 +928,38 @@ function typeAhead(select, minWidth = 0) {
     list.innerHTML = shown.length
       ? shown.map((o, i) => `<li role="option" id="${id}-${i}" data-i="${i}" aria-selected="${o.value === select.value}">${esc(o.label)}</li>`).join('')
       : '<li class="none">No matches</li>';
+    if (list.parentNode !== document.body) document.body.append(list);
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
-    // Line the list up under the box, or above it when there's no room below.
-    const box = input.getBoundingClientRect(), width = Math.min(Math.max(box.width, minWidth), window.innerWidth - 16);
-    const below = window.innerHeight - box.bottom, above = box.top;
-    const flip = below < Math.min(list.scrollHeight, 264) + 8 && above > below;
-    Object.assign(list.style, {
-      width: `${width}px`,
-      left: `${Math.max(8, Math.min(box.left, window.innerWidth - width - 8))}px`,
-      top: flip ? '' : `${box.bottom + 3}px`,
-      bottom: flip ? `${window.innerHeight - box.top + 3}px` : '',
-    });
     closeOpenCombo = close;
+    placeOpenCombo = place;
+    place();
     setActive(q ? (shown.length ? 0 : -1) : shown.indexOf(current()));
   };
+  // Line the list up under the box, or above it when there's more room there, sized to fit on screen.
+  const place = () => {
+    if (!input.isConnected) return close();
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0, viewLeft = vv ? vv.offsetLeft : 0;
+    const viewHeight = vv ? vv.height : window.innerHeight, viewWidth = vv ? vv.width : window.innerWidth;
+    const box = input.getBoundingClientRect(), width = Math.min(Math.max(box.width, minWidth), viewWidth - 16);
+    const below = viewTop + viewHeight - box.bottom - 11, above = box.top - viewTop - 11;
+    const want = Math.min(list.scrollHeight, 264);
+    const flip = below < Math.min(want, 120) && above > below;
+    const height = Math.max(Math.min(want, flip ? above : below), 44);
+    const left = Math.max(viewLeft + 8, Math.min(box.left, viewLeft + viewWidth - width - 8));
+    const top = flip ? box.top - 3 - height : box.bottom + 3;
+    Object.assign(list.style, {
+      width: `${width}px`,
+      maxHeight: `${height}px`,
+      left: `${left + window.scrollX}px`,
+      top: `${top + window.scrollY}px`,
+    });
+  };
   const close = () => {
-    if (closeOpenCombo === close) closeOpenCombo = null;
+    if (closeOpenCombo === close) closeOpenCombo = placeOpenCombo = null;
     list.hidden = true;
+    if (list.parentNode !== wrap) wrap.append(list);
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
   };
