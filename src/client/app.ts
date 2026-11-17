@@ -2971,18 +2971,33 @@ document.addEventListener('click', e => { if (bell.open && !(e.target as Element
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setBell(false); });
 window.addEventListener('hashchange', () => setBell(false));
 
-// On a phone app the stream band on the Projects page pins just under the status bar. While it's
-// pinned it gets the "stuck" class, which fills the status-bar strip above it in the stream's color,
-// so cards don't show through above the band as they scroll by.
+// On a phone app the stream band on the Projects page pins just under the status bar. A fixed bar
+// behind the status bar takes the color of the stream at the top of the screen (the page background
+// in the gap between streams), so cards and the outgoing band slide under it rather than showing
+// behind the clock, and it switches color right as the next band takes over. Pinned bands also get
+// the "stuck" class for a stronger shadow.
 let stuckFrame = 0;
+const statusCover = document.createElement('div');
+statusCover.id = 'statusCover';
+document.body.append(statusCover);
 const markStuckBands = () => {
   stuckFrame = 0;
-  document.querySelectorAll<HTMLElement>('.lanehead').forEach(h => {
-    const top = parseFloat(getComputedStyle(h).top) || 0;
-    h.classList.toggle('stuck', top > 0 && h.getBoundingClientRect().top <= top + 0.5);
+  const lanes = [...document.querySelectorAll<HTMLElement>('.lane')];
+  const head = lanes[0]?.querySelector<HTMLElement>('.lanehead');
+  const top = head ? parseFloat(getComputedStyle(head).top) || 0 : 0;
+  let color = '';
+  if (top > 0 && lanes.length && lanes[0].getBoundingClientRect().top < top) {
+    const current = lanes.find(l => { const r = l.getBoundingClientRect(); return r.top <= top + 0.5 && r.bottom > top + 0.5; });
+    color = current ? getComputedStyle(current).getPropertyValue('--lane') : getComputedStyle(document.body).backgroundColor;
+  }
+  statusCover.style.background = color;
+  lanes.forEach(l => {
+    const h = l.querySelector<HTMLElement>('.lanehead');
+    h?.classList.toggle('stuck', top > 0 && h.getBoundingClientRect().top <= top + 0.5);
   });
 };
 window.addEventListener('scroll', () => { if (!stuckFrame) stuckFrame = requestAnimationFrame(markStuckBands); }, { passive: true });
+window.addEventListener('hashchange', () => requestAnimationFrame(markStuckBands));
 
 backfillTodos();
 route();
