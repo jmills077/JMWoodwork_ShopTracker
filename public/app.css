@@ -593,6 +593,8 @@ ul.rlog .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 .photoview img { max-width: 100%; max-height: calc(100% - 40px); object-fit: contain; background: #fff; border-radius: 4px; }
 .photoview .cap { color: #f3e9dc; font-size: 13px; margin-top: 10px; text-align: center; }
 .photoview .cap a { color: #fff; }
+.photoview .photoacts { display: flex; gap: 8px; margin-top: 10px; }
+.photoview .photoacts .btn { background: #fff; }
 .printhead { display: none; }
 @media print {
   .printhead { display: block; margin-bottom: 14px; }

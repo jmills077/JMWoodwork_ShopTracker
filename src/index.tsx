@@ -16,7 +16,7 @@ import type { App, Env } from './env';
 import { endSession, isSignedIn, passwordMatches, startSession } from './lib/auth';
 import { BadRequest, createProject, getPrices, getState, importBackup, replacePrices, saveChanges } from './lib/db';
 import { readPriceLists } from './lib/prices';
-import { deleteReceipt, keepPhoto, listReceipts, readPhoto, ReceiptError, saveReceipt, scanReceipt } from './lib/receipts';
+import { deleteReceipt, keepPhoto, listReceipts, removePhoto, readPhoto, ReceiptError, saveReceipt, scanReceipt } from './lib/receipts';
 import { orderAdminUrl, readOpenOrders, readProducts, readRecentOrders, shopifyConnected } from './lib/shopify';
 import { AppPage } from './views/app';
 import { LoginPage, SetupPage } from './views/login';
@@ -187,8 +187,13 @@ app.post('/api/receipts', async c => {
 app.get('/api/receipts/:id/photo', async c => {
   const photo = await readPhoto(c.env.DB, c.req.param('id'));
   if (!photo) return c.text('No photo was kept for this receipt.', 404);
-  // A receipt's photo never changes once kept (a retake gets a new id), so the browser can keep it.
-  return c.body(photo.bytes, 200, { 'Content-Type': photo.mime, 'Cache-Control': 'private, max-age=31536000, immutable' });
+  // A photo can be replaced, so the page asks for it with ?v= (its size) and only that address is kept for good.
+  const cache = c.req.query('v') ? 'private, max-age=31536000, immutable' : 'private, no-cache';
+  return c.body(photo.bytes, 200, { 'Content-Type': photo.mime, 'Cache-Control': cache });
+});
+app.post('/api/receipts/:id/photo/delete', async c => {
+  try { await removePhoto(c.env.DB, c.req.param('id')); return c.json({ ok: true }); }
+  catch (error) { if (error instanceof ReceiptError) return c.json({ error: error.message }, 400); throw error; }
 });
 app.post('/api/receipts/:id/delete', async c => {
   try { await deleteReceipt(c.env.DB, c.req.param('id')); return c.json({ ok: true }); }
