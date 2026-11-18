@@ -2801,10 +2801,15 @@ view.addEventListener('error', e => {
   const id = (holder as HTMLElement)?.dataset.photoId;
   const box = document.createElement(id ? 'button' : 'span');
   box.className = id ? 'nophoto addphoto' : 'nophoto';
-  box.innerHTML = id ? 'No photo kept<b>+ Add photo</b><small class="dragnote">or drop one here</small>' : 'No photo kept';
-  if (id) Object.assign(box, { type: 'button' }).dataset.addphoto = id;
+  box.innerHTML = id ? ADD_PHOTO_INNER : 'No photo kept';
+  if (id) Object.assign(box, { type: 'button', title: ADD_PHOTO_TITLE }).dataset.addphoto = id;
   (holder || img).replaceWith(box);
 }, true);
+
+// The box shown in place of a missing receipt photo: a camera and "Add photo" (dragging one in is in the tooltip).
+const ADD_PHOTO_TITLE = 'No photo kept. Tap to add one, or drag a photo here.';
+const ADD_PHOTO_INNER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Add photo</span>';
+const addPhotoButton = (id: string) => `<button type="button" class="nophoto addphoto" data-addphoto="${esc(id)}" title="${ADD_PHOTO_TITLE}" aria-label="Add a photo of this receipt">${ADD_PHOTO_INNER}</button>`;
 
 // A receipt with no photo (scanned before photos were kept, or typed in): tap its box to pick one from the
 // phone's photos (or take one), or drag a photo onto it on a computer.
@@ -2889,7 +2894,7 @@ async function showReceiptLog(year) {
       <ul class="rlog">${shown.map(r => {
         const used = uses.get(r.id) || [];
         return `<li>
-          ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : `<button type="button" class="nophoto addphoto" data-addphoto="${esc(r.id)}">No photo<b>+ Add photo</b><small class="dragnote">or drop one here</small></button>`}
+          ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : addPhotoButton(r.id)}
           <div class="rinfo"><b>${esc(r.store || 'Store not given')}</b> <span class="muted">${esc(r.date ? fmtDate(r.date) : '')}</span>
             ${r.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
             <div class="rprojects">${used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')}
@@ -3208,7 +3213,7 @@ function showSummary(p) {
         const caption = [g.store, g.date && fmtDate(g.date)].filter(Boolean).join(', ');
         const photo = g.id && (!receiptLog || r?.has_photo)
           ? `<a href="${photoUrl(g.id)}" class="thumb" data-photo-id="${esc(g.id)}" data-caption="${esc(caption)}"><img class="rthumb" loading="lazy" src="${photoUrl(g.id)}" alt="Receipt photo"></a>`
-          : g.id ? `<button type="button" class="nophoto addphoto" data-addphoto="${esc(g.id)}">No photo kept<b>+ Add photo</b><small class="dragnote">or drop one here</small></button>` : '<span class="nophoto">Typed in</span>';
+          : g.id ? addPhotoButton(g.id) : '<span class="nophoto">Typed in</span>';
         return `<li>${photo}<div class="rinfo">
           <div class="rtop"><b>${esc(g.store || 'Store not given')}</b><span class="muted">${esc(g.date ? fmtDate(g.date) : '')}</span></div>
           <ul class="purchases">${g.lines.map(x => `<li><span>${esc(x.item)}</span><span class="amt">${money(x.amount)}</span>

@@ -618,10 +618,8 @@ ul.rlog .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 .rgeneral ul.purchases li { grid-template-columns: minmax(0, 1fr) auto 20px; padding: 3px 0; }
 .rnotebtn { font-size: 12px; margin-top: 2px; }
 /* A receipt with no photo: the box is a button to add one. */
-button.nophoto { flex-direction: column; gap: 4px; background: none; font: inherit; font-size: 11px; color: var(--muted); cursor: pointer; padding: 4px; }
-button.nophoto b { color: var(--accent); font-size: 12px; }
-button.nophoto:hover { border-color: var(--accent); }
+button.nophoto { flex-direction: column; gap: 4px; background: none; font: inherit; font-size: 11px; font-weight: 600; line-height: 1.2; color: var(--accent); cursor: pointer; padding: 4px; }
+button.nophoto svg { opacity: .85; }
+button.nophoto > * { pointer-events: none; }
+button.nophoto:hover { border-color: var(--accent); background: #faf5ec; }
 button.nophoto.over { border: 2px solid var(--accent); background: #f6eedf; }
-button.nophoto .dragnote { font-size: 10px; }
-/* Phones and tablets can't drag files in. */
-@media (hover: none) { button.nophoto .dragnote { display: none; } }
