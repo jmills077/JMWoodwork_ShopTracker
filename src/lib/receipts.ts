@@ -73,3 +73,56 @@ export async function scanReceipt(env: Env, image: string): Promise<ScannedRecei
   const date = readDate(String(parsed?.date ?? ''));
   return { store: String(parsed?.store ?? '').trim(), date, items, tax: money(parsed?.tax), total: money(parsed?.total) };
 }
+
+// ---------- keeping the photos ----------
+// Each receipt is a row in the receipts table (migrations/0006_receipts.sql): what was printed on it
+// and the photo. Which project each line went to is in that project's data.purchases.
+
+/** A receipt as listed: everything but the photo itself. */
+export interface ReceiptRecord { id: string; store: string; date: string; total: number; tax: number; has_photo: boolean; created_at: string }
+
+const ID = /^r[0-9a-z]{4,30}$/;
+// What a D1 row can hold, less room for the other columns.
+const MAX_STORED_CHARS = 1_900_000;
+const checkId = (id: unknown) => { if (typeof id !== 'string' || !ID.test(id)) throw new ReceiptError('Not a receipt id.'); return id; };
+
+/** Keeps a receipt photo (sent as a data URL), creating the receipt if it's new. */
+export async function keepPhoto(db: D1Database, id: unknown, image: string) {
+  const m = image.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) throw new ReceiptError('That photo could not be read. Try taking it again.');
+  if (m[2].length > MAX_STORED_CHARS) throw new ReceiptError('That photo is too large to keep. Try taking it again.');
+  await db.prepare(`INSERT INTO receipts (id, mime, image, created_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET mime = excluded.mime, image = excluded.image`)
+    .bind(checkId(id), m[1], m[2], new Date().toISOString()).run();
+}
+
+/** Saves what a receipt says (store, date, total, tax), creating it without a photo if it's new. */
+export async function saveReceipt(db: D1Database, r: any) {
+  const text = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(r?.date)) ? String(r.date) : '';
+  await db.prepare(`INSERT INTO receipts (id, store, date, total, tax, created_at) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET store = excluded.store, date = excluded.date, total = excluded.total, tax = excluded.tax`)
+    .bind(checkId(r?.id), text(r?.store, 200), date, money(r?.total), money(r?.tax), new Date().toISOString()).run();
+}
+
+export async function listReceipts(db: D1Database): Promise<ReceiptRecord[]> {
+  const rows = await db.prepare(`SELECT id, store, date, total, tax, mime != '' AS has_photo, created_at FROM receipts ORDER BY date DESC, created_at DESC`)
+    .all<Omit<ReceiptRecord, 'has_photo'> & { has_photo: number }>();
+  return rows.results.map(r => ({ ...r, has_photo: !!r.has_photo }));
+}
+
+export async function readPhoto(db: D1Database, id: string) {
+  if (!ID.test(id)) return null;
+  const row = await db.prepare(`SELECT mime, image FROM receipts WHERE id = ? AND mime != ''`).bind(id).first<{ mime: string; image: string }>();
+  if (!row) return null;
+  return { mime: row.mime, bytes: Uint8Array.from(atob(row.image), c => c.charCodeAt(0)) };
+}
+
+/** Deletes a receipt, but only one no project's purchases point to (so nothing filed for taxes goes missing). */
+export async function deleteReceipt(db: D1Database, id: unknown) {
+  checkId(id);
+  const used = await db.prepare(`SELECT 1 FROM projects, json_each(projects.data, '$.purchases') AS x
+    WHERE json_extract(x.value, '$.receipt') = ? LIMIT 1`).bind(id).first();
+  if (used) throw new ReceiptError('Lines from this receipt are still on a project. Remove them from the project first.');
+  await db.prepare('DELETE FROM receipts WHERE id = ?').bind(id).run();
+}

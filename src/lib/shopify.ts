@@ -54,18 +54,20 @@ export async function readProducts(env: Env): Promise<ShopItem[]> {
   }));
 }
 
-/** Open orders with something still to ship: the order number, when it was placed and what is owed. */
-export interface OpenOrder { name: string; created_at: string; items: { handle: string; variant: string; qty: number }[] }
+/** Open orders with something still to ship: the order number, when it was placed and what is owed.
+ *  `amount` is what the customer paid for the whole line (after discounts, before tax and shipping). */
+export interface OpenOrder { name: string; created_at: string; items: { handle: string; variant: string; qty: number; quantity: number; amount: number }[] }
 
 export async function readOpenOrders(env: Env): Promise<OpenOrder[]> {
   const data = await admin<any>(env, `{ orders(first: 100, sortKey: CREATED_AT, query: "status:open AND (fulfillment_status:unshipped OR fulfillment_status:partial)") {
-    nodes { name createdAt cancelledAt lineItems(first: 100) { nodes { variantTitle unfulfilledQuantity product { handle } } } } } }`);
+    nodes { name createdAt cancelledAt lineItems(first: 100) { nodes { variantTitle quantity unfulfilledQuantity discountedTotalSet { shopMoney { amount } } product { handle } } } } } }`);
   return data.orders.nodes
     .filter((o: any) => !o.cancelledAt)
     .map((o: any) => ({
       name: o.name, created_at: o.createdAt,
       items: o.lineItems.nodes.filter((i: any) => i.unfulfilledQuantity > 0 && i.product)
-        .map((i: any) => ({ handle: i.product.handle, variant: variantName(i.variantTitle), qty: i.unfulfilledQuantity })),
+        .map((i: any) => ({ handle: i.product.handle, variant: variantName(i.variantTitle), qty: i.unfulfilledQuantity,
+          quantity: i.quantity, amount: Number(i.discountedTotalSet?.shopMoney?.amount) || 0 })),
     }))
     .filter((o: OpenOrder) => o.items.length);
 }
