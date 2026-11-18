@@ -623,3 +623,8 @@ button.nophoto svg { opacity: .85; }
 button.nophoto > * { pointer-events: none; }
 button.nophoto:hover { border-color: var(--accent); background: #faf5ec; }
 button.nophoto.over { border: 2px solid var(--accent); background: #f6eedf; }
+/* Taking a receipt off a project it was put on by mistake. */
+.rremove { font-size: 12px; margin-top: 4px; color: var(--bad); display: inline-block; }
+.ruse { white-space: nowrap; }
+.ruse button { margin-left: 4px; font-size: 14px; color: var(--muted); }
+.ruse button:hover { color: var(--bad); }
