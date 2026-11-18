@@ -131,6 +131,11 @@ scripts/             Seed script
   rate) plus income tax (Settings → Project summaries, 7% by default) and profit after it, and
   profit per hour (after the set-aside) beside the project's hourly rate. Every receipt is listed with its photo (tap for full screen), and the
   page prints or saves as a PDF with the photos.
+- **Export for QuickBooks** (on All receipts): pick a span of dates and download an Excel file (`src/client/xlsx.ts`
+  writes it in the browser, no library) with sheets for each project's summary, each receipt as one expense
+  (date, vendor, total, sales tax, category, Customer:Project, photo link), each expense line with its customer and
+  project, and income (client jobs on the day they were marked delivered, each Shopify order on its date, then
+  what's still expected), plus an About sheet saying how each figure is worked out.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and

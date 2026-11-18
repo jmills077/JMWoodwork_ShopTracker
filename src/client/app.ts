@@ -1,6 +1,6 @@
 // Shop Tracker in the browser: every page is drawn here from the shop's data, which the server
 // embeds in the page and saves to the database. See README.md for how the pieces fit together.
-export {};
+import { workbook, type Cell, type Sheet } from './xlsx';
 
 // ---------- estimating model ----------
 // Baseline hours per phase at a reference size (inches, L x W x H). Hours are
@@ -2778,6 +2778,17 @@ view.addEventListener('error', e => {
 
 const yearOf = r => (r.date || r.created_at || '').slice(0, 4);
 
+// The receipts kept, plus ones scanned before photos were kept (only named by their lines on projects).
+function withOldReceipts(log, uses) {
+  const filed = new Set(log.map(r => r.id));
+  return [...log, ...[...uses].filter(([id]) => !filed.has(id)).map(([id, used]) => {
+    const first = used[0].lines[0];
+    return { id, store: first.store, date: first.date, has_photo: false, created_at: '',
+      total: cents(used.reduce((n, u) => n + u.lines.reduce((m, x) => m + num(x.amount), 0), 0)),
+      tax: cents(used.reduce((n, u) => n + u.lines.filter(x => /^sales tax$/i.test(x.item)).reduce((m, x) => m + num(x.amount), 0), 0)) };
+  })].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
 async function showReceiptLog(year) {
   view.innerHTML = `<a href="#/receipt" class="back">&larr; Scan a receipt</a>
     <div class="pagehead"><h1>All receipts</h1></div><div class="card"><p class="muted">Loading&hellip;</p></div>`;
@@ -2786,20 +2797,14 @@ async function showReceiptLog(year) {
   catch (error) { $('.card', view).innerHTML = `<p class="note err">${esc(serverSaid(error))}</p>`; return; }
   if (!currentHash.startsWith('#/receipts')) return;   // moved on while loading
   const uses = receiptUses();
-  // Receipts scanned before photos were kept are only named by their lines on projects: list them too.
-  const filed = new Set(log.map(r => r.id));
-  log = [...log, ...[...uses].filter(([id]) => !filed.has(id)).map(([id, used]) => {
-    const first = used[0].lines[0];
-    return { id, store: first.store, date: first.date, has_photo: false, created_at: '',
-      total: cents(used.reduce((n, u) => n + u.lines.reduce((m, x) => m + num(x.amount), 0), 0)),
-      tax: cents(used.reduce((n, u) => n + u.lines.filter(x => /^sales tax$/i.test(x.item)).reduce((m, x) => m + num(x.amount), 0), 0)) };
-  })].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  log = withOldReceipts(log, uses);
   const years = [...new Set(log.map(yearOf).filter(Boolean))].sort().reverse();
   const shown = year ? log.filter(r => yearOf(r) === year) : log;
   const sum = (list, f) => cents(list.reduce((n, x) => n + num(f(x)), 0));
   view.innerHTML = `<a href="#/receipt" class="back">&larr; Scan a receipt</a>
     <div class="pagehead"><h1>All receipts</h1><span class="spacer"></span>
       ${shown.length ? `<button type="button" class="btn small" id="receiptCsv">Download ${year || 'all'} as a spreadsheet (CSV)</button>` : ''}</div>
+    <div class="card" id="qbCard"></div>
     <nav class="tabs"><a href="#/receipts" class="${year ? '' : 'on'}">All</a>${years.map(y => `<a href="#/receipts/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</nav>
     <div class="card">
       ${shown.length ? `<div class="tot grand" style="margin-top:0;border-top:0;padding-top:0"><span>${shown.length} receipt${shown.length === 1 ? '' : 's'}${year ? ` in ${year}` : ''}</span><span>${money(sum(shown, r => r.total))}</span></div>
@@ -2817,6 +2822,7 @@ async function showReceiptLog(year) {
     </div>
     <p class="muted" style="font-size:13px">Every receipt photo scanned is kept, even ones with no lines added to a project. Receipts scanned before photos were kept show No photo.</p>`;
   $('#receiptCsv')?.addEventListener('click', () => downloadReceiptCsv(shown, uses, year || 'all'));
+  renderQuickBooksCard();
   view.querySelectorAll('[data-delreceipt]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Delete this receipt and its photo? This cannot be undone.')) return;
     try { await api(`/api/receipts/${encodeURIComponent(b.dataset.delreceipt)}/delete`, {}); }
@@ -2844,6 +2850,184 @@ function downloadReceiptCsv(receipts, uses, label) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+// ---------- Excel export for QuickBooks ----------
+// Everything for a span of dates in one workbook, laid out to match up against QuickBooks Online:
+// each receipt as one expense (its date, vendor and total are what the bank or card feed shows),
+// each line with the customer and project it belongs to, income by project (each Shopify order on its
+// own), and every project's profit and loss as its Summary shows it.
+const EXPENSE_CATEGORY = 'Supplies & Materials';   // a QuickBooks default account; change it in the sheet if you file elsewhere
+const NOT_STARTED = ['draft', 'sent', 'declined'];   // client quotes that never became work
+
+const day = iso => String(iso || '').slice(0, 10);
+const customerOf = p => isClient(p) ? (p.data.client_name || 'Client') : isProduct(p) ? 'Shopify' : 'JM Woodwork';
+// A name that stays the same in QuickBooks: a batch run's title changes with its unit count, so it's named by its start date.
+const exportName = p => isBatch(p) ? `${p.data.title} run ${day(p.created_at)}` : projectName(p);
+const customerProject = p => `${customerOf(p)}:${exportName(p)}`;
+const finishedDay = p => archived(p) ? day(finishedAt(p)) : '';
+const $c = (v, s): Cell => (v === '' || v == null ? null : { v, s });
+
+// Income for a project, one row per payment where it's known: [{ date, customer, description, amount, tax }].
+function incomeRows(p) {
+  const rev = revenueOf(p), done = finishedDay(p);
+  if (rev.typed) return [{ date: done, customer: customerOf(p), description: 'Revenue received (typed in on the Summary)', amount: rev.amount, tax: 0 }];
+  if (isBatch(p)) {
+    const sales = Object.entries(p.data.batch.sales || {}) as [string, any][];
+    if (sales.length) return sales.map(([name, x]) => ({ date: day(x.at), customer: 'Shopify', description: `Shopify order ${name}, ${pos(x.units)} × ${p.data.batch.product}`, amount: num(x.amount), tax: 0 }));
+    return num(p.calc.total) ? [{ date: '', customer: 'Shopify', description: 'Retail value of the units (expected; not sold through Shopify yet)', amount: num(p.calc.total), tax: 0 }] : [];
+  }
+  if (!rev.amount) return [];
+  return [{ date: p.status === 'delivered' ? done : '', customer: customerOf(p), amount: rev.amount, tax: num(p.calc.tax),
+    description: `${rev.label}${p.status === 'delivered' ? '' : ' (not delivered yet)'}` }];
+}
+
+async function exportQuickBooks(from, to) {
+  const inRange = d => !!d && d >= from && d <= to;
+  const uses = receiptUses();
+  const log = withOldReceipts([...await loadReceipts()], uses);
+  const photo = r => r.has_photo ? { link: `${location.origin}${photoUrl(r.id)}`, text: 'Photo' } : 'No photo';
+
+  // A project is in the export if money moved on it in the span, or it was being worked on then.
+  const projects = store.projects.filter(p => {
+    const lines = (p.data.purchases || []).some(x => inRange(x.date));
+    const paid = incomeRows(p).some(r => inRange(r.date));
+    if (lines || paid) return true;
+    if (isClient(p) && NOT_STARTED.includes(p.status)) return false;
+    return day(p.created_at) <= to && (!archived(p) || finishedDay(p) >= from);
+  }).sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  const head = ['Project', 'Customer:Project', 'Customer', 'Stream', 'Status', 'Started', 'Finished', 'Revenue', 'Revenue basis',
+    'Sales tax collected', 'Materials & supplies', 'Profit', 'Margin', 'State tax set-aside', 'Income tax set-aside', 'Profit after taxes',
+    'Hours worked', 'Profit per hour after taxes', 'Receipts', 'Link'];
+  const summary: Cell[][] = [head];
+  const totals = { rev: 0, tax: 0, spent: 0, profit: 0, stateSet: 0, incomeSet: 0, kept: 0, hours: 0 };
+  for (const p of projects) {
+    const x = pnlOf(p);
+    const salesTax = isClient(p) && !x.rev.typed ? num(p.calc.tax) : 0;
+    summary.push([exportName(p), customerProject(p), customerOf(p), STREAM_NAME[streamOf(p)], STATUS_NAME[p.status] || p.status,
+      $c(day(p.created_at), 'date'), $c(finishedDay(p), 'date'), $c(x.rev.amount, 'money'), [x.rev.label, streamOf(p) === 'gallery' ? '' : x.rev.detail].filter(Boolean).join(', '),
+      $c(salesTax, 'money'), $c(x.spent, 'money'), $c(x.profit, 'money'), x.rev.amount ? $c(x.profit / x.rev.amount, 'pct') : null,
+      $c(x.stateSet, 'money'), $c(x.incomeSet, 'money'), $c(x.kept, 'money'), x.hours ? $c(x.hours, 'hours') : null,
+      x.perHour != null ? $c(cents(x.perHour), 'money') : null, new Set((p.data.purchases || []).map(l => l.receipt || l.id)).size,
+      { link: `${location.origin}/#/p/${p.id}/summary`, text: 'Summary' }]);
+    totals.rev += x.rev.amount; totals.tax += salesTax; totals.spent += x.spent; totals.profit += x.profit;
+    totals.stateSet += x.stateSet; totals.incomeSet += x.incomeSet; totals.kept += x.kept; totals.hours += x.hours;
+  }
+  if (projects.length) summary.push([{ v: 'Total', s: 'bold' }, null, null, null, null, null, null, $c(cents(totals.rev), 'boldmoney'), null,
+    $c(cents(totals.tax), 'boldmoney'), $c(cents(totals.spent), 'boldmoney'), $c(cents(totals.profit), 'boldmoney'), null,
+    $c(cents(totals.stateSet), 'boldmoney'), $c(cents(totals.incomeSet), 'boldmoney'), $c(cents(totals.kept), 'boldmoney'), totals.hours ? $c(totals.hours, 'hours') : null]);
+
+  // One row per receipt: what to match against the bank or card transaction.
+  const receipts: Cell[][] = [['Date', 'Vendor', 'Total', 'Sales tax', 'Category', 'Customer:Project', 'Memo', 'Receipt ID', 'Photo']];
+  for (const r of [...log].reverse().filter(r => inRange(r.date))) {
+    const used = uses.get(r.id) || [];
+    const items = used.flatMap(u => u.lines.filter(l => !/^sales tax$/i.test(l.item)).map(l => l.item));
+    receipts.push([$c(r.date, 'date'), r.store, $c(r.total, 'money'), $c(r.tax, 'money'), EXPENSE_CATEGORY,
+      used.length === 1 ? customerProject(used[0].p) : used.length ? 'Split: see Expense lines' : 'Not on a project',
+      items.join('; ').slice(0, 1000), r.id, photo(r)]);
+  }
+
+  // One row per line, with the project it's billed to: for splitting a receipt across projects in QuickBooks.
+  const known = new Map(log.map(r => [r.id, r]));
+  const lines: Cell[][] = [['Date', 'Vendor', 'Description', 'Amount', 'Category', 'Customer:Project', 'Customer', 'Project', 'Class', 'Receipt ID', 'Photo']];
+  const allLines = store.projects.flatMap(p => (p.data.purchases || []).filter(x => inRange(x.date)).map(x => ({ p, x })))
+    .sort((a, b) => a.x.date.localeCompare(b.x.date) || String(a.x.receipt).localeCompare(String(b.x.receipt)));
+  for (const { p, x } of allLines) {
+    const r = known.get(x.receipt);
+    lines.push([$c(x.date, 'date'), x.store, x.item, $c(num(x.amount), 'money'), EXPENSE_CATEGORY, customerProject(p), customerOf(p), exportName(p),
+      STREAM_NAME[streamOf(p)], x.receipt || 'Typed in', r ? photo(r) : 'No photo']);
+  }
+
+  // Income: dated payments in the span, and what's still expected on the projects listed.
+  const income: Cell[][] = [['Date', 'Customer', 'Customer:Project', 'Project', 'Description', 'Amount before sales tax', 'Sales tax', 'Total', 'Class']];
+  for (const p of projects) for (const r of incomeRows(p)) {
+    if (r.date && !inRange(r.date)) continue;
+    income.push([r.date ? $c(r.date, 'date') : 'Not received yet', r.customer, customerProject(p), exportName(p), r.description,
+      $c(r.amount, 'money'), $c(r.tax, 'money'), $c(cents(r.amount + r.tax), 'money'), STREAM_NAME[streamOf(p)]]);
+  }
+
+  const about: Cell[][] = [
+    [{ v: `${store.settings.business_name || 'Shop Tracker'}: export for QuickBooks`, s: 'bold' }],
+    [`Dates ${from} to ${to}, made ${ymd(new Date())}.`],
+    [],
+    [{ v: 'Project summary', s: 'bold' }],
+    ['Every project worked on or paid in these dates, with its whole profit and loss as its Summary page shows it (not only the part in these dates).'],
+    ['Revenue is the agreed or quoted price before sales tax, a product run\'s Shopify orders, or the figure typed in on the Summary.'],
+    [`Tax set-asides are estimates: the project's state tax rate plus ${+pos(store.settings.income_tax_pct)}% income tax, taken from profit.`],
+    [],
+    [{ v: 'Expenses by receipt', s: 'bold' }],
+    ['One row per receipt dated in the span. Date, vendor and total match the bank or card transaction to categorize in QuickBooks.'],
+    [`Category is "${EXPENSE_CATEGORY}" for every row; change it where a purchase belongs in another account.`],
+    [],
+    [{ v: 'Expense lines', s: 'bold' }],
+    ['Each line of each receipt with the customer and project it went to, for splitting a transaction across projects.'],
+    [],
+    [{ v: 'Income', s: 'bold' }],
+    ['Payments dated in the span (a client job on the day it was marked delivered, each Shopify order on its order date), then amounts still expected on the projects listed.'],
+    [],
+    ['Photo and Summary links open in Shop Tracker, so sign in there first.'],
+  ];
+
+  const sheets: Sheet[] = [
+    { name: 'Project summary', rows: summary, widths: [28, 40, 20, 14, 14, 11, 11, 13, 34, 12, 14, 13, 8, 12, 12, 13, 9, 13, 9, 10] },
+    { name: 'Expenses by receipt', rows: receipts, widths: [11, 28, 12, 11, 20, 40, 60, 16, 10] },
+    { name: 'Expense lines', rows: lines, widths: [11, 28, 44, 12, 20, 40, 20, 28, 14, 16, 10] },
+    { name: 'Income', rows: income, widths: [14, 20, 40, 28, 52, 14, 11, 13, 14] },
+    { name: 'About', rows: about, widths: [140], header: false },
+  ];
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(workbook(sheets)), download: `shop-tracker-quickbooks-${from}-to-${to}.xlsx` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return { projects: projects.length, receipts: receipts.length - 1 };
+}
+
+// The export's card on the All receipts page: a span of dates, with quick picks for this year and last.
+let qbFrom = '', qbTo = '';
+function renderQuickBooksCard() {
+  const card = $('#qbCard');
+  if (!card) return;
+  const now = new Date(), y = now.getFullYear();
+  qbFrom ||= `${y}-01-01`;
+  qbTo ||= ymd(now);
+  card.innerHTML = `<h2>Export for QuickBooks</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px">An Excel file with every project's summary, each receipt and its lines with the customer and project they belong to, and income, for the dates you pick.</p>
+    <div class="qbrange">
+      <label class="f"><span>From</span><input type="date" id="qbFrom" value="${esc(qbFrom)}"></label>
+      <label class="f"><span>To</span><input type="date" id="qbTo" value="${esc(qbTo)}"></label>
+    </div>
+    <p style="margin:8px 0 0;font-size:13px"><button type="button" class="link" data-span="${y}">This year</button> &middot;
+      <button type="button" class="link" data-span="${y - 1}">Last year</button> &middot;
+      <button type="button" class="link" data-span="q">This quarter</button></p>
+    <div class="actions" style="margin-top:12px"><button type="button" class="btn primary" id="qbGo">Download Excel file</button><span class="muted" id="qbSaid" style="font-size:13px"></span></div>`;
+  card.addEventListener('change', e => {
+    const el = e.target as HTMLInputElement;
+    if (el.id === 'qbFrom') qbFrom = el.value; else if (el.id === 'qbTo') qbTo = el.value;
+  });
+  card.addEventListener('click', async e => {
+    const btn = (e.target as HTMLElement).closest('button');
+    if (!btn) return;
+    if (btn.dataset.span) {
+      const span = btn.dataset.span;
+      if (span === 'q') { const q = Math.floor(now.getMonth() / 3) * 3; qbFrom = ymd(new Date(y, q, 1)); qbTo = ymd(new Date(y, q + 3, 0)); }
+      else { qbFrom = `${span}-01-01`; qbTo = `${span}-12-31`; }
+      ($('#qbFrom') as HTMLInputElement).value = qbFrom;
+      ($('#qbTo') as HTMLInputElement).value = qbTo;
+      return;
+    }
+    if (btn.id !== 'qbGo') return;
+    const said = $('#qbSaid');
+    if (!qbFrom || !qbTo || qbFrom > qbTo) { said.textContent = 'Pick a From date on or before the To date.'; return; }
+    btn.disabled = true;
+    said.textContent = 'Making the file…';
+    try {
+      const n = await exportQuickBooks(qbFrom, qbTo);
+      said.textContent = `Downloaded: ${n.projects} project${n.projects === 1 ? '' : 's'}, ${n.receipts} receipt${n.receipts === 1 ? '' : 's'}.`;
+    } catch (error) { said.textContent = `Couldn't make the file: ${serverSaid(error)}`; }
+    btn.disabled = false;
+  });
+}
+
 // ---------- project summary: receipts and profit ----------
 // Revenue against what was spent, the hours put in (typed in: data.hours_worked) and what that comes
 // to per hour. Revenue is worked out from the project unless a figure is typed in (data.revenue_actual):
@@ -2861,6 +3045,22 @@ function revenueOf(p) {
   return { amount: num(p.calc.subtotal), label: p.calc.agreed ? 'Agreed price' : 'Quoted price', detail: num(p.calc.tax) ? 'before sales tax' : '' };
 }
 
+// The project's profit and loss, as its Summary shows it (and the QuickBooks export lists it).
+function pnlOf(p) {
+  const rev = revenueOf(p), spent = spentOn(p), profit = cents(rev.amount - spent);
+  const hours = pos(p.data.hours_worked), rate = pos(p.data.rates?.hourly_rate ?? store.settings.hourly_rate);
+  // Set aside from profit: the project's state rate (the one picked on its Details, or the no-state default
+  // for work without a state) plus the income tax share from the settings.
+  const state = isClient(p) ? p.data.client_state : '';
+  const statePct = state ? pos(p.data.rates?.tax_pct) : pos(store.settings.tax_pct);
+  const incomePct = pos(store.settings.income_tax_pct), taxPct = statePct + incomePct;
+  const base = Math.max(profit, 0);
+  const stateSet = cents(base * statePct / 100), incomeSet = cents(base * incomePct / 100);
+  const setAside = cents(stateSet + incomeSet), kept = cents(profit - setAside);
+  const perHour = hours ? kept / hours : null;
+  return { rev, spent, profit, hours, rate, state, statePct, incomePct, taxPct, stateSet, incomeSet, setAside, kept, perHour };
+}
+
 function showSummary(p) {
   ed = { project: p, stream: streamOf(p), data: p.data, dirty: false };
   view.innerHTML = `${projectHeader(p, 'summary', '<button class="btn small" onclick="window.print()">Print / save as PDF</button>')}
@@ -2872,17 +3072,7 @@ function showSummary(p) {
   const touch = () => { p.updated_at = new Date().toISOString(); persist(); };
   const pnl = $('#pnl');
   const renderPnl = () => {
-    const rev = revenueOf(p), spent = spentOn(p), profit = cents(rev.amount - spent);
-    const hours = pos(p.data.hours_worked), rate = pos(p.data.rates?.hourly_rate ?? store.settings.hourly_rate);
-    // Set aside from profit: the project's state rate (the one picked on its Details, or the no-state default
-    // for work without a state) plus the income tax share from the settings.
-    const state = isClient(p) ? p.data.client_state : '';
-    const statePct = state ? pos(p.data.rates?.tax_pct) : pos(store.settings.tax_pct);
-    const incomePct = pos(store.settings.income_tax_pct), taxPct = statePct + incomePct;
-    const base = Math.max(profit, 0);
-    const stateSet = cents(base * statePct / 100), incomeSet = cents(base * incomePct / 100);
-    const setAside = cents(stateSet + incomeSet), kept = cents(profit - setAside);
-    const perHour = hours ? kept / hours : null;
+    const { rev, spent, profit, hours, rate, state, statePct, incomePct, taxPct, stateSet, incomeSet, kept, perHour } = pnlOf(p);
     const receipts = new Set((p.data.purchases || []).map(x => x.receipt || x.id)).size;
     const estHours = num(p.calc.labor_hours) + num(p.calc.contingency_hours);
     pnl.innerHTML = `<h2>Profit and loss</h2>
@@ -2942,7 +3132,7 @@ function showSummary(p) {
       }).join('')}</ul>
       <div class="tot grand"><span>Total spent</span><span>${money(spentOn(p))}</span></div>`
       : '<p class="muted" style="margin:0 0 10px;font-size:14px">No receipts on this project yet.</p>'}
-      <div class="actions noprint" style="margin-top:10px"><a class="btn small primary" href="#/receipt/${p.id}">Scan a receipt</a><a class="btn small" href="#/receipts">All receipts</a></div>`;
+      <div class="actions noprint" style="margin-top:10px"><a class="btn small primary" href="#/receipt/${p.id}">Scan a receipt</a><a class="btn small" href="#/receipts">All receipts &middot; Excel export</a></div>`;
   };
   ed.redraw = () => { renderPnl(); renderReceipts(); };
   ed.redraw();

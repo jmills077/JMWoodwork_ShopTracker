@@ -606,3 +606,6 @@ ul.rlog .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tot.grand.aftertax { font-size: 18px; border-top-width: 1px; }
 .tot.grand.aftertax.loss span:last-child { color: var(--bad); }
 .tot.grand small { font-size: 13px; font-weight: 400; }
+/* Export for QuickBooks: two dates side by side, even on a phone. */
+.qbrange { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 420px; }
+#qbCard { margin-bottom: 16px; }
