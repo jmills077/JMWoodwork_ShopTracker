@@ -625,3 +625,36 @@ button.nophoto svg { opacity: .85; }
 button.nophoto > * { pointer-events: none; }
 button.nophoto:hover { border-color: var(--accent); background: #faf5ec; }
 button.nophoto.over { border: 2px solid var(--accent); background: #f6eedf; }
+
+/* Getting around. The header's own links: Projects, Calendar, Tasks, Receipts, Settings, then + New project.
+   On a phone those links move to a tab bar at the bottom, in reach of a thumb. */
+header.top .hicon { display: none; color: #fdf6e9; padding: 6px; border-radius: 8px; line-height: 0; }
+header.top .hicon.on, header.top .hicon:hover { background: #8a2e21; }
+header.top .newbtn { display: inline-flex; align-items: center; gap: 2px; background: #fdf6e9; color: #8a2e21; font-weight: 700; text-decoration: none; padding: 6px 14px; border-radius: 8px; white-space: nowrap; }
+header.top .newbtn span[aria-hidden] { font-size: 19px; line-height: 1; font-weight: 600; }
+header.top .newbtn:hover, header.top .newbtn.on { background: #fff; }
+nav.tabbar { display: none; }
+.back { padding: 4px 0; }
+.shopping .for a, .sprows .for a { color: inherit; text-decoration-color: #cdbfae; }
+.bellpanel li a.orun { display: inline-block; margin: 2px 0 2px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; padding: 4px 0; background: none; box-shadow: none; }
+@media (max-width: 600px) {
+  header.top { flex-wrap: nowrap; gap: 4px; }
+  header.top nav.topnav { display: none; }
+  header.top .hicon { display: inline-flex; }
+  header.top .newbtn { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 50%; margin-left: 4px; }
+  header.top .newbtn span[aria-hidden] { font-size: 26px; font-weight: 500; margin-top: -2px; }
+  header.top .newbtn .widenav { display: none; }
+  nav.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 35;
+    background: rgba(255, 253, 248, .96); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid var(--line);
+    padding: 4px max(4px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left)); }
+  nav.tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0 3px; color: var(--muted); text-decoration: none; font-size: 11px; font-weight: 600; border-radius: 10px; }
+  nav.tabbar svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  nav.tabbar a.on { color: var(--accent); }
+  nav.tabbar a.on svg { stroke-width: 2.3; }
+  main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  #toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  body.typing nav.tabbar { display: none; }
+  body.typing main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+}
+@media print { nav.tabbar { display: none !important; } }
+@media (max-width: 600px) { .pagehead .wideonly { display: none; } }   /* the tab bar and the + in the header do these on a phone */

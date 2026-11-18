@@ -437,8 +437,36 @@ async function refresh() {
 let ed = null;          // editor state: { project (null while new), data, dirty }
 let currentHash = '';
 
+// Section pages: the lists you open a project from. A project's pages lead back to the one you came from
+// ("← Calendar"), and coming back puts you where you were on it.
+function sectionOf(hash) {
+  const parts = hash.replace(/^#\/?/, '').split('/');
+  if (parts[0] === '' || parts[0] === 's') return 'Projects';
+  if (parts[0] === 'calendar') return 'Calendar';
+  if (parts[0] === 'frozen') return 'Frozen projects';
+  if (parts[0] === 'receipts') return 'All receipts';
+  if (parts[0] === 'products') return 'Shop products';
+  if (parts[0] === 'tasks') return parts[1] === 'shopping' ? 'Shopping list' : parts[1] === 'todos' ? 'All to-dos' : parts[1] ? null : 'Tasks';
+  return null;
+}
+const keep = (key, value?) => {
+  try { if (value === undefined) return JSON.parse(sessionStorage.getItem(key) || 'null'); sessionStorage.setItem(key, JSON.stringify(value)); } catch {}
+  return null;
+};
+let cameFrom = keep('cameFrom');                 // { hash, label }: the last section page shown
+const scrollSpots = keep('scrollSpots') || {};   // section page -> how far down it was
+/** The "← back" link for a page opened from a list: back to the list it was opened from, else `href`. */
+function backLink(href, label) {
+  const to = cameFrom && cameFrom.hash !== currentHash ? cameFrom : { hash: href, label };
+  return `<a href="${esc(to.hash)}" class="back">&larr; ${esc(to.label)}</a>`;
+}
+
 function route() {
+  const before = currentHash;
   currentHash = location.hash || '#/';
+  if (before && sectionOf(before)) { scrollSpots[before] = window.scrollY; keep('scrollSpots', scrollSpots); }
+  const section = sectionOf(currentHash);
+  if (section) { cameFrom = { hash: currentHash, label: section }; keep('cameFrom', cameFrom); }
   ed = null;
   const parts = currentHash.replace(/^#\/?/, '').split('/');
   const project = parts[0] === 'p' ? store.projects.find(p => p.id === Number(parts[1])) : null;
@@ -449,12 +477,12 @@ function route() {
   else if (parts[0] === 'products') { nav = 'settings'; showProducts(); }
   else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
   else if (parts[0] === 'frozen') showFrozen();
-  else if (parts[0] === 'receipt') showReceipt(Number(parts[1]) || null);
-  else if (parts[0] === 'receipts') showReceiptLog(/^\d{4}$/.test(parts[1]) ? parts[1] : '');
+  else if (parts[0] === 'receipt') { nav = 'receipts'; showReceipt(Number(parts[1]) || null); }
+  else if (parts[0] === 'receipts') { nav = 'receipts'; showReceiptLog(/^\d{4}$/.test(parts[1]) ? parts[1] : ''); }
   else if (parts[0] === 'tasks') {
     nav = 'tasks';
     const listed = store.projects.find(p => p.id === Number(parts[1]));
-    if (parts[1] === 'shopping') showShopping(); else if (parts[1] === 'todos') showAllTodos(); else if (listed) showTodo(listed); else showTasks();
+    if (parts[1] === 'shopping') { nav = 'shopping'; showShopping(); } else if (parts[1] === 'todos') showAllTodos(); else if (listed) showTodo(listed); else showTasks();
   }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
@@ -462,8 +490,16 @@ function route() {
   else if (project && isBatch(project)) showBatch(project);
   else if (project) showEditor(project);
   else showBoard();
-  document.querySelectorAll<HTMLElement>('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === nav));
-  window.scrollTo(0, 0);
+  document.querySelectorAll<HTMLElement>('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav.split(' ').includes(nav)));
+  $('header.top .newbtn')?.setAttribute('href', newLink());   // + starts the kind of project the board is showing
+  // Redrawing the same page (new data from another device) stays put; a section page you come back to
+  // opens where you left it; anything else starts at the top.
+  if (before === currentHash) return;
+  const spot = section ? scrollSpots[currentHash] || 0 : 0;
+  window.scrollTo(0, spot);
+  if (spot) [60, 250, 700].forEach(ms => setTimeout(() => {   // pages that finish drawing a moment later
+    if (currentHash === location.hash && window.scrollY < spot - 2) window.scrollTo(0, spot);
+  }, ms));
 }
 window.addEventListener('hashchange', () => {
   if (ed && !ed.project && ed.dirty && !confirm('Discard this unsaved quote?')) {
@@ -472,6 +508,16 @@ window.addEventListener('hashchange', () => {
   }
   route();
 });
+// Tapping the menu or tab bar link for the page you're already on takes you to its top.
+document.addEventListener('click', e => {
+  const a = (e.target as Element).closest<HTMLAnchorElement>('header.top a, nav.tabbar a');
+  if (a && a.getAttribute('href') === (location.hash || '#/')) { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+});
+// The tab bar steps aside while typing on a phone, so it doesn't sit on top of the keyboard.
+document.addEventListener('focusin', e => { if ((e.target as Element).matches('input:not([type=checkbox]):not([type=radio]), textarea, select')) document.body.classList.add('typing'); });
+document.addEventListener('focusout', () => setTimeout(() => {
+  if (!document.activeElement?.matches('input:not([type=checkbox]):not([type=radio]), textarea, select')) document.body.classList.remove('typing');
+}, 50));
 
 // ---------- projects board ----------
 // The board shows one stream at a time, or all of them; the choice is remembered on this device.
@@ -501,7 +547,7 @@ function showBoard() {
     if (nav && on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2;
   };
   const newLabel = tab === 'client' ? 'New quote' : 'New project';
-  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn" href="#/receipt">Scan a receipt</a><a class="btn primary" href="${newLink()}">${newLabel}</a></div>${tabs}`;
+  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn wideonly" href="#/receipt">Scan a receipt</a><a class="btn primary wideonly" href="${newLink()}">${newLabel}</a></div>${tabs}`;
   const quick = tab === 'product' ? '<div class="card" id="quickBatch"></div>' : '';
   if (!shown.length) {
     view.innerHTML = `${head}${quick}<div class="card empty"><h1>Nothing here yet</h1>
@@ -1025,7 +1071,7 @@ function blankData() {
 // Heading and tabs shared by a project's Details and Client quote views.
 function projectHeader(p, tab, side) {
   return `<div class="noprint">
-    <a href="${boardLink()}" class="back">&larr; Projects</a>
+    ${backLink(boardLink(), 'Projects')}
     <div class="projhead">
       <div class="name"><h1 id="projTitle">${esc(projectName(p))}</h1><span class="pill ${p.status}" id="statusPill">${STATUS_NAME[p.status]}</span></div>
       <div class="sub">${isClient(p) ? `${esc(p.quote_number)} &middot; ` : ''}${STREAM_NAME[streamOf(p)]}</div>
@@ -1688,7 +1734,7 @@ function showAllTodos() {
 function showTodo(p) {
   if (!p.data.todo) { p.data.todo = defaultTodo(p); todoChanged(p); }
   const todo = p.data.todo;
-  view.innerHTML = `<a href="#/tasks" class="back">&larr; Tasks</a>
+  view.innerHTML = `${backLink('#/tasks', 'Tasks')}
     <div class="pagehead"><h1>${esc(projectName(p))}</h1><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>
       <span class="spacer"></span><a class="btn" href="#/p/${p.id}">Open project</a></div>
     ${isFrozen(p) ? `<p class="note frozen">This project is frozen. Its list is kept as it is until you unfreeze it.</p>` : ''}
@@ -1894,7 +1940,7 @@ function showShopping() {
           ${other ? `<span class="text">${esc(t.text)}</span>`
             : `<span class="dim">${l.thick ? esc(l.thick) : l.thickMissing ? '<span class="need" title="Thickness not given">?</span>' : dash}</span><span class="dim">${l.width ? esc(l.width) : dash}</span>
                <span class="dim">${l.length ? esc(l.length) : dash}</span><span class="dim">${l.count ? esc(l.count) : dash}</span>`}
-          <span class="for muted">${esc(projectName(p))}${!other && l.note ? ` &middot; ${esc(l.note)}` : ''}${!other && l.thickMissing && !t.done_at ? ' &middot; <span class="need">thickness not given</span>' : ''}${t.done_at ? ` &middot; bought ${esc(fmtDate(t.done_at))}` : ''}</span>
+          <span class="for muted"><a href="#/tasks/${p.id}">${esc(projectName(p))}</a>${!other && l.note ? ` &middot; ${esc(l.note)}` : ''}${!other && l.thickMissing && !t.done_at ? ' &middot; <span class="need">thickness not given</span>' : ''}${t.done_at ? ` &middot; bought ${esc(fmtDate(t.done_at))}` : ''}</span>
         </li>`).join('')}</ul>
       </section>`;
     }).join('')}</div>
@@ -1918,6 +1964,7 @@ function showShopping() {
   box.addEventListener('click', e => {
     const by = (e.target as Element).closest<HTMLElement>('[data-by]');
     if (by) { shoppingBy = by.dataset.by; draw(); return; }
+    if ((e.target as Element).closest('a')) return;   // a project's name opens its own list
     const li = (e.target as Element).closest<HTMLElement>('li.task'), p = li && projectOf(li);
     if (!p) return;
     if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
@@ -2556,7 +2603,7 @@ function showReceipt(projectId) {
   if (projectId) scanProjectId = projectId;
   const from = store.projects.find(p => p.id === projectId);
   view.innerHTML = `
-    <a href="${from ? `#/p/${from.id}/summary` : boardLink()}" class="back">&larr; ${from ? esc(projectName(from)) : 'Projects'}</a>
+    ${from ? `<a href="#/p/${from.id}/summary" class="back">&larr; ${esc(projectName(from))}</a>` : backLink(boardLink(), 'Projects')}
     <div class="pagehead"><h1>Scan a receipt</h1><span class="spacer"></span><a class="btn small" href="#/receipts">All receipts</a></div>
     <div class="card receipt">
       <div class="actions">
@@ -3415,6 +3462,10 @@ function showSettings() {
       <p class="muted">Projects and settings are stored on the server and shared by every device you sign in on. Export a backup now and then to keep a copy of your own.</p>
       <div class="actions"><button class="btn" id="export">Export backup</button>
         <button class="btn" id="import">Import backup&hellip;</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
+    </div>
+    <div class="card"><h2>This device</h2>
+      <p class="muted">Signing out means typing the password again next time, on this device only. Other devices stay signed in.</p>
+      <form method="post" action="/logout"><button class="btn">Sign out</button></form>
     </div>`;
 
   $('#general').addEventListener('input', e => {
@@ -3532,11 +3583,13 @@ function showBellCount() {
 
 function renderBellPanel(error = '') {
   const fresh = bell.orders.filter(o => o.new), earlier = bell.orders.filter(o => !o.new).slice(0, Math.max(3, 8 - fresh.length));
+  // The product line run an order's units are being made in, if one is open.
+  const runOf = o => store.projects.find(p => isBatch(p) && !archived(p) && p.data.batch.orders?.some(x => x.name === o.name));
   const row = o => `<li class="${o.new ? 'new' : ''}"><a href="${esc(o.url)}" target="_blank" rel="noopener">
       <span class="ohead"><b>${esc(o.name)}</b><span class="muted">${esc(ago(o.created_at))}</span><span class="amt">${money(o.total)}</span></span>
       <span class="oitems">${o.items.map(i => `${esc(i.title)}${i.variant ? ` (${esc(i.variant)})` : ''} &times; ${i.qty}`).join(', ')}</span>
       ${FULFILLMENT[o.fulfillment] ? `<span class="pill ${o.fulfillment === 'FULFILLED' ? 'accepted' : ''}">${FULFILLMENT[o.fulfillment]}</span>` : ''}
-    </a></li>`;
+    </a>${runOf(o) ? `<a class="orun" href="#/p/${runOf(o).id}">In the ${esc(projectName(runOf(o)))} run &rarr;</a>` : ''}</li>`;
   $('#bellPanel').innerHTML = `
     <div class="bellhead"><b>Shop orders</b><button type="button" class="bellclose" aria-label="Close">&times;</button></div>
     ${error ? `<p class="note err">${esc(error)}</p>` : ''}
@@ -3582,7 +3635,7 @@ function setBell(open) {
   showBellCount();
 }
 $('#bell').addEventListener('click', () => setBell(!bell.open));
-$('#bellPanel').addEventListener('click', e => { if ((e.target as Element).closest('.bellclose')) setBell(false); });
+$('#bellPanel').addEventListener('click', e => { if ((e.target as Element).closest('.bellclose, .orun')) setBell(false); });
 document.addEventListener('click', e => { if (bell.open && !(e.target as Element).closest('#bellWrap')) setBell(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setBell(false); });
 window.addEventListener('hashchange', () => setBell(false));
