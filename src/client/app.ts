@@ -1,6 +1,6 @@
 // Shop Tracker in the browser: every page is drawn here from the shop's data, which the server
 // embeds in the page and saves to the database. See README.md for how the pieces fit together.
-export {};
+import { workbook, type Cell, type Sheet } from './xlsx';
 
 // ---------- estimating model ----------
 // Baseline hours per phase at a reference size (inches, L x W x H). Hours are
@@ -134,6 +134,7 @@ const DEFAULT_SETTINGS = {
   // { id, handle, name, listed, variants: [{ name, price }], unit_cost, unit_hours, materials }
   products: [],
   hourly_rate: 65, design_retainer: 300, contingency_pct: 10, markup_pct: 20, tax_pct: 0, deposit_pct: 50, waste_pct: 25, shop_speed: 1, quote_valid_days: 30,
+  income_tax_pct: 7,   // share of a project's profit to set aside for taxes, on its Summary
   // price is $ per board foot; labor is how much slower (or faster) the species is to work than cherry or walnut
   species: [
     { name: 'Pine', price: 4, labor: 0.9 }, { name: 'Poplar', price: 5, labor: 0.9 }, { name: 'Red oak', price: 7, labor: 1 },
@@ -449,6 +450,7 @@ function route() {
   else if (parts[0] === 'calendar') { nav = 'calendar'; showCalendar(parts[1]); }
   else if (parts[0] === 'frozen') showFrozen();
   else if (parts[0] === 'receipt') showReceipt(Number(parts[1]) || null);
+  else if (parts[0] === 'receipts') showReceiptLog(/^\d{4}$/.test(parts[1]) ? parts[1] : '');
   else if (parts[0] === 'tasks') {
     nav = 'tasks';
     const listed = store.projects.find(p => p.id === Number(parts[1]));
@@ -456,6 +458,7 @@ function route() {
   }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
+  else if (project && parts[2] === 'summary') showSummary(project);
   else if (project && isBatch(project)) showBatch(project);
   else if (project) showEditor(project);
   else showBoard();
@@ -1034,6 +1037,7 @@ function projectHeader(p, tab, side) {
       <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
       <a href="#/tasks/${p.id}">To-do list</a>
       ${isClient(p) ? `<a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>` : ''}
+      <a href="#/p/${p.id}/summary" class="${tab === 'summary' ? 'on' : ''}">Summary</a>
       <span class="spacer"></span><span class="side">${side}</span>
     </nav>
   </div>`;
@@ -2425,6 +2429,11 @@ async function syncRunsWithOrders(orders) {
     }
     b.variants = b.variants.filter(v => v.qty > 0 || v.ordered > 0);
     b.orders = mine.map(o => ({ name: o.name, created_at: o.created_at }));
+    // What each order paid for this product, kept after it ships, for the run's profit summary.
+    for (const o of mine) {
+      if (!o.items.some(i => i.amount !== undefined)) continue;   // a list read before amounts were asked for
+      (b.sales ||= {})[o.name] = { at: o.created_at, units: o.items.reduce((n, i) => n + pos(i.quantity ?? i.qty), 0), amount: cents(o.items.reduce((n, i) => n + num(i.amount), 0)) };
+    }
     if (mine.length && !b.ship_manual) run.data.due_date = shipByFor(pr, mine);
     if (!b.variants.length) {   // everything has shipped
       b.variants = [];
@@ -2446,13 +2455,18 @@ async function syncRunsWithOrders(orders) {
 }
 
 // ---------- receipts: material purchases ----------
-// A photo of a store receipt is read on the server (Workers AI, see src/lib/receipts.ts) into line
-// items. They're shown here to check over: fix a description or price, untick what isn't for this job,
-// pick the project, and the ticked items are added to that project's material purchases
-// (data.purchases: [{ id, date, store, item, qty, amount, receipt }]). Items left over can then go to
-// another project from the same receipt. The photo itself isn't kept.
+// A photo of a store receipt is sent to the server, which keeps it (the receipts table, for taxes and
+// audits) and reads it (Workers AI, see src/lib/receipts.ts) into line items. They're shown here to
+// check over: fix a description or price, untick what isn't for this job, pick the project, and the
+// ticked items are added to that project's material purchases
+// (data.purchases: [{ id, date, store, item, qty, amount, receipt }], `receipt` being the receipt's id).
+// Items left over can then go to another project from the same receipt. A receipt that can't be read
+// keeps its photo and the lines are typed in; a purchase with no receipt at all can be typed in too.
 const SCAN_MAX_SIDE = 1600;   // long side of the photo sent to the server, in pixels: plenty to read a receipt
-let scan = null;              // the receipt being checked over: { id, store, date, total, lines: [{ description, qty, amount, on, added }] }
+const PHOTO_MAX_CHARS = 1_400_000;   // what the server will keep (a D1 row); photos are made smaller until they fit
+let scan = null;              // the receipt being checked over: { id, store, date, total, tax, image, kept, lines: [{ description, qty, amount, on, added }] }
+let scanFailed = null;        // a photo that couldn't be read: { id, image, kept, message }
+let scanGeneral = false;      // the ticked items are general business expenses, not for one project
 let scanProjectId = null;     // the project picked to add items to
 let purchaseSeq = 0;
 
@@ -2462,57 +2476,94 @@ const spentOn = p => cents((p.data.purchases || []).reduce((n, x) => n + num(x.a
 const budgetFor = p => isBatch(p) ? num(p.calc.materials_est) : num(p.calc.materials_est) + num(p.calc.other_costs);
 // Projects that can take purchases, most recently touched first.
 const purchaseProjects = () => store.projects.filter(p => !archived(p) || p.id === scanProjectId).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+const receiptId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const photoUrl = id => `/api/receipts/${encodeURIComponent(id)}/photo`;
 
-// Shrinks a phone photo (often 4000+ px) to a JPEG data URL small enough to send quickly.
+// Shrinks a phone photo (often 4000+ px) to a JPEG data URL small enough to send quickly and keep.
 async function shrinkPhoto(file: File) {
   // createImageBitmap turns the photo upright from its camera orientation, as it's shown on screen.
   const img = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => { throw new Error("That file couldn't be opened as a photo."); });
-  const scale = Math.min(1, SCAN_MAX_SIDE / Math.max(img.width, img.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  const g = canvas.getContext('2d');
-  g.fillStyle = '#fff';   // a transparent PNG would otherwise turn black as a JPEG
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  let side = SCAN_MAX_SIDE, quality = 0.85, url = '';
+  for (let tries = 0; tries < 6; tries++) {
+    const scale = Math.min(1, side / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#fff';   // a transparent PNG would otherwise turn black as a JPEG
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(img, 0, 0, canvas.width, canvas.height);
+    url = canvas.toDataURL('image/jpeg', quality);
+    if (url.length <= PHOTO_MAX_CHARS) break;
+    quality = Math.max(0.6, quality - 0.1);
+    if (quality === 0.6) side = Math.round(side * 0.85);
+  }
   img.close();
-  return canvas.toDataURL('image/jpeg', 0.85);
+  return url;
 }
+
+// The server's own explanation reads better than "The server returned 400: {...}".
+const serverSaid = error => String(error.message).match(/"error":"([^"]+)"/)?.[1] || error.message;
 
 async function readReceipt(file: File) {
   const box = $('#scanBox');
+  scan = null;
+  scanFailed = null;
+  scanGeneral = false;
   box.innerHTML = '<p class="scanning">Reading the receipt&hellip; <span class="muted">this takes a few seconds</span></p>';
+  let image = '', id = receiptId(), kept = false;
   try {
-    const image = await shrinkPhoto(file);
+    image = await shrinkPhoto(file);
     box.insertAdjacentHTML('afterbegin', `<img class="receiptimg" src="${image}" alt="The receipt photo">`);
-    const r = await api('/api/receipts/scan', { image });
+    const r = await api('/api/receipts/scan', { id, image });
+    kept = !!r.kept;
     if (r.error) throw new Error(r.error);
-    if (!r.items.length) throw new Error("No items could be read from that photo. Try again with the whole receipt flat, in good light.");
+    if (!r.items.length) throw new Error("No items could be read from that photo. Try again with the whole receipt flat, in good light, or type the items in.");
     scan = {
-      id: `r${Date.now().toString(36)}`, store: r.store, date: r.date || ymd(new Date()), total: r.total,
+      id, image, kept, store: r.store, date: r.date || ymd(new Date()), total: r.total, tax: r.tax, notes: '', general: [],
       lines: [...r.items.map(i => ({ description: i.description, qty: i.quantity, amount: i.amount, on: true })),
         ...(r.tax ? [{ description: 'Sales tax', qty: 1, amount: r.tax, on: true, tax: true }] : [])],
     };
     renderScan();
   } catch (error) {
-    // The server's own explanation reads better than "The server returned 400: {...}".
-    const said = String(error.message).match(/"error":"([^"]+)"/)?.[1];
-    box.innerHTML = `<p class="note err">${esc(said || error.message)}</p>`;
+    scanFailed = image ? { id, image, kept, message: serverSaid(error) } : null;
+    if (scanFailed) renderScanFailed();
+    else box.innerHTML = `<p class="note err">${esc(serverSaid(error))}</p>`;
   }
+}
+
+// Reading failed: the photo is still kept, and the lines can be typed in from it.
+function renderScanFailed() {
+  const box = $('#scanBox');
+  if (!box || !scanFailed) return;
+  box.innerHTML = `<img class="receiptimg" src="${scanFailed.image}" alt="The receipt photo">
+    <p class="note err" style="margin-top:12px">${esc(scanFailed.message)}</p>
+    <div class="actions"><button type="button" class="btn" data-byhand>Type the items in from this photo</button></div>`;
+}
+
+// Starts a receipt to type in: from a photo that couldn't be read, or with no photo at all.
+function startByHand(from = null) {
+  scan = { id: from?.id || receiptId(), image: from?.image || '', kept: !!from?.kept, store: '', date: ymd(new Date()), total: 0, tax: 0,
+    notes: '', general: [], lines: [{ description: '', qty: 1, amount: '', on: true }] };
+  scanFailed = null;
+  scanGeneral = false;
+  renderScan();
+  $('#scanBox [data-scan="store"]')?.focus();
 }
 
 function showReceipt(projectId) {
   if (projectId) scanProjectId = projectId;
   const from = store.projects.find(p => p.id === projectId);
   view.innerHTML = `
-    <a href="${from ? `#/p/${from.id}` : boardLink()}" class="back">&larr; ${from ? esc(projectName(from)) : 'Projects'}</a>
-    <div class="pagehead"><h1>Scan a receipt</h1></div>
+    <a href="${from ? `#/p/${from.id}/summary` : boardLink()}" class="back">&larr; ${from ? esc(projectName(from)) : 'Projects'}</a>
+    <div class="pagehead"><h1>Scan a receipt</h1><span class="spacer"></span><a class="btn small" href="#/receipts">All receipts</a></div>
     <div class="card receipt">
       <div class="actions">
         <label class="btn primary">Take a photo<input type="file" accept="image/*" capture="environment" data-photo hidden></label>
         <label class="btn">Choose a photo<input type="file" accept="image/*" data-photo hidden></label>
-        <span class="muted" style="font-size:13px">Lay the receipt flat in good light, with the whole thing in the picture.</span>
+        <span class="muted" style="font-size:13px">Lay the receipt flat in good light, with the whole thing in the picture. The photo is kept with the receipt.</span>
       </div>
+      <p style="margin:10px 0 0;font-size:13px"><button type="button" class="link" data-nophoto>No receipt? Type a purchase in by hand</button></p>
       <div id="scanBox"></div>
     </div>`;
   view.querySelectorAll('[data-photo]').forEach((input: HTMLInputElement) => input.addEventListener('change', () => {
@@ -2520,7 +2571,7 @@ function showReceipt(projectId) {
     input.value = '';
     if (file) readReceipt(file);
   }));
-  if (scan) renderScan();
+  if (scan) renderScan(); else if (scanFailed) renderScanFailed();
 }
 
 function renderScan() {
@@ -2532,33 +2583,35 @@ function renderScan() {
   const left = scan.lines.filter(l => !l.added);
   const projects = purchaseProjects();
   if (!projects.some(p => p.id === scanProjectId)) scanProjectId = projects[0]?.id ?? null;
-  const img = $('.receiptimg', box)?.outerHTML || '';
-  box.innerHTML = `${img}
+  box.innerHTML = `${scan.image ? `<img class="receiptimg" src="${scan.image}" alt="The receipt photo">` : ''}
     <div class="grid" style="margin-top:14px">
       <label class="f w3"><span>Store</span><input data-scan="store" value="${esc(scan.store)}"></label>
       <label class="f"><span>Date</span><input type="date" data-scan="date" value="${esc(scan.date)}"></label>
+      <label class="f w6"><span>Notes <small class="muted" style="font-weight:400">what you bought and why</small></span><textarea data-scan="notes" rows="2" placeholder="e.g. Glue and hinges for the stool lid; spare blade for the table saw">${esc(scan.notes || '')}</textarea></label>
     </div>
     <div class="scanhead">
-      <h2>Items on the receipt</h2>
-      ${left.length ? `<span class="muted" style="font-size:13px"><button type="button" class="link" data-all="1">Tick all</button> &middot; <button type="button" class="link" data-all="0">Untick all</button></span>` : ''}
+      <h2>Items ${scan.image ? 'on the receipt' : 'bought'}</h2>
+      ${left.length > 1 ? `<span class="muted" style="font-size:13px"><button type="button" class="link" data-all="1">Tick all</button> &middot; <button type="button" class="link" data-all="0">Untick all</button></span>` : ''}
     </div>
     <ul class="scanlines">${scan.lines.map((l, i) => `<li class="${l.added ? 'added' : l.on ? '' : 'off'}">
       <input type="checkbox" data-i="${i}" data-k="on" ${l.on && !l.added ? 'checked' : ''} ${l.added ? 'disabled' : ''} aria-label="Include ${esc(l.description)}">
-      <input data-i="${i}" data-k="description" value="${esc(l.description)}" ${l.added ? 'disabled' : ''} aria-label="Item">
-      <input type="number" step="any" data-i="${i}" data-k="amount" value="${esc(l.amount)}" ${l.added ? 'disabled' : ''} aria-label="Price ($)">
+      <input data-i="${i}" data-k="description" value="${esc(l.description)}" ${l.added ? 'disabled' : ''} placeholder="What was bought" aria-label="Item">
+      <input type="number" step="any" inputmode="decimal" data-i="${i}" data-k="amount" value="${esc(l.amount)}" ${l.added ? 'disabled' : ''} placeholder="$" aria-label="Price ($)">
       ${l.added ? `<span class="addedto">Added to ${esc(l.added)}</span>` : `<button type="button" class="link" data-remove="${i}" aria-label="Remove this line">&times;</button>`}
     </li>`).join('')}</ul>
-    <button type="button" class="link" data-addline>+ Add a line that was missed</button>
+    <button type="button" class="link" data-addline>+ Add ${scan.image ? 'a line that was missed' : 'another line'}</button>
     <hr class="rule">
     ${scan.total && Math.abs(allSum - scan.total) >= 0.01 ? `<p class="note">The lines add up to ${money(allSum)}, but the receipt total reads ${money(scan.total)}. Check for a missed or misread line.</p>` : ''}
-    ${left.length ? `<div class="grid">
+    ${left.length ? `<label class="checkline"><input type="checkbox" id="scanGeneral" ${scanGeneral ? 'checked' : ''}> <span><b>General business expense</b>
+      <small class="muted">not for one project: tools, shop supplies, shipping materials&hellip;</small></span></label>
+    ${scanGeneral ? '' : `<div class="grid">
       <label class="f w4"><span>Add the ticked items to</span><select id="scanProject">${projects.map(p =>
         `<option value="${p.id}" ${p.id === scanProjectId ? 'selected' : ''}>${esc(projectName(p))}${isClient(p) ? ` (${esc(p.data.client_name || p.quote_number)})` : ''}</option>`).join('')}</select></label>
-    </div>
+    </div>`}
     <div class="actions" style="margin-top:12px">
-      <button type="button" class="btn primary" id="scanAdd" ${picked.length && scanProjectId ? '' : 'disabled'}>Add ${picked.length} item${picked.length === 1 ? '' : 's'} (${money(pickedSum)}) to material costs</button>
+      <button type="button" class="btn primary" id="scanAdd" ${picked.length && (scanGeneral || scanProjectId) ? '' : 'disabled'}>Add ${picked.length} item${picked.length === 1 ? '' : 's'} (${money(pickedSum)}) to ${scanGeneral ? 'general business expenses' : 'material costs'}</button>
     </div>` : `<p class="note ok">Every item on this receipt has been added.</p>`}
-    <p style="margin-top:14px"><button type="button" class="link" data-new>Done with this receipt &middot; scan another</button></p>`;
+    <p style="margin-top:14px"><button type="button" class="link" data-new>Done with this receipt &middot; ${scan.image ? 'scan another' : 'start another'}</button></p>`;
   const sel = $('#scanProject', box);
   if (sel) typeAhead(sel);
 }
@@ -2566,9 +2619,20 @@ function renderScan() {
 // One listener on the page for the whole check-over form, so redraws don't stack up handlers.
 function scanEvents(e: Event) {
   const el = e.target as any;
+  if (e.type === 'click' && el.closest?.('[data-nophoto]')) {
+    if (scan?.lines.some(l => l.on && !l.added) && !confirm('Some ticked items haven\'t been added to a project yet. Start over anyway?')) return;
+    return startByHand();
+  }
+  if (e.type === 'click' && el.closest?.('[data-byhand]')) return startByHand(scanFailed);
   if (!scan || !el.closest?.('#scanBox')) return;
   if (e.type === 'input' || e.type === 'change') {
-    if (el.dataset.scan) { scan[el.dataset.scan] = el.value; return; }
+    if (el.dataset.scan) {
+      scan[el.dataset.scan] = el.value;
+      // Once filed, a change to the store, date or notes is saved straight away.
+      if (e.type === 'change' && scan.filed) fileReceipt(scan).catch(error => toast(`Not saved: ${serverSaid(error)}`));
+      return;
+    }
+    if (el.id === 'scanGeneral') { if (e.type === 'change') { scanGeneral = el.checked; renderScan(); } return; }
     if (el.id === 'scanProject') { scanProjectId = Number(el.value); if (e.type === 'change') renderScan(); return; }
     const line = scan.lines[el.dataset.i];
     if (!line) return;
@@ -2599,27 +2663,66 @@ function scanEvents(e: Event) {
     scan = null;
     $('#scanBox').innerHTML = '';
     return;
-  } else if (btn.id === 'scanAdd') return addScanned();
+  } else if (btn.id === 'scanAdd') { addScanned(); return; }
   renderScan();
 }
 view.addEventListener('click', scanEvents);
 view.addEventListener('input', scanEvents);
 view.addEventListener('change', scanEvents);
 
-function addScanned() {
-  const p = store.projects.find(x => x.id === scanProjectId);
+// Files the receipt (its photo, if not kept yet, then store, date and total) before its lines go on
+// the project, so every purchase on a project has its receipt on file.
+async function fileReceipt(r) {
+  if (r.image && !r.kept) {
+    await api('/api/receipts/photo', { id: r.id, image: r.image });
+    r.kept = true;
+  }
+  const lineSum = cents(r.lines.reduce((n, l) => n + num(l.amount), 0));
+  const tax = cents(r.lines.filter(l => l.tax || /^sales tax$/i.test(String(l.description).trim())).reduce((n, l) => n + num(l.amount), 0)) || num(r.tax);
+  await api('/api/receipts', { id: r.id, store: r.store, date: r.date, total: r.total || lineSum, tax, notes: r.notes || '', general: r.general || [] });
+  r.filed = true;
+  receiptLog = null;   // the list is out of date now
+}
+
+let filing = false;
+const lineId = () => `m${Date.now().toString(36)}${(purchaseSeq++).toString(36)}`;
+async function addScanned() {
+  const general = scanGeneral;
+  const p = general ? null : store.projects.find(x => x.id === scanProjectId);
   const lines = scan.lines.filter(l => l.on && !l.added && String(l.description).trim());
-  if (!p || !lines.length) return;
+  if ((!general && !p) || !lines.length || filing) return;
+  const r = scan;
+  filing = true;
+  const btn = $('#scanAdd');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving the receipt…'; }
+  // General business expenses are kept with the receipt itself, so they're saved with it.
+  const before = r.general || [];
+  if (general) r.general = [...before, ...lines.map(l => ({ id: lineId(), item: String(l.description).trim(), qty: l.qty || 1, amount: cents(num(l.amount)) }))];
+  try { await fileReceipt(r); }
+  catch (error) {
+    filing = false;
+    r.general = before;
+    toast(`The receipt couldn't be saved, so nothing was added: ${serverSaid(error)}`);
+    renderScan();
+    return;
+  }
+  filing = false;
+  if (general) {
+    for (const l of lines) { l.added = 'general business expenses'; l.on = false; }
+    toast(`Added ${lines.length} item${lines.length === 1 ? '' : 's'} to general business expenses.`);
+    if (scan === r) renderScan();
+    return;
+  }
   for (const l of lines) {
-    purchasesOf(p).push({ id: `m${Date.now().toString(36)}${(purchaseSeq++).toString(36)}`, date: scan.date, store: scan.store.trim(),
-      item: String(l.description).trim(), qty: l.qty || 1, amount: cents(num(l.amount)), receipt: scan.id });
+    purchasesOf(p).push({ id: lineId(), date: r.date, store: String(r.store).trim(),
+      item: String(l.description).trim(), qty: l.qty || 1, amount: cents(num(l.amount)), receipt: r.id });
     l.added = projectName(p);
     l.on = false;
   }
   p.updated_at = new Date().toISOString();
   persist();
   toast(`Added ${lines.length} item${lines.length === 1 ? '' : 's'} to ${projectName(p)}. Spent on materials so far: ${money(spentOn(p))}`);
-  renderScan();
+  if (scan === r) renderScan();
 }
 
 // The "Material purchases" card on a project's page.
@@ -2639,19 +2742,439 @@ function renderPurchasesCard(p) {
     ${budget ? `<div class="tot"><span class="muted">Estimated <small>${isBatch(p) ? 'materials' : 'lumber and hardware'}</small></span><span class="muted">${money(budget)}</span></div>
     <div class="tot"><span class="${spent > budget ? 'over' : 'muted'}">${spent > budget ? 'Over the estimate' : 'Left in the estimate'}</span><span class="${spent > budget ? 'over' : 'muted'}">${money(Math.abs(budget - spent))}</span></div>` : ''}`
     : '<p class="muted" style="margin:0 0 10px;font-size:14px">Nothing bought for this project yet.</p>'}
-    <div class="actions" style="margin-top:10px"><a class="btn small" href="#/receipt/${p.id}">Scan a receipt</a></div>`;
+    <div class="actions" style="margin-top:10px"><a class="btn small" href="#/receipt/${p.id}">Scan a receipt</a><a class="btn small" href="#/p/${p.id}/summary">Profit and receipts</a></div>`;
 }
 view.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-unpurchase]');
   const p = ed?.project;
   if (!btn || !p) return;
   const item = (p.data.purchases || []).find(x => x.id === btn.dataset.unpurchase);
-  if (!item || !confirm(`Remove ${item.item} (${money(item.amount)}) from this project's purchases?`)) return;
+  if (!item || !confirm(`Remove ${item.item} (${money(item.amount)}) from this project's purchases?${item.receipt ? ' The receipt photo stays on file under All receipts.' : ''}`)) return;
   p.data.purchases = p.data.purchases.filter(x => x !== item);
   p.updated_at = new Date().toISOString();
   persist();
-  renderPurchasesCard(p);
+  if (ed.redraw && $('#summary')) ed.redraw(); else renderPurchasesCard(p);
 });
+
+// ---------- every receipt kept ----------
+let receiptLog = null;   // [{ id, store, date, total, tax, has_photo, created_at }] from the server, newest first
+async function loadReceipts() {
+  if (!receiptLog) receiptLog = (await api('/api/receipts')).receipts;
+  return receiptLog;
+}
+// Where each receipt's lines went: receipt id -> [{ p, lines }].
+function receiptUses() {
+  const uses = new Map();
+  for (const p of store.projects) for (const x of p.data.purchases || []) {
+    if (!x.receipt) continue;
+    const list = uses.get(x.receipt) || [];
+    let use = list.find(u => u.p === p);
+    if (!use) list.push(use = { p, lines: [] });
+    use.lines.push(x);
+    uses.set(x.receipt, list);
+  }
+  return uses;
+}
+
+// A photo, full screen. Tap anywhere (or press Escape) to close it.
+function showPhoto(src, caption = '') {
+  const box = document.createElement('div');
+  box.className = 'photoview';
+  box.innerHTML = `<img src="${esc(src)}" alt="${esc(caption || 'Receipt photo')}"><div class="cap">${esc(caption)} <a href="${esc(src)}" target="_blank" rel="noopener">Open on its own</a> &middot; tap to close</div>`;
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+  box.addEventListener('click', e => { if (!(e.target as HTMLElement).closest('a')) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.append(box);
+}
+view.addEventListener('click', e => {
+  const t = (e.target as HTMLElement).closest<HTMLElement>('[data-photo-id]');
+  if (!t) return;
+  e.preventDefault();
+  showPhoto(photoUrl(t.dataset.photoId), t.dataset.caption);
+});
+// A receipt from before photos were kept has none: show a note in its place.
+view.addEventListener('error', e => {
+  const img = e.target as HTMLElement;
+  if (img.tagName !== 'IMG' || !img.classList.contains('rthumb')) return;
+  const holder = img.closest('[data-photo-id]');
+  (holder || img).replaceWith(Object.assign(document.createElement('span'), { className: 'nophoto', textContent: 'No photo kept' }));
+}, true);
+
+const yearOf = r => (r.date || r.created_at || '').slice(0, 4);
+
+// The receipts kept, plus ones scanned before photos were kept (only named by their lines on projects).
+function withOldReceipts(log, uses) {
+  const filed = new Set(log.map(r => r.id));
+  return [...log, ...[...uses].filter(([id]) => !filed.has(id)).map(([id, used]) => {
+    const first = used[0].lines[0];
+    return { id, store: first.store, date: first.date, has_photo: false, created_at: '', notes: '', general: [], old: true,
+      total: cents(used.reduce((n, u) => n + u.lines.reduce((m, x) => m + num(x.amount), 0), 0)),
+      tax: cents(used.reduce((n, u) => n + u.lines.filter(x => /^sales tax$/i.test(x.item)).reduce((m, x) => m + num(x.amount), 0), 0)) };
+  })].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+async function showReceiptLog(year) {
+  view.innerHTML = `<a href="#/receipt" class="back">&larr; Scan a receipt</a>
+    <div class="pagehead"><h1>All receipts</h1></div><div class="card"><p class="muted">Loading&hellip;</p></div>`;
+  let log;
+  try { log = [...await loadReceipts()]; }
+  catch (error) { $('.card', view).innerHTML = `<p class="note err">${esc(serverSaid(error))}</p>`; return; }
+  if (!currentHash.startsWith('#/receipts')) return;   // moved on while loading
+  const uses = receiptUses();
+  log = withOldReceipts(log, uses);
+  const years = [...new Set(log.map(yearOf).filter(Boolean))].sort().reverse();
+  const shown = year ? log.filter(r => yearOf(r) === year) : log;
+  const sum = (list, f) => cents(list.reduce((n, x) => n + num(f(x)), 0));
+  const generalSum = list => sum(list, r => sum(r.general || [], l => l.amount));
+  view.innerHTML = `<a href="#/receipt" class="back">&larr; Scan a receipt</a>
+    <div class="pagehead"><h1>All receipts</h1></div>
+    <div class="card" id="qbCard"></div>
+    <nav class="tabs"><a href="#/receipts" class="${year ? '' : 'on'}">All</a>${years.map(y => `<a href="#/receipts/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</nav>
+    <div class="card">
+      ${shown.length ? `<div class="tot grand" style="margin-top:0;border-top:0;padding-top:0"><span>${shown.length} receipt${shown.length === 1 ? '' : 's'}${year ? ` in ${year}` : ''}</span><span>${money(sum(shown, r => r.total))}</span></div>
+      <div class="tot"><span class="muted">Sales tax paid</span><span class="muted">${money(sum(shown, r => r.tax))}</span></div>
+      ${generalSum(shown) ? `<div class="tot"><span class="muted">General business expenses</span><span class="muted">${money(generalSum(shown))}</span></div>` : ''}
+      <ul class="rlog">${shown.map(r => {
+        const used = uses.get(r.id) || [];
+        return `<li>
+          ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : '<span class="nophoto">No photo</span>'}
+          <div class="rinfo"><b>${esc(r.store || 'Store not given')}</b> <span class="muted">${esc(r.date ? fmtDate(r.date) : '')}</span>
+            ${r.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
+            <div class="rprojects">${used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')}
+              ${!used.length && !(r.general || []).length ? `<span class="muted">Not on any project.</span> <button type="button" class="link" data-delreceipt="${esc(r.id)}" style="color:var(--bad)">Delete</button>` : ''}</div>
+            ${(r.general || []).length ? `<div class="rgeneral"><b>General business</b><ul class="purchases">${r.general.map(l => `<li><span>${esc(l.item)}</span><span class="amt">${money(l.amount)}</span>
+              <button type="button" class="link" data-ungeneral="${esc(r.id)}:${esc(l.id)}" aria-label="Remove ${esc(l.item)}">&times;</button></li>`).join('')}</ul></div>` : ''}
+            ${r.old ? '' : `<button type="button" class="link rnotebtn" data-renote="${esc(r.id)}">${r.notes ? 'Edit notes' : 'Add notes'}</button>`}</div>
+          <span class="amt">${money(r.total)}</span>
+        </li>`;
+      }).join('')}</ul>` : '<p class="muted" style="margin:0">No receipts kept yet. Scan one and its photo is kept here.</p>'}
+    </div>
+    <p class="muted" style="font-size:13px">Every receipt photo scanned is kept, even ones with no lines added to a project. Receipts scanned before photos were kept show No photo.</p>`;
+  renderQuickBooksCard();
+  // Notes and general business lines are saved on the receipt itself.
+  const resave = async (r, change) => {
+    try { await api('/api/receipts', { ...r, ...change }); }
+    catch (error) { toast(`Not saved: ${serverSaid(error)}`); return; }
+    receiptLog = null;
+    showReceiptLog(year);
+  };
+  view.querySelectorAll('[data-renote]').forEach(b => b.addEventListener('click', () => {
+    const r = log.find(x => x.id === b.dataset.renote);
+    const notes = r && prompt('Notes: what was bought and why', r.notes || '');
+    if (notes != null && r) resave(r, { notes });
+  }));
+  view.querySelectorAll('[data-ungeneral]').forEach(b => b.addEventListener('click', () => {
+    const [id, lineId] = b.dataset.ungeneral.split(':');
+    const r = log.find(x => x.id === id), line = r?.general.find(l => l.id === lineId);
+    if (!line || !confirm(`Remove ${line.item} (${money(line.amount)}) from general business expenses? The receipt stays on file.`)) return;
+    resave(r, { general: r.general.filter(l => l !== line) });
+  }));
+  view.querySelectorAll('[data-delreceipt]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Delete this receipt and its photo? This cannot be undone.')) return;
+    try { await api(`/api/receipts/${encodeURIComponent(b.dataset.delreceipt)}/delete`, {}); }
+    catch (error) { toast(serverSaid(error)); return; }
+    receiptLog = null;
+    showReceiptLog(year);
+  }));
+}
+
+// ---------- Excel export for QuickBooks ----------
+// Everything for a span of dates in one workbook, laid out to match up against QuickBooks Online:
+// each receipt as one expense (its date, vendor and total are what the bank or card feed shows),
+// each line with the customer and project it belongs to, income by project (each Shopify order on its
+// own), and every project's profit and loss as its Summary shows it.
+const EXPENSE_CATEGORY = 'Supplies & Materials';   // a QuickBooks default account; change it in the sheet if you file elsewhere
+const NOT_STARTED = ['draft', 'sent', 'declined'];   // client quotes that never became work
+
+const day = iso => String(iso || '').slice(0, 10);
+const customerOf = p => isClient(p) ? (p.data.client_name || 'Client') : isProduct(p) ? 'Shopify' : 'JM Woodwork';
+// A name that stays the same in QuickBooks: a batch run's title changes with its unit count, so it's named by its start date.
+const exportName = p => isBatch(p) ? `${p.data.title} run ${day(p.created_at)}` : projectName(p);
+const customerProject = p => `${customerOf(p)}:${exportName(p)}`;
+const finishedDay = p => archived(p) ? day(finishedAt(p)) : '';
+const $c = (v, s): Cell => (v === '' || v == null ? null : { v, s });
+
+// Income for a project, one row per payment where it's known: [{ date, customer, description, amount, tax }].
+function incomeRows(p) {
+  const rev = revenueOf(p), done = finishedDay(p);
+  if (rev.typed) return [{ date: done, customer: customerOf(p), description: 'Revenue received (typed in on the Summary)', amount: rev.amount, tax: 0 }];
+  if (isBatch(p)) {
+    const sales = Object.entries(p.data.batch.sales || {}) as [string, any][];
+    if (sales.length) return sales.map(([name, x]) => ({ date: day(x.at), customer: 'Shopify', description: `Shopify order ${name}, ${pos(x.units)} × ${p.data.batch.product}`, amount: num(x.amount), tax: 0 }));
+    return num(p.calc.total) ? [{ date: '', customer: 'Shopify', description: 'Retail value of the units (expected; not sold through Shopify yet)', amount: num(p.calc.total), tax: 0 }] : [];
+  }
+  if (!rev.amount) return [];
+  return [{ date: p.status === 'delivered' ? done : '', customer: customerOf(p), amount: rev.amount, tax: num(p.calc.tax),
+    description: `${rev.label}${p.status === 'delivered' ? '' : ' (not delivered yet)'}` }];
+}
+
+async function exportQuickBooks(from, to) {
+  const inRange = d => !!d && d >= from && d <= to;
+  const uses = receiptUses();
+  const log = withOldReceipts([...await loadReceipts()], uses);
+  const photo = r => r.has_photo ? { link: `${location.origin}${photoUrl(r.id)}`, text: 'Photo' } : 'No photo';
+
+  // A project is in the export if money moved on it in the span, or it was being worked on then.
+  const projects = store.projects.filter(p => {
+    const lines = (p.data.purchases || []).some(x => inRange(x.date));
+    const paid = incomeRows(p).some(r => inRange(r.date));
+    if (lines || paid) return true;
+    if (isClient(p) && NOT_STARTED.includes(p.status)) return false;
+    return day(p.created_at) <= to && (!archived(p) || finishedDay(p) >= from);
+  }).sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  const head = ['Project', 'Customer:Project', 'Customer', 'Stream', 'Status', 'Started', 'Finished', 'Revenue', 'Revenue basis',
+    'Sales tax collected', 'Materials & supplies', 'Profit', 'Margin', 'State tax set-aside', 'Income tax set-aside', 'Profit after taxes',
+    'Hours worked', 'Profit per hour after taxes', 'Receipts', 'Link'];
+  const summary: Cell[][] = [head];
+  const totals = { rev: 0, tax: 0, spent: 0, profit: 0, stateSet: 0, incomeSet: 0, kept: 0, hours: 0 };
+  for (const p of projects) {
+    const x = pnlOf(p);
+    const salesTax = isClient(p) && !x.rev.typed ? num(p.calc.tax) : 0;
+    summary.push([exportName(p), customerProject(p), customerOf(p), STREAM_NAME[streamOf(p)], STATUS_NAME[p.status] || p.status,
+      $c(day(p.created_at), 'date'), $c(finishedDay(p), 'date'), $c(x.rev.amount, 'money'), [x.rev.label, streamOf(p) === 'gallery' ? '' : x.rev.detail].filter(Boolean).join(', '),
+      $c(salesTax, 'money'), $c(x.spent, 'money'), $c(x.profit, 'money'), x.rev.amount ? $c(x.profit / x.rev.amount, 'pct') : null,
+      $c(x.stateSet, 'money'), $c(x.incomeSet, 'money'), $c(x.kept, 'money'), x.hours ? $c(x.hours, 'hours') : null,
+      x.perHour != null ? $c(cents(x.perHour), 'money') : null, new Set((p.data.purchases || []).map(l => l.receipt || l.id)).size,
+      { link: `${location.origin}/#/p/${p.id}/summary`, text: 'Summary' }]);
+    totals.rev += x.rev.amount; totals.tax += salesTax; totals.spent += x.spent; totals.profit += x.profit;
+    totals.stateSet += x.stateSet; totals.incomeSet += x.incomeSet; totals.kept += x.kept; totals.hours += x.hours;
+  }
+  if (projects.length) summary.push([{ v: 'Total', s: 'bold' }, null, null, null, null, null, null, $c(cents(totals.rev), 'boldmoney'), null,
+    $c(cents(totals.tax), 'boldmoney'), $c(cents(totals.spent), 'boldmoney'), $c(cents(totals.profit), 'boldmoney'), null,
+    $c(cents(totals.stateSet), 'boldmoney'), $c(cents(totals.incomeSet), 'boldmoney'), $c(cents(totals.kept), 'boldmoney'), totals.hours ? $c(totals.hours, 'hours') : null]);
+
+  // One row per receipt: what to match against the bank or card transaction.
+  const receipts: Cell[][] = [['Date', 'Vendor', 'Total', 'Sales tax', 'Category', 'Customer:Project', 'Memo', 'Notes', 'General business', 'Receipt ID', 'Photo']];
+  for (const r of [...log].reverse().filter(r => inRange(r.date))) {
+    const used = uses.get(r.id) || [];
+    const general = r.general || [];
+    const items = [...used.flatMap(u => u.lines.map(l => l.item)), ...general.map(l => l.item)].filter(i => !/^sales tax$/i.test(i));
+    const where = used.length + (general.length ? 1 : 0) > 1 ? 'Split: see Expense lines'
+      : used.length ? customerProject(used[0].p) : general.length ? 'General business' : 'Not on a project';
+    receipts.push([$c(r.date, 'date'), r.store, $c(r.total, 'money'), $c(r.tax, 'money'), EXPENSE_CATEGORY, where,
+      items.join('; ').slice(0, 1000), r.notes || '', general.length ? $c(cents(general.reduce((n, l) => n + num(l.amount), 0)), 'money') : null, r.id, photo(r)]);
+  }
+
+  // One row per line, with the project it's billed to: for splitting a receipt across projects in QuickBooks.
+  const known = new Map(log.map(r => [r.id, r]));
+  const lines: Cell[][] = [['Date', 'Vendor', 'Description', 'Amount', 'Category', 'Customer:Project', 'Customer', 'Project', 'Class', 'Receipt notes', 'Receipt ID', 'Photo']];
+  const allLines = [
+    ...store.projects.flatMap(p => (p.data.purchases || []).filter(x => inRange(x.date)).map(x => ({ p, x }))),
+    ...log.filter(r => inRange(r.date)).flatMap(r => (r.general || []).map(l => ({ p: null, x: { ...l, date: r.date, store: r.store, receipt: r.id } }))),
+  ].sort((a, b) => a.x.date.localeCompare(b.x.date) || String(a.x.receipt).localeCompare(String(b.x.receipt)));
+  for (const { p, x } of allLines) {
+    const r = known.get(x.receipt);
+    lines.push([$c(x.date, 'date'), x.store, x.item, $c(num(x.amount), 'money'), EXPENSE_CATEGORY,
+      p ? customerProject(p) : '', p ? customerOf(p) : '', p ? exportName(p) : '', p ? STREAM_NAME[streamOf(p)] : 'General business',
+      r?.notes || '', x.receipt || 'Typed in', r ? photo(r) : 'No photo']);
+  }
+
+  // Income: dated payments in the span, and what's still expected on the projects listed.
+  const income: Cell[][] = [['Date', 'Customer', 'Customer:Project', 'Project', 'Description', 'Amount before sales tax', 'Sales tax', 'Total', 'Class']];
+  for (const p of projects) for (const r of incomeRows(p)) {
+    if (r.date && !inRange(r.date)) continue;
+    income.push([r.date ? $c(r.date, 'date') : 'Not received yet', r.customer, customerProject(p), exportName(p), r.description,
+      $c(r.amount, 'money'), $c(r.tax, 'money'), $c(cents(r.amount + r.tax), 'money'), STREAM_NAME[streamOf(p)]]);
+  }
+
+  const about: Cell[][] = [
+    [{ v: `${store.settings.business_name || 'Shop Tracker'}: export for QuickBooks`, s: 'bold' }],
+    [`Dates ${from} to ${to}, made ${ymd(new Date())}.`],
+    [],
+    [{ v: 'Project summary', s: 'bold' }],
+    ['Every project worked on or paid in these dates, with its whole profit and loss as its Summary page shows it (not only the part in these dates).'],
+    ['Revenue is the agreed or quoted price before sales tax, a product run\'s Shopify orders, or the figure typed in on the Summary.'],
+    [`Tax set-asides are estimates: the project's state tax rate plus ${+pos(store.settings.income_tax_pct)}% income tax, taken from profit.`],
+    [],
+    [{ v: 'Expenses by receipt', s: 'bold' }],
+    ['One row per receipt dated in the span. Date, vendor and total match the bank or card transaction to categorize in QuickBooks.'],
+    [`Category is "${EXPENSE_CATEGORY}" for every row; change it where a purchase belongs in another account.`],
+    [],
+    [{ v: 'Expense lines', s: 'bold' }],
+    ['Each line of each receipt with the customer and project it went to, for splitting a transaction across projects.'],
+    ['General business expenses (not for one project) have no customer or project, and "General business" as their class.'],
+    [],
+    [{ v: 'Income', s: 'bold' }],
+    ['Payments dated in the span (a client job on the day it was marked delivered, each Shopify order on its order date), then amounts still expected on the projects listed.'],
+    [],
+    ['Photo and Summary links open in Shop Tracker, so sign in there first.'],
+  ];
+
+  const sheets: Sheet[] = [
+    { name: 'Project summary', rows: summary, widths: [28, 40, 20, 14, 14, 11, 11, 13, 34, 12, 14, 13, 8, 12, 12, 13, 9, 13, 9, 10] },
+    { name: 'Expenses by receipt', rows: receipts, widths: [11, 28, 12, 11, 20, 40, 60, 50, 14, 16, 10] },
+    { name: 'Expense lines', rows: lines, widths: [11, 28, 44, 12, 20, 40, 20, 28, 16, 50, 16, 10] },
+    { name: 'Income', rows: income, widths: [14, 20, 40, 28, 52, 14, 11, 13, 14] },
+    { name: 'About', rows: about, widths: [140], header: false },
+  ];
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(workbook(sheets)), download: `shop-tracker-quickbooks-${from}-to-${to}.xlsx` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return { projects: projects.length, receipts: receipts.length - 1 };
+}
+
+// The export's card on the All receipts page: a span of dates, with quick picks for this year and last.
+let qbFrom = '', qbTo = '';
+function renderQuickBooksCard() {
+  const card = $('#qbCard');
+  if (!card) return;
+  const now = new Date(), y = now.getFullYear();
+  qbFrom ||= `${y}-01-01`;
+  qbTo ||= ymd(now);
+  card.innerHTML = `<h2>Export for QuickBooks</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px">An Excel file with every project's summary, each receipt and its lines with the customer and project they belong to, and income, for the dates you pick.</p>
+    <div class="qbrange">
+      <label class="f"><span>From</span><input type="date" id="qbFrom" value="${esc(qbFrom)}"></label>
+      <label class="f"><span>To</span><input type="date" id="qbTo" value="${esc(qbTo)}"></label>
+    </div>
+    <p style="margin:8px 0 0;font-size:13px"><button type="button" class="link" data-span="${y}">This year</button> &middot;
+      <button type="button" class="link" data-span="${y - 1}">Last year</button> &middot;
+      <button type="button" class="link" data-span="q">This quarter</button></p>
+    <div class="actions" style="margin-top:12px"><button type="button" class="btn primary" id="qbGo">Download Excel file</button><span class="muted" id="qbSaid" style="font-size:13px"></span></div>`;
+  card.addEventListener('change', e => {
+    const el = e.target as HTMLInputElement;
+    if (el.id === 'qbFrom') qbFrom = el.value; else if (el.id === 'qbTo') qbTo = el.value;
+  });
+  card.addEventListener('click', async e => {
+    const btn = (e.target as HTMLElement).closest('button');
+    if (!btn) return;
+    if (btn.dataset.span) {
+      const span = btn.dataset.span;
+      if (span === 'q') { const q = Math.floor(now.getMonth() / 3) * 3; qbFrom = ymd(new Date(y, q, 1)); qbTo = ymd(new Date(y, q + 3, 0)); }
+      else { qbFrom = `${span}-01-01`; qbTo = `${span}-12-31`; }
+      ($('#qbFrom') as HTMLInputElement).value = qbFrom;
+      ($('#qbTo') as HTMLInputElement).value = qbTo;
+      return;
+    }
+    if (btn.id !== 'qbGo') return;
+    const said = $('#qbSaid');
+    if (!qbFrom || !qbTo || qbFrom > qbTo) { said.textContent = 'Pick a From date on or before the To date.'; return; }
+    btn.disabled = true;
+    said.textContent = 'Making the file…';
+    try {
+      const n = await exportQuickBooks(qbFrom, qbTo);
+      said.textContent = `Downloaded: ${n.projects} project${n.projects === 1 ? '' : 's'}, ${n.receipts} receipt${n.receipts === 1 ? '' : 's'}.`;
+    } catch (error) { said.textContent = `Couldn't make the file: ${serverSaid(error)}`; }
+    btn.disabled = false;
+  });
+}
+
+// ---------- project summary: receipts and profit ----------
+// Revenue against what was spent, the hours put in (typed in: data.hours_worked) and what that comes
+// to per hour. Revenue is worked out from the project unless a figure is typed in (data.revenue_actual):
+// a client job's agreed (or quoted) price before sales tax, or a product run's Shopify sales
+// (data.batch.sales, kept from its orders) or else the retail value of its units.
+function revenueOf(p) {
+  const typed = p.data.revenue_actual;
+  if (typed !== '' && typed != null) return { amount: pos(typed), label: 'Revenue received', typed: true };
+  if (isBatch(p)) {
+    const sales = Object.entries(p.data.batch.sales || {}) as [string, any][];
+    if (sales.length) return { amount: cents(sales.reduce((n, [, s]) => n + num(s.amount), 0)), label: `Shopify orders`, detail: sales.map(([name]) => name).join(', ') };
+    return { amount: num(p.calc.total), label: 'Retail value of the units', detail: 'expected, not yet sold through Shopify' };
+  }
+  if (streamOf(p) === 'gallery') return { amount: 0, label: 'Not for sale', detail: 'type in a price below if it sells' };
+  return { amount: num(p.calc.subtotal), label: p.calc.agreed ? 'Agreed price' : 'Quoted price', detail: num(p.calc.tax) ? 'before sales tax' : '' };
+}
+
+// The project's profit and loss, as its Summary shows it (and the QuickBooks export lists it).
+function pnlOf(p) {
+  const rev = revenueOf(p), spent = spentOn(p), profit = cents(rev.amount - spent);
+  const hours = pos(p.data.hours_worked), rate = pos(p.data.rates?.hourly_rate ?? store.settings.hourly_rate);
+  // Set aside from profit: the project's state rate (the one picked on its Details, or the no-state default
+  // for work without a state) plus the income tax share from the settings.
+  const state = isClient(p) ? p.data.client_state : '';
+  const statePct = state ? pos(p.data.rates?.tax_pct) : pos(store.settings.tax_pct);
+  const incomePct = pos(store.settings.income_tax_pct), taxPct = statePct + incomePct;
+  const base = Math.max(profit, 0);
+  const stateSet = cents(base * statePct / 100), incomeSet = cents(base * incomePct / 100);
+  const setAside = cents(stateSet + incomeSet), kept = cents(profit - setAside);
+  const perHour = hours ? kept / hours : null;
+  return { rev, spent, profit, hours, rate, state, statePct, incomePct, taxPct, stateSet, incomeSet, setAside, kept, perHour };
+}
+
+function showSummary(p) {
+  ed = { project: p, stream: streamOf(p), data: p.data, dirty: false };
+  view.innerHTML = `${projectHeader(p, 'summary', '<button class="btn small" onclick="window.print()">Print / save as PDF</button>')}
+    <div class="printhead"><h1>${esc(projectName(p))}</h1><div class="muted">${isClient(p) ? `${esc(p.quote_number)} &middot; ${esc(p.data.client_name || '')} &middot; ` : ''}${STREAM_NAME[streamOf(p)]} &middot; Summary as of ${esc(fmtDate(new Date().toISOString()))}</div></div>
+    <div class="cols" id="summary">
+      <div><div class="card" id="pnl"></div></div>
+      <aside><div class="card" id="receiptsCard"></div></aside>
+    </div>`;
+  const touch = () => { p.updated_at = new Date().toISOString(); persist(); };
+  const pnl = $('#pnl');
+  const renderPnl = () => {
+    const { rev, spent, profit, hours, rate, state, statePct, incomePct, taxPct, stateSet, incomeSet, kept, perHour } = pnlOf(p);
+    const receipts = new Set((p.data.purchases || []).map(x => x.receipt || x.id)).size;
+    const estHours = num(p.calc.labor_hours) + num(p.calc.contingency_hours);
+    pnl.innerHTML = `<h2>Profit and loss</h2>
+      <div class="pl-sec">Revenue</div>
+      <div class="tot"><span>${esc(rev.label)}${rev.detail ? ` <small>${esc(rev.detail)}</small>` : ''}</span><b>${money(rev.amount)}</b></div>
+      ${isClient(p) && num(p.calc.tax) && !rev.typed ? `<div class="tot"><span class="muted">Sales tax collected <small>passed on to the state, not counted</small></span><span class="muted">${money(p.calc.tax)}</span></div>` : ''}
+      <div class="pl-sec">Expenses</div>
+      <div class="tot"><span>Materials and supplies <small>${(p.data.purchases || []).length} line${(p.data.purchases || []).length === 1 ? '' : 's'} from ${receipts} receipt${receipts === 1 ? '' : 's'}, tax included</small></span><b>&minus; ${money(spent)}</b></div>
+      <div class="tot grand ${profit < 0 ? 'loss' : 'profit'}"><span>${profit < 0 ? 'Loss' : 'Profit'}</span><span>${money(Math.abs(profit))}</span></div>
+      ${rev.amount ? `<div class="tot"><span class="muted">Margin</span><span class="muted">${Math.round(profit / rev.amount * 100)}%</span></div>` : ''}
+      ${taxPct ? `<div class="pl-sec">Set aside for taxes <small style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted)">estimates, ${+cents(taxPct)}% of profit</small></div>
+        ${statePct ? `<div class="tot"><span>State tax <small>${state ? `${esc(STATE_NAME[state] || state)} ` : ''}${+statePct}%</small></span><b>&minus; ${money(stateSet)}</b></div>` : ''}
+        ${incomePct ? `<div class="tot"><span>Income tax <small>${+incomePct}%</small></span><b>&minus; ${money(incomeSet)}</b></div>` : ''}
+        <div class="tot grand aftertax ${kept < 0 ? 'loss' : 'profit'}"><span>Profit after taxes</span><span>${money(kept)}</span></div>` : ''}
+      <div class="pl-sec">Time</div>
+      <div class="tot"><span>Hours worked</span><b>${hours ? hrs(hours) : '<span class="muted">not entered</span>'}</b></div>
+      ${perHour != null ? `<div class="tot grand perhour ${perHour < rate ? 'under' : ''}"><span>Profit per hour${taxPct ? ' <small>after taxes</small>' : ''}</span><span>${money(perHour)}</span></div>
+        <div class="tot"><span class="muted">Your hourly rate on this project</span><span class="muted">${money(rate)}</span></div>` : ''}
+      <hr class="rule">
+      <div class="grid noprint">
+        <label class="f w3"><span>Total hours worked</span><input type="number" min="0" step="0.25" inputmode="decimal" id="hoursWorked" value="${esc(p.data.hours_worked ?? '')}" placeholder="${estHours ? `estimate ${+estHours.toFixed(2)}` : 'e.g. 12.5'}"></label>
+        <label class="f w3"><span>Revenue received ($) <small>leave blank to use the ${esc(revenueOf({ ...p, data: { ...p.data, revenue_actual: '' } }).label.replace(/^(?!Shopify)./, c => c.toLowerCase()))}</small></span><input type="number" min="0" step="0.01" inputmode="decimal" id="revenueActual" value="${esc(p.data.revenue_actual ?? '')}"></label>
+      </div>`;
+  };
+  pnl.addEventListener('change', e => {
+    const el = e.target as HTMLInputElement;
+    if (el.id === 'hoursWorked') p.data.hours_worked = el.value === '' ? '' : pos(el.value);
+    else if (el.id === 'revenueActual') p.data.revenue_actual = el.value === '' ? '' : cents(pos(el.value));
+    else return;
+    touch();
+    renderPnl();
+  });
+
+  const renderReceipts = () => {
+    const card = $('#receiptsCard');
+    const groups = new Map();
+    for (const x of p.data.purchases || []) {
+      const key = x.receipt || `hand:${x.id}`;
+      if (!groups.has(key)) groups.set(key, { id: x.receipt, store: x.store, date: x.date, lines: [] });
+      groups.get(key).lines.push(x);
+    }
+    const list = [...groups.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const known = new Map<string, any>((receiptLog || []).map(r => [r.id, r]));
+    card.innerHTML = `<h2>Receipts</h2>
+      ${list.length ? `<ul class="rgroups">${list.map(g => {
+        const r = known.get(g.id), mine = cents(g.lines.reduce((n, x) => n + num(x.amount), 0));
+        const caption = [g.store, g.date && fmtDate(g.date)].filter(Boolean).join(', ');
+        const photo = g.id && (!receiptLog || r?.has_photo)
+          ? `<a href="${photoUrl(g.id)}" class="thumb" data-photo-id="${esc(g.id)}" data-caption="${esc(caption)}"><img class="rthumb" loading="lazy" src="${photoUrl(g.id)}" alt="Receipt photo"></a>`
+          : `<span class="nophoto">${g.id ? 'No photo kept' : 'Typed in'}</span>`;
+        return `<li>${photo}<div class="rinfo">
+          <div class="rtop"><b>${esc(g.store || 'Store not given')}</b><span class="muted">${esc(g.date ? fmtDate(g.date) : '')}</span></div>
+          <ul class="purchases">${g.lines.map(x => `<li><span>${esc(x.item)}</span><span class="amt">${money(x.amount)}</span>
+            <button type="button" class="link noprint" data-unpurchase="${esc(x.id)}" aria-label="Remove ${esc(x.item)}">&times;</button></li>`).join('')}</ul>
+          ${r?.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
+          ${r && r.total && Math.abs(r.total - mine) >= 0.01 ? `<small class="muted">Receipt total ${money(r.total)}; ${money(mine)} of it is on this project.</small>` : ''}
+        </div></li>`;
+      }).join('')}</ul>
+      <div class="tot grand"><span>Total spent</span><span>${money(spentOn(p))}</span></div>`
+      : '<p class="muted" style="margin:0 0 10px;font-size:14px">No receipts on this project yet.</p>'}
+      <div class="actions noprint" style="margin-top:10px"><a class="btn small primary" href="#/receipt/${p.id}">Scan a receipt</a><a class="btn small" href="#/receipts">All receipts &middot; Excel export</a></div>`;
+  };
+  ed.redraw = () => { renderPnl(); renderReceipts(); };
+  ed.redraw();
+  // Which receipts have photos (and their printed totals) come from the server.
+  loadReceipts().then(() => { if (ed?.project === p && $('#summary')) renderReceipts(); }).catch(() => {});
+}
 
 // ---------- design notes (internal; never shown on the client quote) ----------
 const NOTE_KINDS = ['Client call', 'Site visit', 'Email or message', 'Research', 'Other'];
@@ -2775,6 +3298,9 @@ function showSettings() {
       <fieldset><h2>Estimating</h2><div class="grid">
         ${inp('Shop speed multiplier', 'shop_speed', 'number', 'w3')}${inp('Lumber waste allowance (%)', 'waste_pct', 'number', 'w3')}
       </div><p class="muted" style="margin-bottom:0">Shop speed scales every estimated hour: if jobs take you about 20% longer than estimated, set it to 1.2.</p></fieldset>
+      <fieldset><h2>Project summaries</h2><div class="grid">
+        ${inp('Income tax to set aside (% of profit)', 'income_tax_pct', 'number', 'w3')}
+      </div><p class="muted" style="margin-bottom:0">Each project's Summary sets aside this share of its profit for income tax, plus its state's rate (the state picked on a client job, or the no-state sales tax rate above for other work).</p></fieldset>
     </div>
     <div class="card"><h2>Sales tax by state</h2>
       <p class="muted" style="margin-top:0">Choosing a client's state on a quote applies the rate below. These are statewide rates only, without city or county taxes, so check them against current rates before relying on them.</p>

@@ -5,7 +5,8 @@
 //   /api/shop-products    the jmwood.work shop's small-batch products and variants
 //   /api/shop-orders      its unfulfilled orders (with the Shopify app connected)
 //   /api/new-orders       orders placed since the bell was last opened (POST /seen marks them read)
-//   /api/receipts/scan    reads a receipt photo into line items (Workers AI)
+//   /api/receipts/scan    keeps a receipt photo and reads it into line items (Workers AI)
+//   /api/receipts         every receipt kept (POST saves what one says; /:id/photo, /:id/delete)
 //   /app.css, /app.js     static files from public/ (served by Workers Static Assets)
 //   cron (weekly)         refreshes the supplier price list
 import { Hono } from 'hono';
@@ -15,7 +16,7 @@ import type { App, Env } from './env';
 import { endSession, isSignedIn, passwordMatches, startSession } from './lib/auth';
 import { BadRequest, createProject, getPrices, getState, importBackup, replacePrices, saveChanges } from './lib/db';
 import { readPriceLists } from './lib/prices';
-import { ReceiptError, scanReceipt } from './lib/receipts';
+import { deleteReceipt, keepPhoto, listReceipts, readPhoto, ReceiptError, saveReceipt, scanReceipt } from './lib/receipts';
 import { orderAdminUrl, readOpenOrders, readProducts, readRecentOrders, shopifyConnected } from './lib/shopify';
 import { AppPage } from './views/app';
 import { LoginPage, SetupPage } from './views/login';
@@ -153,17 +154,45 @@ app.post('/api/new-orders/seen', async c => {
 });
 
 // ---------- receipts ----------
-// The browser sends a shrunken photo as a data URL; the line items come back for checking over.
-// Nothing is saved here: the items picked are added to a project's purchases by the browser.
+// The browser sends a shrunken photo as a data URL with an id it made for the receipt. The photo is
+// kept first (for taxes and audits, even if it can't be read), then the line items come back for
+// checking over. The items picked are added to a project's purchases by the browser, which then
+// saves the store, date and total here.
 app.post('/api/receipts/scan', async c => {
-  const { image } = await c.req.json<{ image?: string }>();
+  const { id, image } = await c.req.json<{ id?: string; image?: string }>();
   try {
-    return c.json(await scanReceipt(c.env, String(image ?? '')));
+    let kept = false;
+    if (id !== undefined) {
+      try { await keepPhoto(c.env.DB, id, String(image ?? '')); kept = true; }
+      catch (error) { if (error instanceof ReceiptError) throw error; console.error(`Keeping receipt photo failed: ${error}`); }
+    }
+    return c.json({ ...await scanReceipt(c.env, String(image ?? '')), kept });
   } catch (error) {
     if (error instanceof ReceiptError) return c.json({ error: error.message }, 400);
     console.error(`Receipt scan failed: ${error}`);
     return c.json({ error: "Couldn't read the receipt just now. Try again in a minute." }, 502);
   }
+});
+// A photo kept without reading it (when reading failed and the lines are typed in instead, it's already kept).
+app.post('/api/receipts/photo', async c => {
+  const { id, image } = await c.req.json<{ id?: string; image?: string }>();
+  try { await keepPhoto(c.env.DB, id, String(image ?? '')); return c.json({ ok: true }); }
+  catch (error) { if (error instanceof ReceiptError) return c.json({ error: error.message }, 400); throw error; }
+});
+app.get('/api/receipts', async c => c.json({ receipts: await listReceipts(c.env.DB) }));
+app.post('/api/receipts', async c => {
+  try { await saveReceipt(c.env.DB, await c.req.json()); return c.json({ ok: true }); }
+  catch (error) { if (error instanceof ReceiptError) return c.json({ error: error.message }, 400); throw error; }
+});
+app.get('/api/receipts/:id/photo', async c => {
+  const photo = await readPhoto(c.env.DB, c.req.param('id'));
+  if (!photo) return c.text('No photo was kept for this receipt.', 404);
+  // A receipt's photo never changes once kept (a retake gets a new id), so the browser can keep it.
+  return c.body(photo.bytes, 200, { 'Content-Type': photo.mime, 'Cache-Control': 'private, max-age=31536000, immutable' });
+});
+app.post('/api/receipts/:id/delete', async c => {
+  try { await deleteReceipt(c.env.DB, c.req.param('id')); return c.json({ ok: true }); }
+  catch (error) { if (error instanceof ReceiptError) return c.json({ error: error.message }, 400); throw error; }
 });
 
 app.onError((err, c) => {

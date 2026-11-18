@@ -78,6 +78,10 @@ to set up: it's turned on with the deploy, needs no secret, and is billed to the
 (a shop's receipts fit well inside the daily free allowance). Usage shows in the dashboard under
 **AI → Workers AI**.
 
+Receipt photos are kept in the D1 database (the `receipts` table from `migrations/0006_receipts.sql`), about
+0.3 to 1 MB each, so a few thousand fit in the free plan's 500 MB. Apply that migration when deploying
+(`npm run db:migrate:remote`).
+
 ## The weekly price check
 
 The cron trigger in `wrangler.jsonc` (`17 9 * * 1`: Mondays at 09:17 UTC, about 5 am Eastern) is

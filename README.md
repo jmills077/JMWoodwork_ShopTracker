@@ -110,16 +110,35 @@ scripts/             Seed script
   checked off. Projects from before this got a list on first load. No migration: it's part of the
   project's data.
 - **Receipts and material purchases.** **Scan a receipt** (on the Projects page, or on a project's
-  Material purchases box) takes a photo with the phone's camera or picks one from the library. The
-  browser shrinks it and sends it to `POST /api/receipts/scan`, which reads it with a vision model on
+  Material purchases box or Summary) takes a photo with the phone's camera or picks one from the library. The
+  browser shrinks it and sends it to `POST /api/receipts/scan`, which first keeps the photo in the `receipts`
+  table (`migrations/0006_receipts.sql`, base64 JPEG, for taxes and audits) and then reads it with a vision model on
   Workers AI (`src/lib/receipts.ts`, the `AI` binding: no API key, billed to the Cloudflare account
   under the Workers AI free allowance). The lines come back to check over: fix a name or price, untick
   what isn't for this job, pick the project, and the ticked lines (sales tax is a line of its own) are
-  added to its `data.purchases`. Lines left over can go to another project from the same receipt. A
-  project's page lists what was bought, the total spent and how it compares with the estimated lumber
-  and hardware. Purchases don't change a quote or price. The photo isn't kept. No migration: it's
-  part of the project's data. Under `npm run dev` the `AI` binding still runs on Cloudflare, so it
+  added to its `data.purchases`, each naming its receipt by id; the receipt's store, date, total and tax are saved with
+  it (`POST /api/receipts`). Lines left over can go to another project from the same receipt. A receipt that can't be
+  read keeps its photo and the lines are typed in from it; a purchase with no receipt can be typed in too.
+  Each receipt has a Notes box (what was bought and why, `receipts.notes`), and ticking **General business expense** sends
+  the ticked lines to the receipt itself (`receipts.general`) instead of a project, for tools, shop supplies and the like.
+  **All receipts** (`#/receipts`, by year) lists every receipt kept with its notes, the projects its lines went to and its
+  general business lines (notes can be edited and general lines removed there). A receipt can be deleted there only while
+  nothing uses it.
+  Purchases don't change a quote or price. Under `npm run dev` the `AI` binding still runs on Cloudflare, so it
   needs `npx wrangler login`.
+- **Project summary** (`#/p/<id>/summary`, the Summary tab): profit and loss for the project. Revenue is a client job's
+  agreed (or quoted) price before sales tax, a product run's Shopify sales (`data.batch.sales`, what each order paid for
+  that product, kept as orders sync so it survives shipping) or else the retail value of its units, or a figure typed in
+  (`data.revenue_actual`). Expenses are its material purchases. Hours worked are typed in (`data.hours_worked`), giving
+  a tax set-aside from profit: the project's state rate (the state picked on a client job, else the no-state
+  rate) plus income tax (Settings → Project summaries, 7% by default) and profit after it, and
+  profit per hour (after the set-aside) beside the project's hourly rate. Every receipt is listed with its photo (tap for full screen), and the
+  page prints or saves as a PDF with the photos.
+- **Export for QuickBooks** (on All receipts): pick a span of dates and download an Excel file (`src/client/xlsx.ts`
+  writes it in the browser, no library) with sheets for each project's summary, each receipt as one expense
+  (date, vendor, total, sales tax, category, Customer:Project, photo link), each expense line with its customer and
+  project, and income (client jobs on the day they were marked delivered, each Shopify order on its date, then
+  what's still expected), plus an About sheet saying how each figure is worked out.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.
 - **Sign-in.** One shop password, set as the `APP_PASSWORD` secret. Sessions last 30 days, and
