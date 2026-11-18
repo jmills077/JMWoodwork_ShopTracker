@@ -2466,6 +2466,7 @@ const SCAN_MAX_SIDE = 1600;   // long side of the photo sent to the server, in p
 const PHOTO_MAX_CHARS = 1_400_000;   // what the server will keep (a D1 row); photos are made smaller until they fit
 let scan = null;              // the receipt being checked over: { id, store, date, total, tax, image, kept, lines: [{ description, qty, amount, on, added }] }
 let scanFailed = null;        // a photo that couldn't be read: { id, image, kept, message }
+let scanGeneral = false;      // the ticked items are general business expenses, not for one project
 let scanProjectId = null;     // the project picked to add items to
 let purchaseSeq = 0;
 
@@ -2508,6 +2509,7 @@ async function readReceipt(file: File) {
   const box = $('#scanBox');
   scan = null;
   scanFailed = null;
+  scanGeneral = false;
   box.innerHTML = '<p class="scanning">Reading the receipt&hellip; <span class="muted">this takes a few seconds</span></p>';
   let image = '', id = receiptId(), kept = false;
   try {
@@ -2518,7 +2520,7 @@ async function readReceipt(file: File) {
     if (r.error) throw new Error(r.error);
     if (!r.items.length) throw new Error("No items could be read from that photo. Try again with the whole receipt flat, in good light, or type the items in.");
     scan = {
-      id, image, kept, store: r.store, date: r.date || ymd(new Date()), total: r.total, tax: r.tax,
+      id, image, kept, store: r.store, date: r.date || ymd(new Date()), total: r.total, tax: r.tax, notes: '', general: [],
       lines: [...r.items.map(i => ({ description: i.description, qty: i.quantity, amount: i.amount, on: true })),
         ...(r.tax ? [{ description: 'Sales tax', qty: 1, amount: r.tax, on: true, tax: true }] : [])],
     };
@@ -2542,8 +2544,9 @@ function renderScanFailed() {
 // Starts a receipt to type in: from a photo that couldn't be read, or with no photo at all.
 function startByHand(from = null) {
   scan = { id: from?.id || receiptId(), image: from?.image || '', kept: !!from?.kept, store: '', date: ymd(new Date()), total: 0, tax: 0,
-    lines: [{ description: '', qty: 1, amount: '', on: true }] };
+    notes: '', general: [], lines: [{ description: '', qty: 1, amount: '', on: true }] };
   scanFailed = null;
+  scanGeneral = false;
   renderScan();
   $('#scanBox [data-scan="store"]')?.focus();
 }
@@ -2584,6 +2587,7 @@ function renderScan() {
     <div class="grid" style="margin-top:14px">
       <label class="f w3"><span>Store</span><input data-scan="store" value="${esc(scan.store)}"></label>
       <label class="f"><span>Date</span><input type="date" data-scan="date" value="${esc(scan.date)}"></label>
+      <label class="f w6"><span>Notes <small class="muted" style="font-weight:400">what you bought and why</small></span><textarea data-scan="notes" rows="2" placeholder="e.g. Glue and hinges for the stool lid; spare blade for the table saw">${esc(scan.notes || '')}</textarea></label>
     </div>
     <div class="scanhead">
       <h2>Items ${scan.image ? 'on the receipt' : 'bought'}</h2>
@@ -2598,12 +2602,14 @@ function renderScan() {
     <button type="button" class="link" data-addline>+ Add ${scan.image ? 'a line that was missed' : 'another line'}</button>
     <hr class="rule">
     ${scan.total && Math.abs(allSum - scan.total) >= 0.01 ? `<p class="note">The lines add up to ${money(allSum)}, but the receipt total reads ${money(scan.total)}. Check for a missed or misread line.</p>` : ''}
-    ${left.length ? `<div class="grid">
+    ${left.length ? `<label class="checkline"><input type="checkbox" id="scanGeneral" ${scanGeneral ? 'checked' : ''}> <span><b>General business expense</b>
+      <small class="muted">not for one project: tools, shop supplies, shipping materials&hellip;</small></span></label>
+    ${scanGeneral ? '' : `<div class="grid">
       <label class="f w4"><span>Add the ticked items to</span><select id="scanProject">${projects.map(p =>
         `<option value="${p.id}" ${p.id === scanProjectId ? 'selected' : ''}>${esc(projectName(p))}${isClient(p) ? ` (${esc(p.data.client_name || p.quote_number)})` : ''}</option>`).join('')}</select></label>
-    </div>
+    </div>`}
     <div class="actions" style="margin-top:12px">
-      <button type="button" class="btn primary" id="scanAdd" ${picked.length && scanProjectId ? '' : 'disabled'}>Add ${picked.length} item${picked.length === 1 ? '' : 's'} (${money(pickedSum)}) to material costs</button>
+      <button type="button" class="btn primary" id="scanAdd" ${picked.length && (scanGeneral || scanProjectId) ? '' : 'disabled'}>Add ${picked.length} item${picked.length === 1 ? '' : 's'} (${money(pickedSum)}) to ${scanGeneral ? 'general business expenses' : 'material costs'}</button>
     </div>` : `<p class="note ok">Every item on this receipt has been added.</p>`}
     <p style="margin-top:14px"><button type="button" class="link" data-new>Done with this receipt &middot; ${scan.image ? 'scan another' : 'start another'}</button></p>`;
   const sel = $('#scanProject', box);
@@ -2620,7 +2626,13 @@ function scanEvents(e: Event) {
   if (e.type === 'click' && el.closest?.('[data-byhand]')) return startByHand(scanFailed);
   if (!scan || !el.closest?.('#scanBox')) return;
   if (e.type === 'input' || e.type === 'change') {
-    if (el.dataset.scan) { scan[el.dataset.scan] = el.value; return; }
+    if (el.dataset.scan) {
+      scan[el.dataset.scan] = el.value;
+      // Once filed, a change to the store, date or notes is saved straight away.
+      if (e.type === 'change' && scan.filed) fileReceipt(scan).catch(error => toast(`Not saved: ${serverSaid(error)}`));
+      return;
+    }
+    if (el.id === 'scanGeneral') { if (e.type === 'change') { scanGeneral = el.checked; renderScan(); } return; }
     if (el.id === 'scanProject') { scanProjectId = Number(el.value); if (e.type === 'change') renderScan(); return; }
     const line = scan.lines[el.dataset.i];
     if (!line) return;
@@ -2667,29 +2679,42 @@ async function fileReceipt(r) {
   }
   const lineSum = cents(r.lines.reduce((n, l) => n + num(l.amount), 0));
   const tax = cents(r.lines.filter(l => l.tax || /^sales tax$/i.test(String(l.description).trim())).reduce((n, l) => n + num(l.amount), 0)) || num(r.tax);
-  await api('/api/receipts', { id: r.id, store: r.store, date: r.date, total: r.total || lineSum, tax });
+  await api('/api/receipts', { id: r.id, store: r.store, date: r.date, total: r.total || lineSum, tax, notes: r.notes || '', general: r.general || [] });
+  r.filed = true;
   receiptLog = null;   // the list is out of date now
 }
 
 let filing = false;
+const lineId = () => `m${Date.now().toString(36)}${(purchaseSeq++).toString(36)}`;
 async function addScanned() {
-  const p = store.projects.find(x => x.id === scanProjectId);
+  const general = scanGeneral;
+  const p = general ? null : store.projects.find(x => x.id === scanProjectId);
   const lines = scan.lines.filter(l => l.on && !l.added && String(l.description).trim());
-  if (!p || !lines.length || filing) return;
+  if ((!general && !p) || !lines.length || filing) return;
   const r = scan;
   filing = true;
   const btn = $('#scanAdd');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving the receipt…'; }
+  // General business expenses are kept with the receipt itself, so they're saved with it.
+  const before = r.general || [];
+  if (general) r.general = [...before, ...lines.map(l => ({ id: lineId(), item: String(l.description).trim(), qty: l.qty || 1, amount: cents(num(l.amount)) }))];
   try { await fileReceipt(r); }
   catch (error) {
     filing = false;
+    r.general = before;
     toast(`The receipt couldn't be saved, so nothing was added: ${serverSaid(error)}`);
     renderScan();
     return;
   }
   filing = false;
+  if (general) {
+    for (const l of lines) { l.added = 'general business expenses'; l.on = false; }
+    toast(`Added ${lines.length} item${lines.length === 1 ? '' : 's'} to general business expenses.`);
+    if (scan === r) renderScan();
+    return;
+  }
   for (const l of lines) {
-    purchasesOf(p).push({ id: `m${Date.now().toString(36)}${(purchaseSeq++).toString(36)}`, date: r.date, store: String(r.store).trim(),
+    purchasesOf(p).push({ id: lineId(), date: r.date, store: String(r.store).trim(),
       item: String(l.description).trim(), qty: l.qty || 1, amount: cents(num(l.amount)), receipt: r.id });
     l.added = projectName(p);
     l.on = false;
@@ -2783,7 +2808,7 @@ function withOldReceipts(log, uses) {
   const filed = new Set(log.map(r => r.id));
   return [...log, ...[...uses].filter(([id]) => !filed.has(id)).map(([id, used]) => {
     const first = used[0].lines[0];
-    return { id, store: first.store, date: first.date, has_photo: false, created_at: '',
+    return { id, store: first.store, date: first.date, has_photo: false, created_at: '', notes: '', general: [], old: true,
       total: cents(used.reduce((n, u) => n + u.lines.reduce((m, x) => m + num(x.amount), 0), 0)),
       tax: cents(used.reduce((n, u) => n + u.lines.filter(x => /^sales tax$/i.test(x.item)).reduce((m, x) => m + num(x.amount), 0), 0)) };
   })].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -2801,28 +2826,50 @@ async function showReceiptLog(year) {
   const years = [...new Set(log.map(yearOf).filter(Boolean))].sort().reverse();
   const shown = year ? log.filter(r => yearOf(r) === year) : log;
   const sum = (list, f) => cents(list.reduce((n, x) => n + num(f(x)), 0));
+  const generalSum = list => sum(list, r => sum(r.general || [], l => l.amount));
   view.innerHTML = `<a href="#/receipt" class="back">&larr; Scan a receipt</a>
-    <div class="pagehead"><h1>All receipts</h1><span class="spacer"></span>
-      ${shown.length ? `<button type="button" class="btn small" id="receiptCsv">Download ${year || 'all'} as a spreadsheet (CSV)</button>` : ''}</div>
+    <div class="pagehead"><h1>All receipts</h1></div>
     <div class="card" id="qbCard"></div>
     <nav class="tabs"><a href="#/receipts" class="${year ? '' : 'on'}">All</a>${years.map(y => `<a href="#/receipts/${y}" class="${y === year ? 'on' : ''}">${y}</a>`).join('')}</nav>
     <div class="card">
       ${shown.length ? `<div class="tot grand" style="margin-top:0;border-top:0;padding-top:0"><span>${shown.length} receipt${shown.length === 1 ? '' : 's'}${year ? ` in ${year}` : ''}</span><span>${money(sum(shown, r => r.total))}</span></div>
       <div class="tot"><span class="muted">Sales tax paid</span><span class="muted">${money(sum(shown, r => r.tax))}</span></div>
+      ${generalSum(shown) ? `<div class="tot"><span class="muted">General business expenses</span><span class="muted">${money(generalSum(shown))}</span></div>` : ''}
       <ul class="rlog">${shown.map(r => {
         const used = uses.get(r.id) || [];
         return `<li>
           ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : '<span class="nophoto">No photo</span>'}
           <div class="rinfo"><b>${esc(r.store || 'Store not given')}</b> <span class="muted">${esc(r.date ? fmtDate(r.date) : '')}</span>
-            <div class="rprojects">${used.length ? used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')
-              : `<span class="muted">Not on any project.</span> <button type="button" class="link" data-delreceipt="${esc(r.id)}" style="color:var(--bad)">Delete</button>`}</div></div>
+            ${r.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
+            <div class="rprojects">${used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')}
+              ${!used.length && !(r.general || []).length ? `<span class="muted">Not on any project.</span> <button type="button" class="link" data-delreceipt="${esc(r.id)}" style="color:var(--bad)">Delete</button>` : ''}</div>
+            ${(r.general || []).length ? `<div class="rgeneral"><b>General business</b><ul class="purchases">${r.general.map(l => `<li><span>${esc(l.item)}</span><span class="amt">${money(l.amount)}</span>
+              <button type="button" class="link" data-ungeneral="${esc(r.id)}:${esc(l.id)}" aria-label="Remove ${esc(l.item)}">&times;</button></li>`).join('')}</ul></div>` : ''}
+            ${r.old ? '' : `<button type="button" class="link rnotebtn" data-renote="${esc(r.id)}">${r.notes ? 'Edit notes' : 'Add notes'}</button>`}</div>
           <span class="amt">${money(r.total)}</span>
         </li>`;
       }).join('')}</ul>` : '<p class="muted" style="margin:0">No receipts kept yet. Scan one and its photo is kept here.</p>'}
     </div>
     <p class="muted" style="font-size:13px">Every receipt photo scanned is kept, even ones with no lines added to a project. Receipts scanned before photos were kept show No photo.</p>`;
-  $('#receiptCsv')?.addEventListener('click', () => downloadReceiptCsv(shown, uses, year || 'all'));
   renderQuickBooksCard();
+  // Notes and general business lines are saved on the receipt itself.
+  const resave = async (r, change) => {
+    try { await api('/api/receipts', { ...r, ...change }); }
+    catch (error) { toast(`Not saved: ${serverSaid(error)}`); return; }
+    receiptLog = null;
+    showReceiptLog(year);
+  };
+  view.querySelectorAll('[data-renote]').forEach(b => b.addEventListener('click', () => {
+    const r = log.find(x => x.id === b.dataset.renote);
+    const notes = r && prompt('Notes: what was bought and why', r.notes || '');
+    if (notes != null && r) resave(r, { notes });
+  }));
+  view.querySelectorAll('[data-ungeneral]').forEach(b => b.addEventListener('click', () => {
+    const [id, lineId] = b.dataset.ungeneral.split(':');
+    const r = log.find(x => x.id === id), line = r?.general.find(l => l.id === lineId);
+    if (!line || !confirm(`Remove ${line.item} (${money(line.amount)}) from general business expenses? The receipt stays on file.`)) return;
+    resave(r, { general: r.general.filter(l => l !== line) });
+  }));
   view.querySelectorAll('[data-delreceipt]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Delete this receipt and its photo? This cannot be undone.')) return;
     try { await api(`/api/receipts/${encodeURIComponent(b.dataset.delreceipt)}/delete`, {}); }
@@ -2830,24 +2877,6 @@ async function showReceiptLog(year) {
     receiptLog = null;
     showReceiptLog(year);
   }));
-}
-
-// One row per line bought, with the project it went to and a link to the receipt's photo (open it while signed in).
-function downloadReceiptCsv(receipts, uses, label) {
-  const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const rows = [['Date', 'Store', 'Item', 'Amount', 'Project', 'Stream', 'Receipt total', 'Receipt sales tax', 'Receipt', 'Photo']];
-  for (const r of [...receipts].reverse()) {
-    const photo = r.has_photo ? `${location.origin}${photoUrl(r.id)}` : '';
-    const used = uses.get(r.id) || [];
-    if (!used.length) rows.push([r.date, r.store, '', '', '(not on a project)', '', r.total, r.tax, r.id, photo]);
-    for (const u of used) for (const x of u.lines) rows.push([x.date || r.date, x.store || r.store, x.item, x.amount, projectName(u.p), STREAM_NAME[streamOf(u.p)], r.total, r.tax, r.id, photo]);
-  }
-  const blob = new Blob([rows.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv' });
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `receipts-${label}.csv` });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // ---------- Excel export for QuickBooks ----------
@@ -2917,24 +2946,29 @@ async function exportQuickBooks(from, to) {
     $c(cents(totals.stateSet), 'boldmoney'), $c(cents(totals.incomeSet), 'boldmoney'), $c(cents(totals.kept), 'boldmoney'), totals.hours ? $c(totals.hours, 'hours') : null]);
 
   // One row per receipt: what to match against the bank or card transaction.
-  const receipts: Cell[][] = [['Date', 'Vendor', 'Total', 'Sales tax', 'Category', 'Customer:Project', 'Memo', 'Receipt ID', 'Photo']];
+  const receipts: Cell[][] = [['Date', 'Vendor', 'Total', 'Sales tax', 'Category', 'Customer:Project', 'Memo', 'Notes', 'General business', 'Receipt ID', 'Photo']];
   for (const r of [...log].reverse().filter(r => inRange(r.date))) {
     const used = uses.get(r.id) || [];
-    const items = used.flatMap(u => u.lines.filter(l => !/^sales tax$/i.test(l.item)).map(l => l.item));
-    receipts.push([$c(r.date, 'date'), r.store, $c(r.total, 'money'), $c(r.tax, 'money'), EXPENSE_CATEGORY,
-      used.length === 1 ? customerProject(used[0].p) : used.length ? 'Split: see Expense lines' : 'Not on a project',
-      items.join('; ').slice(0, 1000), r.id, photo(r)]);
+    const general = r.general || [];
+    const items = [...used.flatMap(u => u.lines.map(l => l.item)), ...general.map(l => l.item)].filter(i => !/^sales tax$/i.test(i));
+    const where = used.length + (general.length ? 1 : 0) > 1 ? 'Split: see Expense lines'
+      : used.length ? customerProject(used[0].p) : general.length ? 'General business' : 'Not on a project';
+    receipts.push([$c(r.date, 'date'), r.store, $c(r.total, 'money'), $c(r.tax, 'money'), EXPENSE_CATEGORY, where,
+      items.join('; ').slice(0, 1000), r.notes || '', general.length ? $c(cents(general.reduce((n, l) => n + num(l.amount), 0)), 'money') : null, r.id, photo(r)]);
   }
 
   // One row per line, with the project it's billed to: for splitting a receipt across projects in QuickBooks.
   const known = new Map(log.map(r => [r.id, r]));
-  const lines: Cell[][] = [['Date', 'Vendor', 'Description', 'Amount', 'Category', 'Customer:Project', 'Customer', 'Project', 'Class', 'Receipt ID', 'Photo']];
-  const allLines = store.projects.flatMap(p => (p.data.purchases || []).filter(x => inRange(x.date)).map(x => ({ p, x })))
-    .sort((a, b) => a.x.date.localeCompare(b.x.date) || String(a.x.receipt).localeCompare(String(b.x.receipt)));
+  const lines: Cell[][] = [['Date', 'Vendor', 'Description', 'Amount', 'Category', 'Customer:Project', 'Customer', 'Project', 'Class', 'Receipt notes', 'Receipt ID', 'Photo']];
+  const allLines = [
+    ...store.projects.flatMap(p => (p.data.purchases || []).filter(x => inRange(x.date)).map(x => ({ p, x }))),
+    ...log.filter(r => inRange(r.date)).flatMap(r => (r.general || []).map(l => ({ p: null, x: { ...l, date: r.date, store: r.store, receipt: r.id } }))),
+  ].sort((a, b) => a.x.date.localeCompare(b.x.date) || String(a.x.receipt).localeCompare(String(b.x.receipt)));
   for (const { p, x } of allLines) {
     const r = known.get(x.receipt);
-    lines.push([$c(x.date, 'date'), x.store, x.item, $c(num(x.amount), 'money'), EXPENSE_CATEGORY, customerProject(p), customerOf(p), exportName(p),
-      STREAM_NAME[streamOf(p)], x.receipt || 'Typed in', r ? photo(r) : 'No photo']);
+    lines.push([$c(x.date, 'date'), x.store, x.item, $c(num(x.amount), 'money'), EXPENSE_CATEGORY,
+      p ? customerProject(p) : '', p ? customerOf(p) : '', p ? exportName(p) : '', p ? STREAM_NAME[streamOf(p)] : 'General business',
+      r?.notes || '', x.receipt || 'Typed in', r ? photo(r) : 'No photo']);
   }
 
   // Income: dated payments in the span, and what's still expected on the projects listed.
@@ -2960,6 +2994,7 @@ async function exportQuickBooks(from, to) {
     [],
     [{ v: 'Expense lines', s: 'bold' }],
     ['Each line of each receipt with the customer and project it went to, for splitting a transaction across projects.'],
+    ['General business expenses (not for one project) have no customer or project, and "General business" as their class.'],
     [],
     [{ v: 'Income', s: 'bold' }],
     ['Payments dated in the span (a client job on the day it was marked delivered, each Shopify order on its order date), then amounts still expected on the projects listed.'],
@@ -2969,8 +3004,8 @@ async function exportQuickBooks(from, to) {
 
   const sheets: Sheet[] = [
     { name: 'Project summary', rows: summary, widths: [28, 40, 20, 14, 14, 11, 11, 13, 34, 12, 14, 13, 8, 12, 12, 13, 9, 13, 9, 10] },
-    { name: 'Expenses by receipt', rows: receipts, widths: [11, 28, 12, 11, 20, 40, 60, 16, 10] },
-    { name: 'Expense lines', rows: lines, widths: [11, 28, 44, 12, 20, 40, 20, 28, 14, 16, 10] },
+    { name: 'Expenses by receipt', rows: receipts, widths: [11, 28, 12, 11, 20, 40, 60, 50, 14, 16, 10] },
+    { name: 'Expense lines', rows: lines, widths: [11, 28, 44, 12, 20, 40, 20, 28, 16, 50, 16, 10] },
     { name: 'Income', rows: income, widths: [14, 20, 40, 28, 52, 14, 11, 13, 14] },
     { name: 'About', rows: about, widths: [140], header: false },
   ];
@@ -3127,6 +3162,7 @@ function showSummary(p) {
           <div class="rtop"><b>${esc(g.store || 'Store not given')}</b><span class="muted">${esc(g.date ? fmtDate(g.date) : '')}</span></div>
           <ul class="purchases">${g.lines.map(x => `<li><span>${esc(x.item)}</span><span class="amt">${money(x.amount)}</span>
             <button type="button" class="link noprint" data-unpurchase="${esc(x.id)}" aria-label="Remove ${esc(x.item)}">&times;</button></li>`).join('')}</ul>
+          ${r?.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
           ${r && r.total && Math.abs(r.total - mine) >= 0.01 ? `<small class="muted">Receipt total ${money(r.total)}; ${money(mine)} of it is on this project.</small>` : ''}
         </div></li>`;
       }).join('')}</ul>

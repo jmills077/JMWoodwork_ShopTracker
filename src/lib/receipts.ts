@@ -79,7 +79,8 @@ export async function scanReceipt(env: Env, image: string): Promise<ScannedRecei
 // and the photo. Which project each line went to is in that project's data.purchases.
 
 /** A receipt as listed: everything but the photo itself. */
-export interface ReceiptRecord { id: string; store: string; date: string; total: number; tax: number; has_photo: boolean; created_at: string }
+export interface GeneralLine { id: string; item: string; qty: number; amount: number }
+export interface ReceiptRecord { id: string; store: string; date: string; total: number; tax: number; notes: string; general: GeneralLine[]; has_photo: boolean; created_at: string }
 
 const ID = /^r[0-9a-z]{4,30}$/;
 // What a D1 row can hold, less room for the other columns.
@@ -96,19 +97,27 @@ export async function keepPhoto(db: D1Database, id: unknown, image: string) {
     .bind(checkId(id), m[1], m[2], new Date().toISOString()).run();
 }
 
-/** Saves what a receipt says (store, date, total, tax), creating it without a photo if it's new. */
+/** Saves what a receipt says (store, date, total, tax, notes), creating it without a photo if it's new.
+ *  `general` (its lines that are general business expenses) is replaced only when it's sent. */
 export async function saveReceipt(db: D1Database, r: any) {
   const text = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(r?.date)) ? String(r.date) : '';
-  await db.prepare(`INSERT INTO receipts (id, store, date, total, tax, created_at) VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT (id) DO UPDATE SET store = excluded.store, date = excluded.date, total = excluded.total, tax = excluded.tax`)
-    .bind(checkId(r?.id), text(r?.store, 200), date, money(r?.total), money(r?.tax), new Date().toISOString()).run();
+  let general: string | null = null;
+  if (r?.general !== undefined) {
+    if (!Array.isArray(r.general) || r.general.length > 300) throw new ReceiptError('Malformed general expense lines.');
+    general = JSON.stringify(r.general.map((l: any) => ({ id: text(l?.id, 40), item: text(l?.item, 300), qty: money(l?.qty) || 1, amount: money(l?.amount) }))
+      .filter((l: GeneralLine) => l.id && l.item));
+  }
+  await db.prepare(`INSERT INTO receipts (id, store, date, total, tax, notes, general, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (id) DO UPDATE SET store = excluded.store, date = excluded.date, total = excluded.total, tax = excluded.tax, notes = excluded.notes,
+      general = CASE WHEN ? THEN excluded.general ELSE receipts.general END`)
+    .bind(checkId(r?.id), text(r?.store, 200), date, money(r?.total), money(r?.tax), text(r?.notes, 4000), general ?? '[]', new Date().toISOString(), general !== null ? 1 : 0).run();
 }
 
 export async function listReceipts(db: D1Database): Promise<ReceiptRecord[]> {
-  const rows = await db.prepare(`SELECT id, store, date, total, tax, mime != '' AS has_photo, created_at FROM receipts ORDER BY date DESC, created_at DESC`)
-    .all<Omit<ReceiptRecord, 'has_photo'> & { has_photo: number }>();
-  return rows.results.map(r => ({ ...r, has_photo: !!r.has_photo }));
+  const rows = await db.prepare(`SELECT id, store, date, total, tax, notes, general, mime != '' AS has_photo, created_at FROM receipts ORDER BY date DESC, created_at DESC`)
+    .all<Omit<ReceiptRecord, 'has_photo' | 'general'> & { has_photo: number; general: string }>();
+  return rows.results.map(r => ({ ...r, general: JSON.parse(r.general || '[]'), has_photo: !!r.has_photo }));
 }
 
 export async function readPhoto(db: D1Database, id: string) {
@@ -124,5 +133,7 @@ export async function deleteReceipt(db: D1Database, id: unknown) {
   const used = await db.prepare(`SELECT 1 FROM projects, json_each(projects.data, '$.purchases') AS x
     WHERE json_extract(x.value, '$.receipt') = ? LIMIT 1`).bind(id).first();
   if (used) throw new ReceiptError('Lines from this receipt are still on a project. Remove them from the project first.');
+  const general = await db.prepare(`SELECT 1 FROM receipts WHERE id = ? AND general != '[]'`).bind(id).first();
+  if (general) throw new ReceiptError('This receipt has general business expenses on it. Remove them first.');
   await db.prepare('DELETE FROM receipts WHERE id = ?').bind(id).run();
 }

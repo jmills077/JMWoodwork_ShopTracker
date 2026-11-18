@@ -119,8 +119,11 @@ scripts/             Seed script
   added to its `data.purchases`, each naming its receipt by id; the receipt's store, date, total and tax are saved with
   it (`POST /api/receipts`). Lines left over can go to another project from the same receipt. A receipt that can't be
   read keeps its photo and the lines are typed in from it; a purchase with no receipt can be typed in too.
-  **All receipts** (`#/receipts`, by year) lists every receipt kept with the projects its lines went to, and downloads a
-  CSV (one row per line, with a link to the photo). A receipt can be deleted there only while no project uses it.
+  Each receipt has a Notes box (what was bought and why, `receipts.notes`), and ticking **General business expense** sends
+  the ticked lines to the receipt itself (`receipts.general`) instead of a project, for tools, shop supplies and the like.
+  **All receipts** (`#/receipts`, by year) lists every receipt kept with its notes, the projects its lines went to and its
+  general business lines (notes can be edited and general lines removed there). A receipt can be deleted there only while
+  nothing uses it.
   Purchases don't change a quote or price. Under `npm run dev` the `AI` binding still runs on Cloudflare, so it
   needs `npx wrangler login`.
 - **Project summary** (`#/p/<id>/summary`, the Summary tab): profit and loss for the project. Revenue is a client job's
