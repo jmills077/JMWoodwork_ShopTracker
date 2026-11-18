@@ -2798,8 +2798,59 @@ view.addEventListener('error', e => {
   const img = e.target as HTMLElement;
   if (img.tagName !== 'IMG' || !img.classList.contains('rthumb')) return;
   const holder = img.closest('[data-photo-id]');
-  (holder || img).replaceWith(Object.assign(document.createElement('span'), { className: 'nophoto', textContent: 'No photo kept' }));
+  const id = (holder as HTMLElement)?.dataset.photoId;
+  const box = document.createElement(id ? 'button' : 'span');
+  box.className = id ? 'nophoto addphoto' : 'nophoto';
+  box.innerHTML = id ? 'No photo kept<b>+ Add photo</b><small class="dragnote">or drop one here</small>' : 'No photo kept';
+  if (id) Object.assign(box, { type: 'button' }).dataset.addphoto = id;
+  (holder || img).replaceWith(box);
 }, true);
+
+// A receipt with no photo (scanned before photos were kept, or typed in): tap its box to pick one from the
+// phone's photos (or take one), or drag a photo onto it on a computer.
+async function addReceiptPhoto(btn: HTMLElement, file: File) {
+  const id = btn.dataset.addphoto;
+  if (!file.type.startsWith('image/') && !/\.(jpe?g|png|webp|heic)$/i.test(file.name)) { toast('That file isn\'t a photo. Use a JPG or PNG.'); return; }
+  btn.innerHTML = 'Saving&hellip;';
+  try {
+    const image = await shrinkPhoto(file);
+    // What's known about the receipt (from its lines, for one scanned before receipts were kept), so it's listed properly.
+    const r = withOldReceipts([...await loadReceipts()], receiptUses()).find(x => x.id === id);
+    await api('/api/receipts/photo', { id, image });
+    if (r) await api('/api/receipts', { id, store: r.store, date: r.date, total: r.total, tax: r.tax, notes: r.notes || '' });
+    receiptLog = null;
+    toast('Photo saved with the receipt.');
+  } catch (error) {
+    toast(`The photo couldn't be saved: ${serverSaid(error)}`);
+  }
+  // Redraw where we are, without jumping back to the top.
+  if (currentHash.startsWith('#/receipts')) showReceiptLog(currentHash.split('/')[2] || '');
+  else if (ed?.redraw && $('#summary')) loadReceipts().then(() => ed?.redraw?.()).catch(() => {});
+}
+view.addEventListener('click', e => {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-addphoto]');
+  if (!btn) return;
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+  input.addEventListener('change', () => { const file = input.files?.[0]; if (file) addReceiptPhoto(btn, file); });
+  input.click();
+});
+const dropTarget = (e: DragEvent) => (e.target as HTMLElement).closest?.<HTMLElement>('[data-addphoto]');
+view.addEventListener('dragover', (e: DragEvent) => {
+  const btn = dropTarget(e);
+  if (!btn) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  btn.classList.add('over');
+});
+view.addEventListener('dragleave', (e: DragEvent) => dropTarget(e)?.classList.remove('over'));
+view.addEventListener('drop', (e: DragEvent) => {
+  const btn = dropTarget(e);
+  if (!btn) return;
+  e.preventDefault();
+  btn.classList.remove('over');
+  const file = e.dataTransfer.files?.[0];
+  if (file) addReceiptPhoto(btn, file);
+});
 
 const yearOf = r => (r.date || r.created_at || '').slice(0, 4);
 
@@ -2838,7 +2889,7 @@ async function showReceiptLog(year) {
       <ul class="rlog">${shown.map(r => {
         const used = uses.get(r.id) || [];
         return `<li>
-          ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : '<span class="nophoto">No photo</span>'}
+          ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : `<button type="button" class="nophoto addphoto" data-addphoto="${esc(r.id)}">No photo<b>+ Add photo</b><small class="dragnote">or drop one here</small></button>`}
           <div class="rinfo"><b>${esc(r.store || 'Store not given')}</b> <span class="muted">${esc(r.date ? fmtDate(r.date) : '')}</span>
             ${r.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
             <div class="rprojects">${used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')}
@@ -3157,7 +3208,7 @@ function showSummary(p) {
         const caption = [g.store, g.date && fmtDate(g.date)].filter(Boolean).join(', ');
         const photo = g.id && (!receiptLog || r?.has_photo)
           ? `<a href="${photoUrl(g.id)}" class="thumb" data-photo-id="${esc(g.id)}" data-caption="${esc(caption)}"><img class="rthumb" loading="lazy" src="${photoUrl(g.id)}" alt="Receipt photo"></a>`
-          : `<span class="nophoto">${g.id ? 'No photo kept' : 'Typed in'}</span>`;
+          : g.id ? `<button type="button" class="nophoto addphoto" data-addphoto="${esc(g.id)}">No photo kept<b>+ Add photo</b><small class="dragnote">or drop one here</small></button>` : '<span class="nophoto">Typed in</span>';
         return `<li>${photo}<div class="rinfo">
           <div class="rtop"><b>${esc(g.store || 'Store not given')}</b><span class="muted">${esc(g.date ? fmtDate(g.date) : '')}</span></div>
           <ul class="purchases">${g.lines.map(x => `<li><span>${esc(x.item)}</span><span class="amt">${money(x.amount)}</span>
