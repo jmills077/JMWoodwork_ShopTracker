@@ -127,7 +127,8 @@ scripts/             Seed script
   agreed (or quoted) price before sales tax, a product run's Shopify sales (`data.batch.sales`, what each order paid for
   that product, kept as orders sync so it survives shipping) or else the retail value of its units, or a figure typed in
   (`data.revenue_actual`). Expenses are its material purchases. Hours worked are typed in (`data.hours_worked`), giving
-  profit per hour beside the project's hourly rate. Every receipt is listed with its photo (tap for full screen), and the
+  a tax set-aside (Settings → Project summaries, 7% of profit by default) and profit after it, and
+  profit per hour (after the set-aside) beside the project's hourly rate. Every receipt is listed with its photo (tap for full screen), and the
   page prints or saves as a PDF with the photos.
 - **Prices.** A cron trigger runs every Monday at 09:17 UTC, reads Parkerville's price lists, and
   replaces the `price_items` table. If a list can't be read, the previous prices stay.

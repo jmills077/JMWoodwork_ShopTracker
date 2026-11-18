@@ -603,3 +603,6 @@ ul.rlog .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
   ul.rgroups > li { grid-template-columns: 150px minmax(0, 1fr); break-inside: avoid; }
 }
 #pnl .tot > :last-child, ul.rlog .amt { white-space: nowrap; }
+.tot.grand.aftertax { font-size: 18px; border-top-width: 1px; }
+.tot.grand.aftertax.loss span:last-child { color: var(--bad); }
+.tot.grand small { font-size: 13px; font-weight: 400; }

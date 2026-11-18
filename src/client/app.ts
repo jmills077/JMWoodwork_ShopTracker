@@ -134,6 +134,7 @@ const DEFAULT_SETTINGS = {
   // { id, handle, name, listed, variants: [{ name, price }], unit_cost, unit_hours, materials }
   products: [],
   hourly_rate: 65, design_retainer: 300, contingency_pct: 10, markup_pct: 20, tax_pct: 0, deposit_pct: 50, waste_pct: 25, shop_speed: 1, quote_valid_days: 30,
+  income_tax_pct: 7,   // share of a project's profit to set aside for taxes, on its Summary
   // price is $ per board foot; labor is how much slower (or faster) the species is to work than cherry or walnut
   species: [
     { name: 'Pine', price: 4, labor: 0.9 }, { name: 'Poplar', price: 5, labor: 0.9 }, { name: 'Red oak', price: 7, labor: 1 },
@@ -2873,7 +2874,8 @@ function showSummary(p) {
   const renderPnl = () => {
     const rev = revenueOf(p), spent = spentOn(p), profit = cents(rev.amount - spent);
     const hours = pos(p.data.hours_worked), rate = pos(p.data.rates?.hourly_rate ?? store.settings.hourly_rate);
-    const perHour = hours ? profit / hours : null;
+    const taxPct = pos(store.settings.income_tax_pct), setAside = cents(Math.max(profit, 0) * taxPct / 100), kept = cents(profit - setAside);
+    const perHour = hours ? kept / hours : null;
     const receipts = new Set((p.data.purchases || []).map(x => x.receipt || x.id)).size;
     const estHours = num(p.calc.labor_hours) + num(p.calc.contingency_hours);
     pnl.innerHTML = `<h2>Profit and loss</h2>
@@ -2884,9 +2886,11 @@ function showSummary(p) {
       <div class="tot"><span>Materials and supplies <small>${(p.data.purchases || []).length} line${(p.data.purchases || []).length === 1 ? '' : 's'} from ${receipts} receipt${receipts === 1 ? '' : 's'}, tax included</small></span><b>&minus; ${money(spent)}</b></div>
       <div class="tot grand ${profit < 0 ? 'loss' : 'profit'}"><span>${profit < 0 ? 'Loss' : 'Profit'}</span><span>${money(Math.abs(profit))}</span></div>
       ${rev.amount ? `<div class="tot"><span class="muted">Margin</span><span class="muted">${Math.round(profit / rev.amount * 100)}%</span></div>` : ''}
+      ${taxPct ? `<div class="tot"><span>Set aside for taxes <small>${+taxPct}% of profit, an estimate</small></span><b>&minus; ${money(setAside)}</b></div>
+        <div class="tot grand aftertax ${kept < 0 ? 'loss' : 'profit'}"><span>Profit after taxes</span><span>${money(kept)}</span></div>` : ''}
       <div class="pl-sec">Time</div>
       <div class="tot"><span>Hours worked</span><b>${hours ? hrs(hours) : '<span class="muted">not entered</span>'}</b></div>
-      ${perHour != null ? `<div class="tot grand perhour ${perHour < rate ? 'under' : ''}"><span>Profit per hour</span><span>${money(perHour)}</span></div>
+      ${perHour != null ? `<div class="tot grand perhour ${perHour < rate ? 'under' : ''}"><span>Profit per hour${taxPct ? ' <small>after taxes</small>' : ''}</span><span>${money(perHour)}</span></div>
         <div class="tot"><span class="muted">Your hourly rate on this project</span><span class="muted">${money(rate)}</span></div>` : ''}
       <hr class="rule">
       <div class="grid noprint">
@@ -3059,6 +3063,9 @@ function showSettings() {
       <fieldset><h2>Estimating</h2><div class="grid">
         ${inp('Shop speed multiplier', 'shop_speed', 'number', 'w3')}${inp('Lumber waste allowance (%)', 'waste_pct', 'number', 'w3')}
       </div><p class="muted" style="margin-bottom:0">Shop speed scales every estimated hour: if jobs take you about 20% longer than estimated, set it to 1.2.</p></fieldset>
+      <fieldset><h2>Project summaries</h2><div class="grid">
+        ${inp('Set aside for taxes (% of profit)', 'income_tax_pct', 'number', 'w3')}
+      </div><p class="muted" style="margin-bottom:0">Each project's Summary shows this share of its profit as money to put away for taxes.</p></fieldset>
     </div>
     <div class="card"><h2>Sales tax by state</h2>
       <p class="muted" style="margin-top:0">Choosing a client's state on a quote applies the rate below. These are statewide rates only, without city or county taxes, so check them against current rates before relying on them.</p>
