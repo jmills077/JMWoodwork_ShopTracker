@@ -80,7 +80,7 @@ export async function scanReceipt(env: Env, image: string): Promise<ScannedRecei
 
 /** A receipt as listed: everything but the photo itself. */
 export interface GeneralLine { id: string; item: string; qty: number; amount: number }
-export interface ReceiptRecord { id: string; store: string; date: string; total: number; tax: number; notes: string; general: GeneralLine[]; has_photo: boolean; created_at: string }
+export interface ReceiptRecord { id: string; store: string; date: string; total: number; tax: number; notes: string; general: GeneralLine[]; has_photo: boolean; photo_v: number; created_at: string }
 
 const ID = /^r[0-9a-z]{4,30}$/;
 // What a D1 row can hold, less room for the other columns.
@@ -115,9 +115,14 @@ export async function saveReceipt(db: D1Database, r: any) {
 }
 
 export async function listReceipts(db: D1Database): Promise<ReceiptRecord[]> {
-  const rows = await db.prepare(`SELECT id, store, date, total, tax, notes, general, mime != '' AS has_photo, created_at FROM receipts ORDER BY date DESC, created_at DESC`)
+  const rows = await db.prepare(`SELECT id, store, date, total, tax, notes, general, mime != '' AS has_photo, length(image) AS photo_v, created_at FROM receipts ORDER BY date DESC, created_at DESC`)
     .all<Omit<ReceiptRecord, 'has_photo' | 'general'> & { has_photo: number; general: string }>();
   return rows.results.map(r => ({ ...r, general: JSON.parse(r.general || '[]'), has_photo: !!r.has_photo }));
+}
+
+/** Takes a receipt's photo off (the wrong one was kept); its store, date, total and lines stay. */
+export async function removePhoto(db: D1Database, id: unknown) {
+  await db.prepare(`UPDATE receipts SET mime = '', image = '' WHERE id = ?`).bind(checkId(id)).run();
 }
 
 export async function readPhoto(db: D1Database, id: string) {

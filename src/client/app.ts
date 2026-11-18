@@ -2477,7 +2477,8 @@ const budgetFor = p => isBatch(p) ? num(p.calc.materials_est) : num(p.calc.mater
 // Projects that can take purchases, most recently touched first.
 const purchaseProjects = () => store.projects.filter(p => !archived(p) || p.id === scanProjectId).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 const receiptId = () => `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const photoUrl = id => `/api/receipts/${encodeURIComponent(id)}/photo`;
+// A photo can be replaced, so its address carries a version (its size) and the browser keeps each version.
+const photoUrl = (id, v?) => `/api/receipts/${encodeURIComponent(id)}/photo${v ? `?v=${v}` : ''}`;
 
 // Shrinks a phone photo (often 4000+ px) to a JPEG data URL small enough to send quickly and keep.
 async function shrinkPhoto(file: File) {
@@ -2777,13 +2778,30 @@ function receiptUses() {
 }
 
 // A photo, full screen. Tap anywhere (or press Escape) to close it.
-function showPhoto(src, caption = '') {
+function showPhoto(src, caption = '', id = '') {
   const box = document.createElement('div');
   box.className = 'photoview';
-  box.innerHTML = `<img src="${esc(src)}" alt="${esc(caption || 'Receipt photo')}"><div class="cap">${esc(caption)} <a href="${esc(src)}" target="_blank" rel="noopener">Open on its own</a> &middot; tap to close</div>`;
+  box.innerHTML = `<img src="${esc(src)}" alt="${esc(caption || 'Receipt photo')}"><div class="cap">${esc(caption)} <a href="${esc(src)}" target="_blank" rel="noopener">Open on its own</a> &middot; tap to close</div>
+    ${id ? '<div class="photoacts"><button type="button" class="btn small" data-act="replace">Replace photo</button><button type="button" class="btn small" data-act="remove">Remove photo</button></div>' : ''}`;
   const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-  box.addEventListener('click', e => { if (!(e.target as HTMLElement).closest('a')) close(); });
+  box.addEventListener('click', e => {
+    const t = e.target as HTMLElement;
+    if (t.closest('a')) return;
+    const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
+    if (act === 'replace') {
+      // The wrong photo was kept: pick (or take) the right one, and it takes this one's place.
+      pickPhoto(file => { close(); addReceiptPhoto(id, file); });
+      return;
+    }
+    if (act === 'remove') {
+      if (!confirm('Remove this photo from the receipt? The receipt and its lines stay; you can add another photo after.')) return;
+      close();
+      removeReceiptPhoto(id);
+      return;
+    }
+    close();
+  });
   document.addEventListener('keydown', onKey);
   document.body.append(box);
 }
@@ -2791,7 +2809,7 @@ view.addEventListener('click', e => {
   const t = (e.target as HTMLElement).closest<HTMLElement>('[data-photo-id]');
   if (!t) return;
   e.preventDefault();
-  showPhoto(photoUrl(t.dataset.photoId), t.dataset.caption);
+  showPhoto((t as HTMLAnchorElement).getAttribute('href') || photoUrl(t.dataset.photoId), t.dataset.caption, t.dataset.photoId);
 });
 // A receipt from before photos were kept has none: show a note in its place.
 view.addEventListener('error', e => {
@@ -2801,17 +2819,21 @@ view.addEventListener('error', e => {
   const id = (holder as HTMLElement)?.dataset.photoId;
   const box = document.createElement(id ? 'button' : 'span');
   box.className = id ? 'nophoto addphoto' : 'nophoto';
-  box.innerHTML = id ? 'No photo kept<b>+ Add photo</b><small class="dragnote">or drop one here</small>' : 'No photo kept';
-  if (id) Object.assign(box, { type: 'button' }).dataset.addphoto = id;
+  box.innerHTML = id ? ADD_PHOTO_INNER : 'No photo kept';
+  if (id) Object.assign(box, { type: 'button', title: ADD_PHOTO_TITLE }).dataset.addphoto = id;
   (holder || img).replaceWith(box);
 }, true);
 
+// The box shown in place of a missing receipt photo: a camera and "Add photo" (dragging one in is in the tooltip).
+const ADD_PHOTO_TITLE = 'No photo kept. Tap to add one, or drag a photo here.';
+const ADD_PHOTO_INNER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Add photo</span>';
+const addPhotoButton = (id: string) => `<button type="button" class="nophoto addphoto" data-addphoto="${esc(id)}" title="${ADD_PHOTO_TITLE}" aria-label="Add a photo of this receipt">${ADD_PHOTO_INNER}</button>`;
+
 // A receipt with no photo (scanned before photos were kept, or typed in): tap its box to pick one from the
 // phone's photos (or take one), or drag a photo onto it on a computer.
-async function addReceiptPhoto(btn: HTMLElement, file: File) {
-  const id = btn.dataset.addphoto;
+async function addReceiptPhoto(id: string, file: File, btn?: HTMLElement) {
   if (!file.type.startsWith('image/') && !/\.(jpe?g|png|webp|heic)$/i.test(file.name)) { toast('That file isn\'t a photo. Use a JPG or PNG.'); return; }
-  btn.innerHTML = 'Saving&hellip;';
+  if (btn) btn.innerHTML = 'Saving&hellip;'; else toast('Saving the photo…');
   try {
     const image = await shrinkPhoto(file);
     // What's known about the receipt (from its lines, for one scanned before receipts were kept), so it's listed properly.
@@ -2823,16 +2845,33 @@ async function addReceiptPhoto(btn: HTMLElement, file: File) {
   } catch (error) {
     toast(`The photo couldn't be saved: ${serverSaid(error)}`);
   }
-  // Redraw where we are, without jumping back to the top.
+  redrawReceipts();
+}
+// Redraw where we are (All receipts, or a project's Summary), without jumping back to the top.
+function redrawReceipts() {
   if (currentHash.startsWith('#/receipts')) showReceiptLog(currentHash.split('/')[2] || '');
   else if (ed?.redraw && $('#summary')) loadReceipts().then(() => ed?.redraw?.()).catch(() => {});
+}
+async function removeReceiptPhoto(id: string) {
+  try {
+    await api(`/api/receipts/${encodeURIComponent(id)}/photo/delete`, {});
+    receiptLog = null;
+    toast('Photo removed. Tap Add photo to put the right one on.');
+  } catch (error) {
+    toast(`The photo couldn't be removed: ${serverSaid(error)}`);
+  }
+  redrawReceipts();
+}
+// The phone's photo picker (or camera); a file chooser on a computer.
+function pickPhoto(then: (file: File) => void) {
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+  input.addEventListener('change', () => { const file = input.files?.[0]; if (file) then(file); });
+  input.click();
 }
 view.addEventListener('click', e => {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-addphoto]');
   if (!btn) return;
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
-  input.addEventListener('change', () => { const file = input.files?.[0]; if (file) addReceiptPhoto(btn, file); });
-  input.click();
+  pickPhoto(file => addReceiptPhoto(btn.dataset.addphoto, file, btn));
 });
 const dropTarget = (e: DragEvent) => (e.target as HTMLElement).closest?.<HTMLElement>('[data-addphoto]');
 view.addEventListener('dragover', (e: DragEvent) => {
@@ -2849,7 +2888,7 @@ view.addEventListener('drop', (e: DragEvent) => {
   e.preventDefault();
   btn.classList.remove('over');
   const file = e.dataTransfer.files?.[0];
-  if (file) addReceiptPhoto(btn, file);
+  if (file) addReceiptPhoto(btn.dataset.addphoto, file, btn);
 });
 
 const yearOf = r => (r.date || r.created_at || '').slice(0, 4);
@@ -2889,7 +2928,7 @@ async function showReceiptLog(year) {
       <ul class="rlog">${shown.map(r => {
         const used = uses.get(r.id) || [];
         return `<li>
-          ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : `<button type="button" class="nophoto addphoto" data-addphoto="${esc(r.id)}">No photo<b>+ Add photo</b><small class="dragnote">or drop one here</small></button>`}
+          ${r.has_photo ? `<a href="${photoUrl(r.id, r.photo_v)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id, r.photo_v)}" alt="Receipt photo"></a>` : addPhotoButton(r.id)}
           <div class="rinfo"><b>${esc(r.store || 'Store not given')}</b> <span class="muted">${esc(r.date ? fmtDate(r.date) : '')}</span>
             ${r.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
             <div class="rprojects">${used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')}
@@ -3207,8 +3246,8 @@ function showSummary(p) {
         const r = known.get(g.id), mine = cents(g.lines.reduce((n, x) => n + num(x.amount), 0));
         const caption = [g.store, g.date && fmtDate(g.date)].filter(Boolean).join(', ');
         const photo = g.id && (!receiptLog || r?.has_photo)
-          ? `<a href="${photoUrl(g.id)}" class="thumb" data-photo-id="${esc(g.id)}" data-caption="${esc(caption)}"><img class="rthumb" loading="lazy" src="${photoUrl(g.id)}" alt="Receipt photo"></a>`
-          : g.id ? `<button type="button" class="nophoto addphoto" data-addphoto="${esc(g.id)}">No photo kept<b>+ Add photo</b><small class="dragnote">or drop one here</small></button>` : '<span class="nophoto">Typed in</span>';
+          ? `<a href="${photoUrl(g.id, r?.photo_v)}" class="thumb" data-photo-id="${esc(g.id)}" data-caption="${esc(caption)}"><img class="rthumb" loading="lazy" src="${photoUrl(g.id, r?.photo_v)}" alt="Receipt photo"></a>`
+          : g.id ? addPhotoButton(g.id) : '<span class="nophoto">Typed in</span>';
         return `<li>${photo}<div class="rinfo">
           <div class="rtop"><b>${esc(g.store || 'Store not given')}</b><span class="muted">${esc(g.date ? fmtDate(g.date) : '')}</span></div>
           <ul class="purchases">${g.lines.map(x => `<li><span>${esc(x.item)}</span><span class="amt">${money(x.amount)}</span>
