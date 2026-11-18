@@ -2874,7 +2874,14 @@ function showSummary(p) {
   const renderPnl = () => {
     const rev = revenueOf(p), spent = spentOn(p), profit = cents(rev.amount - spent);
     const hours = pos(p.data.hours_worked), rate = pos(p.data.rates?.hourly_rate ?? store.settings.hourly_rate);
-    const taxPct = pos(store.settings.income_tax_pct), setAside = cents(Math.max(profit, 0) * taxPct / 100), kept = cents(profit - setAside);
+    // Set aside from profit: the project's state rate (the one picked on its Details, or the no-state default
+    // for work without a state) plus the income tax share from the settings.
+    const state = isClient(p) ? p.data.client_state : '';
+    const statePct = state ? pos(p.data.rates?.tax_pct) : pos(store.settings.tax_pct);
+    const incomePct = pos(store.settings.income_tax_pct), taxPct = statePct + incomePct;
+    const base = Math.max(profit, 0);
+    const stateSet = cents(base * statePct / 100), incomeSet = cents(base * incomePct / 100);
+    const setAside = cents(stateSet + incomeSet), kept = cents(profit - setAside);
     const perHour = hours ? kept / hours : null;
     const receipts = new Set((p.data.purchases || []).map(x => x.receipt || x.id)).size;
     const estHours = num(p.calc.labor_hours) + num(p.calc.contingency_hours);
@@ -2886,7 +2893,9 @@ function showSummary(p) {
       <div class="tot"><span>Materials and supplies <small>${(p.data.purchases || []).length} line${(p.data.purchases || []).length === 1 ? '' : 's'} from ${receipts} receipt${receipts === 1 ? '' : 's'}, tax included</small></span><b>&minus; ${money(spent)}</b></div>
       <div class="tot grand ${profit < 0 ? 'loss' : 'profit'}"><span>${profit < 0 ? 'Loss' : 'Profit'}</span><span>${money(Math.abs(profit))}</span></div>
       ${rev.amount ? `<div class="tot"><span class="muted">Margin</span><span class="muted">${Math.round(profit / rev.amount * 100)}%</span></div>` : ''}
-      ${taxPct ? `<div class="tot"><span>Set aside for taxes <small>${+taxPct}% of profit, an estimate</small></span><b>&minus; ${money(setAside)}</b></div>
+      ${taxPct ? `<div class="pl-sec">Set aside for taxes <small style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted)">estimates, ${+cents(taxPct)}% of profit</small></div>
+        ${statePct ? `<div class="tot"><span>State tax <small>${state ? `${esc(STATE_NAME[state] || state)} ` : ''}${+statePct}%</small></span><b>&minus; ${money(stateSet)}</b></div>` : ''}
+        ${incomePct ? `<div class="tot"><span>Income tax <small>${+incomePct}%</small></span><b>&minus; ${money(incomeSet)}</b></div>` : ''}
         <div class="tot grand aftertax ${kept < 0 ? 'loss' : 'profit'}"><span>Profit after taxes</span><span>${money(kept)}</span></div>` : ''}
       <div class="pl-sec">Time</div>
       <div class="tot"><span>Hours worked</span><b>${hours ? hrs(hours) : '<span class="muted">not entered</span>'}</b></div>
@@ -3064,8 +3073,8 @@ function showSettings() {
         ${inp('Shop speed multiplier', 'shop_speed', 'number', 'w3')}${inp('Lumber waste allowance (%)', 'waste_pct', 'number', 'w3')}
       </div><p class="muted" style="margin-bottom:0">Shop speed scales every estimated hour: if jobs take you about 20% longer than estimated, set it to 1.2.</p></fieldset>
       <fieldset><h2>Project summaries</h2><div class="grid">
-        ${inp('Set aside for taxes (% of profit)', 'income_tax_pct', 'number', 'w3')}
-      </div><p class="muted" style="margin-bottom:0">Each project's Summary shows this share of its profit as money to put away for taxes.</p></fieldset>
+        ${inp('Income tax to set aside (% of profit)', 'income_tax_pct', 'number', 'w3')}
+      </div><p class="muted" style="margin-bottom:0">Each project's Summary sets aside this share of its profit for income tax, plus its state's rate (the state picked on a client job, or the no-state sales tax rate above for other work).</p></fieldset>
     </div>
     <div class="card"><h2>Sales tax by state</h2>
       <p class="muted" style="margin-top:0">Choosing a client's state on a quote applies the rate below. These are statewide rates only, without city or county taxes, so check them against current rates before relying on them.</p>
