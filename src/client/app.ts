@@ -2756,19 +2756,6 @@ view.addEventListener('click', e => {
   if (ed.redraw && $('#summary')) ed.redraw(); else renderPurchasesCard(p);
 });
 
-// A receipt put on the wrong project: take all of its lines off this one (the receipt and photo stay on file).
-view.addEventListener('click', e => {
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-unreceipt]');
-  const p = ed?.project;
-  if (!btn || !p) return;
-  const lines = (p.data.purchases || []).filter(x => x.receipt === btn.dataset.unreceipt);
-  if (!lines.length || !confirm(`Take this receipt off ${projectName(p)}? Its ${lines.length} lines (${money(lines.reduce((n, x) => n + num(x.amount), 0))}) come off the project. The receipt and photo stay under All receipts, where it can be deleted.`)) return;
-  p.data.purchases = p.data.purchases.filter(x => !lines.includes(x));
-  p.updated_at = new Date().toISOString();
-  persist();
-  if (ed.redraw && $('#summary')) ed.redraw(); else renderPurchasesCard(p);
-});
-
 // ---------- every receipt kept ----------
 let receiptLog = null;   // [{ id, store, date, total, tax, has_photo, created_at }] from the server, newest first
 async function loadReceipts() {
@@ -2910,7 +2897,7 @@ async function showReceiptLog(year) {
           ${r.has_photo ? `<a href="${photoUrl(r.id)}" class="thumb" data-photo-id="${esc(r.id)}" data-caption="${esc([r.store, r.date && fmtDate(r.date)].filter(Boolean).join(', '))}"><img class="rthumb" loading="lazy" src="${photoUrl(r.id)}" alt="Receipt photo"></a>` : addPhotoButton(r.id)}
           <div class="rinfo"><b>${esc(r.store || 'Store not given')}</b> <span class="muted">${esc(r.date ? fmtDate(r.date) : '')}</span>
             ${r.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
-            <div class="rprojects">${used.map(u => `<span class="ruse"><a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}<button type="button" class="link" data-unlink="${esc(r.id)}|${esc(u.p.id)}" aria-label="Take this receipt off ${esc(projectName(u.p))}" title="Wrong project? Take it off">&times;</button></span>`).join(' &middot; ')}
+            <div class="rprojects">${used.map(u => `<a href="#/p/${u.p.id}/summary">${esc(projectName(u.p))}</a> ${money(sum(u.lines, x => x.amount))}`).join(' &middot; ')}
               ${!used.length && !(r.general || []).length ? `<span class="muted">Not on any project.</span> <button type="button" class="link" data-delreceipt="${esc(r.id)}" style="color:var(--bad)">Delete</button>` : ''}</div>
             ${(r.general || []).length ? `<div class="rgeneral"><b>General business</b><ul class="purchases">${r.general.map(l => `<li><span>${esc(l.item)}</span><span class="amt">${money(l.amount)}</span>
               <button type="button" class="link" data-ungeneral="${esc(r.id)}:${esc(l.id)}" aria-label="Remove ${esc(l.item)}">&times;</button></li>`).join('')}</ul></div>` : ''}
@@ -2939,20 +2926,8 @@ async function showReceiptLog(year) {
     if (!line || !confirm(`Remove ${line.item} (${money(line.amount)}) from general business expenses? The receipt stays on file.`)) return;
     resave(r, { general: r.general.filter(l => l !== line) });
   }));
-  // Put on the wrong project: take its lines off that project. With nothing left using it, Delete shows.
-  view.querySelectorAll('[data-unlink]').forEach(b => b.addEventListener('click', () => {
-    const [id, pid] = b.dataset.unlink.split('|');
-    const p = store.projects.find(x => String(x.id) === pid);
-    const lines = (p?.data.purchases || []).filter(x => x.receipt === id);
-    if (!p || !lines.length || !confirm(`Take this receipt off ${projectName(p)}? Its ${lines.length === 1 ? 'line' : `${lines.length} lines`} (${money(sum(lines, x => x.amount))}) come off the project. The receipt stays here, and can then be deleted.`)) return;
-    p.data.purchases = p.data.purchases.filter(x => !lines.includes(x));
-    p.updated_at = new Date().toISOString();
-    persist();
-    showReceiptLog(year);
-  }));
   view.querySelectorAll('[data-delreceipt]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Delete this receipt and its photo? This cannot be undone.')) return;
-    await save();   // a project it was just taken off must be saved first, or the server still sees it in use
     try { await api(`/api/receipts/${encodeURIComponent(b.dataset.delreceipt)}/delete`, {}); }
     catch (error) { toast(serverSaid(error)); return; }
     receiptLog = null;
@@ -3245,7 +3220,6 @@ function showSummary(p) {
             <button type="button" class="link noprint" data-unpurchase="${esc(x.id)}" aria-label="Remove ${esc(x.item)}">&times;</button></li>`).join('')}</ul>
           ${r?.notes ? `<div class="rnote">${esc(r.notes)}</div>` : ''}
           ${r && r.total && Math.abs(r.total - mine) >= 0.01 ? `<small class="muted">Receipt total ${money(r.total)}; ${money(mine)} of it is on this project.</small>` : ''}
-          ${g.id && g.lines.length > 1 ? `<button type="button" class="link rremove noprint" data-unreceipt="${esc(g.id)}">Remove this receipt from the project</button>` : ''}
         </div></li>`;
       }).join('')}</ul>
       <div class="tot grand"><span>Total spent</span><span>${money(spentOn(p))}</span></div>`
