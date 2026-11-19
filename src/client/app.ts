@@ -461,8 +461,10 @@ function backLink(href, label) {
   return `<a href="${esc(to.hash)}" class="back">&larr; ${esc(to.label)}</a>`;
 }
 
+let prevHash = '';
 function route() {
   const before = currentHash;
+  if (before !== (location.hash || '#/')) prevHash = before;
   currentHash = location.hash || '#/';
   if (before && sectionOf(before)) { scrollSpots[before] = window.scrollY; keep('scrollSpots', scrollSpots); }
   const section = sectionOf(currentHash);
@@ -486,6 +488,8 @@ function route() {
   }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
+  else if (project && parts[2] === 'todo') showTodo(project);
+  else if (project && parts[2] === 'dates') { phaseDatesOpen = true; isBatch(project) ? showBatch(project) : showEditor(project); setTimeout(openPhaseDates, 80); }
   else if (project && parts[2] === 'summary') showSummary(project);
   else if (project && isBatch(project)) showBatch(project);
   else if (project) showEditor(project);
@@ -508,6 +512,44 @@ window.addEventListener('hashchange', () => {
   }
   route();
 });
+// ---------- quick find ----------
+// The magnifier in the header (or "/" on a computer) finds any project by its name, client or quote
+// number, frozen and finished ones too.
+const finder = $('#finder'), findInput = $('#findInput') as HTMLInputElement, findResults = $('#findResults');
+function findMatches(q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const text = p => [projectName(p), p.data.client_name, p.quote_number, STREAM_NAME[streamOf(p)], p.data.spec?.species].join(' ').toLowerCase();
+  const rank = p => isFrozen(p) ? 1 : archived(p) ? 2 : 0;
+  return store.projects.filter(p => words.every(w => text(p).includes(w)))
+    .sort((a, b) => rank(a) - rank(b) || b.updated_at.localeCompare(a.updated_at)).slice(0, 12);
+}
+function drawFind() {
+  const q = findInput.value.trim(), list = q ? findMatches(q) : prioritized().slice(0, 6);
+  findResults.innerHTML = (q ? '' : '<li class="findhead muted">Active projects</li>') + (list.map((p, i) => `<li><a href="#/p/${p.id}" class="${i === 0 && q ? 'first' : ''}">
+      <b>${esc(projectName(p))}</b><span class="muted">${isClient(p) ? esc([p.data.client_name, p.quote_number].filter(Boolean).join(' \u00b7 ')) : STREAM_NAME[streamOf(p)]}${isFrozen(p) ? ' \u00b7 frozen' : ''}</span>
+      <span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></a></li>`).join('') || '<li class="findnone muted">No project matches that.</li>');
+}
+function openFind(open = true) {
+  finder.hidden = !open;
+  document.body.classList.toggle('finding', open);
+  if (!open) return;
+  findInput.value = '';
+  drawFind();
+  findInput.focus();
+}
+$('#findBtn').addEventListener('click', () => openFind(finder.hidden));
+findInput.addEventListener('input', drawFind);
+findInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') openFind(false);
+  if (e.key === 'Enter') { const a = findResults.querySelector('a') as HTMLAnchorElement; if (a) { location.hash = a.getAttribute('href'); openFind(false); } }
+});
+finder.addEventListener('click', e => { if ((e.target as Element).closest('a') || e.target === finder) openFind(false); });
+document.addEventListener('keydown', e => {
+  const el = e.target as Element;
+  if (e.key === '/' && finder.hidden && !el.closest('input, textarea, select, [contenteditable]')) { e.preventDefault(); openFind(); }
+  if (e.key === 'Escape' && !finder.hidden) openFind(false);
+});
+
 // Tapping the menu or tab bar link for the page you're already on takes you to its top.
 document.addEventListener('click', e => {
   const a = (e.target as Element).closest<HTMLAnchorElement>('header.top a, nav.tabbar a');
@@ -547,7 +589,7 @@ function showBoard() {
     if (nav && on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2;
   };
   const newLabel = tab === 'client' ? 'New quote' : 'New project';
-  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span><a class="btn wideonly" href="#/receipt">Scan a receipt</a><a class="btn primary wideonly" href="${newLink()}">${newLabel}</a></div>${tabs}`;
+  const head = `<div class="pagehead"><h1>Projects</h1><span class="spacer"></span>${tab === 'product' ? '<a class="btn" href="#/products">Shop products</a>' : ''}<a class="btn wideonly" href="#/receipt">Scan a receipt</a><a class="btn primary wideonly" href="${newLink()}">${newLabel}</a></div>${tabs}`;
   const quick = tab === 'product' ? '<div class="card" id="quickBatch"></div>' : '';
   if (!shown.length) {
     view.innerHTML = `${head}${quick}<div class="card empty"><h1>Nothing here yet</h1>
@@ -557,7 +599,11 @@ function showBoard() {
     return;
   }
   const active = by('accepted', 'in_progress');
-  const stat = (label, value, note) => `<div class="card stat"><span class="muted">${label}</span><b>${value}</b><span class="muted">${note}</span></div>`;
+  const statLists = [];
+  const stat = (label, value, note, list = []) => {
+    statLists.push({ label, list });
+    return `<button type="button" class="card stat" data-stat="${statLists.length - 1}" aria-expanded="false" ${list.length ? '' : 'disabled'}><span class="muted">${label}</span><b>${value}</b><span class="muted">${note}</span></button>`;
+  };
   let stats;
   if (tab === 'client' || tab === 'all') {
     const open = by('sent'), done = by('complete', 'delivered');
@@ -565,18 +611,18 @@ function showBoard() {
     // phase of the product line, at retail value. Gallery pieces aren't for sale, so they're left out.
     const booked = active.filter(isClient), products = shown.filter(p => isProduct(p) && !archived(p));
     const bookedNote = tab === 'all' ? `${booked.length} client \u00b7 ${products.length} product` : `${booked.length} active`;
-    stats = stat('Quotes awaiting answer', money(sum(open, p => p.calc.total)), `${open.length} sent`)
-      + stat(tab === 'all' ? 'Booked Work' : 'Booked client work', money(sum([...booked, ...products], valueOf)), bookedNote)
-      + stat('Shop hours booked', hrs(sum(active, shopHours)), tab === 'all' ? 'all active work' : 'accepted + in progress')
-      + (tab === 'all' ? stat('Completed', String(done.length), 'pieces finished')
-        : stat('Completed', money(sum(done, p => p.calc.total)), `${done.length} finished`));
+    stats = stat('Quotes awaiting answer', money(sum(open, p => p.calc.total)), `${open.length} sent`, open)
+      + stat(tab === 'all' ? 'Booked Work' : 'Booked client work', money(sum([...booked, ...products], valueOf)), bookedNote, [...booked, ...products])
+      + stat('Shop hours booked', hrs(sum(active, shopHours)), tab === 'all' ? 'all active work' : 'accepted + in progress', active)
+      + (tab === 'all' ? stat('Completed', String(done.length), 'pieces finished', done)
+        : stat('Completed', money(sum(done, p => p.calc.total)), `${done.length} finished`, done));
   } else {
     const planned = by('planned'), done = by('complete');
     const valueLabel = tab === 'product' ? 'retail value' : 'cost';
-    stats = stat('Planned', String(planned.length), `${money(sum(planned, valueOf))} ${valueLabel}`)
-      + stat('In progress', String(active.length), `${money(sum(active, valueOf))} ${valueLabel}`)
-      + stat('Shop hours booked', hrs(sum(active, shopHours)), 'in progress')
-      + stat('Completed', String(done.length), `${money(sum(done, valueOf))} ${valueLabel}`);
+    stats = stat('Planned', String(planned.length), `${money(sum(planned, valueOf))} ${valueLabel}`, planned)
+      + stat('In progress', String(active.length), `${money(sum(active, valueOf))} ${valueLabel}`, active)
+      + stat('Shop hours booked', hrs(sum(active, shopHours)), 'in progress', active)
+      + stat('Completed', String(done.length), `${money(sum(done, valueOf))} ${valueLabel}`, done);
   }
   const jobCard = p => `<a class="job" href="#/p/${p.id}" draggable="true" data-id="${p.id}">
       <b>${esc(projectName(p))}</b>
@@ -633,14 +679,14 @@ function showBoard() {
   const lanes = () => STREAMS.map(([key, name]) => {
     const list = shown.filter(p => streamOf(p) === key), open = list.filter(p => !archived(p));
     return `<section class="lane ${key}" data-stream="${key}">
-      <div class="lanehead"><h2>${name} <span>${open.length}</span></h2><a href="#/s/${key}">Open<span class="lopen"> ${name.toLowerCase()}</span> &rarr;</a></div>
+      <div class="lanehead"><h2>${name} <span>${open.length}</span></h2>${key === 'product' ? '<a href="#/products" class="lprod">Products</a>' : ''}<a href="#/s/${key}">Open<span class="lopen"> ${name.toLowerCase()}</span> &rarr;</a></div>
       ${boardHtml(list, key)}${listHtml(list, key)}
     </section>`;
   }).join('');
   view.innerHTML = `
     ${head}
     ${quick}
-    <div class="stats">${stats}</div>
+    <div class="stats">${stats}</div><div id="statList" hidden></div>
     <div class="boards">${tab === 'all' ? lanes() : boardHtml() + listHtml()}</div>
     ${archive.length ? `<div class="card" style="margin-top:20px"><h2>Archive</h2><table class="list">
       <tr><th>Project</th><th>${tab === 'client' ? 'Client' : tab === 'all' ? 'Stream' : ''}</th><th>${tab === 'client' ? 'Quote' : ''}</th><th>${tab === 'gallery' ? 'Cost' : 'Total'}</th><th>Status</th></tr>
@@ -651,6 +697,18 @@ function showBoard() {
 
   tabInView();
   requestAnimationFrame(markStuckBands);
+  $('.stats').addEventListener('click', e => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-stat]');
+    if (!b) return;
+    const box = $('#statList'), was = b.getAttribute('aria-expanded') === 'true';
+    view.querySelectorAll('[data-stat]').forEach(x => x.setAttribute('aria-expanded', 'false'));
+    box.hidden = was;
+    if (was) return;
+    b.setAttribute('aria-expanded', 'true');
+    const { label, list } = statLists[Number(b.dataset.stat)];
+    box.innerHTML = `<div class="card statlist"><h2>${label} <span class="muted">${list.length}</span></h2><ul>${list.map(p => `<li><a href="#/p/${p.id}">${esc(projectName(p))}</a>
+      <span class="muted">${isClient(p) ? esc(p.data.client_name || p.quote_number) : STREAM_NAME[streamOf(p)]}</span><span class="amt">${money(valueOf(p))}</span><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span></li>`).join('')}</ul></div>`;
+  });
   if (quick) renderQuickBatch();
   // Drag a card to another column to change its phase, or (on "All projects") into another stream's section.
   const board = $('.boards');
@@ -759,7 +817,7 @@ function showCalendar(month) {
 
   const daysLeft = due => Math.round((+new Date(due + 'T00:00') - +new Date(today + 'T00:00')) / 86400000);
   const dueText = (j, due) => {
-    if (!due) return `<a href="#/p/${j.p.id}">Set a date</a>`;
+    if (!due) return `<a href="#/p/${j.p.id}/dates">Set a date</a>`;
     const n = daysLeft(due);
     return `${esc(fmtDate(due))} <span class="${n < 0 ? 'late' : 'muted'}">(${n < 0 ? `${-n} day${n === -1 ? '' : 's'} overdue` : n === 0 ? 'today' : `${n} day${n === 1 ? '' : 's'} left`})</span>`;
   };
@@ -811,7 +869,10 @@ const phoneTimeline = () => window.matchMedia('(max-width: 600px)').matches;
 let tlScrollDate = '';   // the date at the left edge of the phone timeline, kept when the page redraws
 window.matchMedia('(max-width: 600px)').addEventListener('change', () => { if (currentHash.startsWith('#/calendar')) route(); });
 
-function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
+function showTimeline({ year, mon, today, jobs: all, plan, shortDate, monthLink }) {
+  // Projects with no dates yet get a short "Needs dates" list under the timeline instead of a one-day bar.
+  const undated = all.filter(j => !j.p.data.due_date && !Object.values(j.p.data.stage_due || {}).some(Boolean));
+  const jobs = all.filter(j => !undated.includes(j));
   const swipe = phoneTimeline() && jobs.length > 0;
   const addDays = (date, n) => { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + n); return ymd(d); };
   const between = (a, b) => Math.round((+new Date(b + 'T00:00') - +new Date(a + 'T00:00')) / 86400000);
@@ -834,7 +895,7 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
       const a = x.from < first ? 1 : col(x.from), b = x.to > last ? days : col(x.to);
       const cls = [`st-${x.key}`, x.past ? 'past' : '', x === j.segs[0] && x.from >= first ? 'first' : '', x === j.segs.at(-1) && x.to <= last ? 'last' : '',
         today >= x.from && today <= x.to ? 'now' : ''].join(' ');
-      return `<a class="tl-seg ${cls}" href="#/p/${j.p.id}" style="grid-column:${a} / ${b + 1}"
+      return `<a class="tl-seg ${cls}" href="#/p/${j.p.id}/dates" style="grid-column:${a} / ${b + 1}"
         title="${esc(STAGE_NAME[x.key])}: ${esc(fmtDate(x.from))} \u2013 ${esc(fmtDate(x.to))}"><span>${STAGE_NAME[x.key]}</span></a>`;
     }).join('');
     const marks = segs.filter(x => x !== j.segs[0] && x.from >= first)
@@ -845,7 +906,7 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
     const nextText = pl.next ? `${STAGE_NAME[pl.next.key]} from ${esc(shortDate(pl.next.from))}`
       : `Due ${esc(shortDate(j.end))}`;
     return `<div class="tl-row">
-      <div class="tl-name"><a href="#/p/${j.p.id}">${esc(projectName(j.p))}</a>
+      <div class="tl-name"><a href="#/p/${j.p.id}/dates">${esc(projectName(j.p))}</a>
         <span class="tl-now">${pl.expected ? 'Now:' : ''} ${shouldBe(pl)} <span class="muted">\u00b7 ${pl.expected || !pl.next ? nextText : `Starts ${esc(shortDate(j.start))}`}</span></span></div>
       <div class="tl-track">${weekends}${weekLines}${bars}${todayLine}</div>
       ${marks ? `<div class="tl-marks">${marks}</div>` : ''}
@@ -874,7 +935,11 @@ function showTimeline({ year, mon, today, jobs, plan, shortDate, monthLink }) {
       ${shown.length ? shown.map(row).join('') : '<p class="muted" style="margin:12px 0 0">Nothing is scheduled this month. A project appears once its quote is accepted (or work starts on a product or gallery piece), from that day to its target completion date.</p>'}
       </div></div>
     </div>
-    <div class="legend">${calLegend(jobs)}<span><span class="swatch tl-todaykey"></span>Today</span></div>`;
+    <div class="legend">${calLegend(jobs)}<span><span class="swatch tl-todaykey"></span>Today</span></div>
+    ${undated.length ? `<div class="card needdates"><h2>Needs dates <span class="muted">${undated.length}</span></h2>
+      <p class="muted">Under way, but with no phase or delivery dates yet, so they can't go on the timeline.</p>
+      <ul>${undated.map(j => `<li><span><b>${esc(projectName(j.p))}</b> <span class="muted">${isClient(j.p) ? esc(j.p.data.client_name || j.p.quote_number) : STREAM_NAME[streamOf(j.p)]} &middot; ${STAGE_NAME[stageOf(j.p)]}</span></span>
+        <a class="btn small" href="#/p/${j.p.id}/dates">Set dates</a></li>`).join('')}</ul></div>` : ''}`;
   view.querySelector('.tl-canvas').style.setProperty('--days', days);
   if (swipe) swipeTimeline({ days, first, dateAt, col, todayCol, monthTitle });
 }
@@ -1070,7 +1135,7 @@ function blankData() {
 
 // Heading and tabs shared by a project's Details and Client quote views.
 function projectHeader(p, tab, side) {
-  return `<div class="noprint">
+  return `<div class="noprint projheadwrap">
     ${backLink(boardLink(), 'Projects')}
     <div class="projhead">
       <div class="name"><h1 id="projTitle">${esc(projectName(p))}</h1><span class="pill ${p.status}" id="statusPill">${STATUS_NAME[p.status]}</span></div>
@@ -1078,15 +1143,87 @@ function projectHeader(p, tab, side) {
     </div>
     ${isFrozen(p) ? `<div class="note frozen"><span><b>Frozen since ${esc(fmtDate(p.data.frozen.at))}</b>${p.data.frozen.reason ? `: ${esc(p.data.frozen.reason)}` : ''}.
       It's off the board and calendar until you unfreeze it.</span><button type="button" class="btn small" data-unfreeze="${p.id}">Unfreeze</button></div>` : ''}
-    <nav class="tabs">
+    <nav class="tabs projtabs">
       <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
+      <a href="#/p/${p.id}/todo" class="${tab === 'todo' ? 'on' : ''}">To-do list${todoLeft(p) ? ` <small>${todoLeft(p)}</small>` : ''}</a>
       <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
-      <a href="#/tasks/${p.id}">To-do list</a>
       ${isClient(p) ? `<a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>` : ''}
       <a href="#/p/${p.id}/summary" class="${tab === 'summary' ? 'on' : ''}">Summary</a>
       <span class="spacer"></span><span class="side">${side}</span>
     </nav>
+    ${/<button/.test(side) ? `<div class="sidem">${side}</div>` : ''}
   </div>`;
+}
+const todoLeft = p => (p.data.todo?.items || []).filter(t => !t.done_at).length;
+
+// ---------- the Now strip ----------
+// At the top of a project that's under way: the next status step, the next date it's due, its next few
+// to-dos (tick them right there) and quick ways to scan a receipt or add to its shopping list.
+// Drafts and quotes waiting on an answer don't get one: the quote itself is what's being worked on then.
+const showsNow = p => !archived(p) && !(isClient(p) && ['draft', 'sent'].includes(p.status));
+const nextStepOf = p => p.status === 'in_progress' && isProduct(p) ? ['complete', 'Mark shipped'] : (isClient(p) ? NEXT_STEP : OWN_NEXT_STEP)[p.status];
+// The next date coming up: the current phase's due date, else the next phase that has one.
+function nextDue(p) {
+  const stages = stagesFor(p), i = Math.max(0, stageIndex(p));
+  for (const [key] of stages.slice(i)) {
+    const due = stageDue(p, key);
+    if (due) return { key, due, last: key === lastPhase(p) };
+  }
+  return null;
+}
+let focusShopping = false;   // the to-do tab opens with the shopping list's add box ready
+function renderNow(p) {
+  const el = $('#nowStrip');
+  if (!el) return;
+  if (!showsNow(p)) { el.innerHTML = ''; el.hidden = true; return; }
+  el.hidden = false;
+  const today = ymd(new Date()), next = nextStepOf(p), due = nextDue(p);
+  const left = due ? Math.round((+new Date(due.due + 'T00:00') - +new Date(today + 'T00:00')) / 86400000) : 0;
+  const dueLabel = due ? (due.last ? (isProduct(p) ? 'Ship by' : 'Delivery due') : `${STAGE_NAME[due.key]} due`) : '';
+  const open = (p.data.todo?.items || []).filter(t => !t.done_at), firstFew = open.slice(0, 3);
+  el.innerHTML = `<div class="card now">
+    <div class="nowtop">
+      <div class="nowdue ${due ? left < 0 ? 'late' : left <= 7 ? 'soon' : '' : ''}">${due
+        ? `<span class="muted">${dueLabel}</span><b>${esc(new Date(due.due + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))}</b>
+           <span>${left < 0 ? `${-left} day${left === -1 ? '' : 's'} late` : left === 0 ? 'today' : `${left} day${left === 1 ? '' : 's'} left`}</span>`
+        : `<span class="muted">No due dates yet</span><button type="button" class="link" data-setdates>Set dates</button>`}</div>
+      <div class="actions">${next ? `<button type="button" class="btn primary" data-status="${next[0]}">${next[1]}</button>` : ''}
+        ${isFrozen(p) ? '' : `<button type="button" class="btn" data-freeze="${p.id}">Freeze</button>`}</div>
+    </div>
+    ${firstFew.length ? `<ul class="tasks nowtasks">${firstFew.map(t => `<li class="task" data-id="${esc(t.id)}">
+      <input type="checkbox" aria-label="${esc(t.text)}"><span class="text">${esc(t.text)}</span></li>`).join('')}</ul>` : '<p class="muted nownone">Nothing left on the to-do list.</p>'}
+    <div class="nowlinks">
+      <a href="#/p/${p.id}/todo">${open.length > firstFew.length ? `All ${open.length} to-dos` : 'To-do list'} &rarr;</a>
+      <span class="spacer"></span>
+      <a class="btn small" href="#/receipt/${p.id}">Scan a receipt</a>
+      <a class="btn small" href="#/p/${p.id}/todo" data-addshop>Add to shopping list</a>
+    </div>
+  </div>`;
+  el.querySelector('[data-status]')?.addEventListener('click', e => setStatus(p, (e.currentTarget as HTMLElement).dataset.status));
+  el.querySelector('[data-addshop]')?.addEventListener('click', () => { focusShopping = true; });
+  el.querySelector('[data-setdates]')?.addEventListener('click', () => openPhaseDates());
+  (el.querySelectorAll("li.task") as NodeListOf<HTMLElement>).forEach(li => li.addEventListener('click', e => {
+    e.preventDefault();
+    const t = p.data.todo.items.find(x => x.id === li.dataset.id);
+    if (!t) return;
+    t.done_at = new Date().toISOString();
+    todoChanged(p, { what: 'done', text: t.text, list: 'items' });
+    li.classList.add('done');
+    (li.querySelector('input') as HTMLInputElement).checked = true;
+    setTimeout(() => renderNow(p), 450);   // a moment to see it ticked before the next one moves up
+    toast(`Done: ${t.text}`);
+  }));
+}
+// Opens the phase dates (folded away on a phone) and brings them into view.
+function openPhaseDates() {
+  phaseDatesOpen = true;
+  const d = $('#stages details') as HTMLDetailsElement | null;
+  if (d) d.open = true;
+  const el = $('#stages');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1600);
 }
 
 function showEditor(project, newStream = 'client') {
@@ -1102,14 +1239,20 @@ function showEditor(project, newStream = 'client') {
       `<option value="${esc(v)}" ${getPath(d, path) === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
   const speciesNames = store.settings.species.map(s => s.name);
   if (d.spec.species && !speciesNames.includes(d.spec.species)) speciesNames.push(d.spec.species);
+  // Once a job is accepted (or a piece of your own is started) the quote form folds up, so the page leads
+  // with what's needed day to day. It opens with a tap, and stays open for that project until you leave.
+  const foldable = !!project && (client ? !['draft', 'sent'].includes(project.status) : project.status !== 'planned');
+  const folded = foldable && !quoteOpen.has(project.id);
 
   view.innerHTML = `
     ${project ? projectHeader(project, 'details', '<span class="muted">Changes save automatically</span>')
       : `<a href="${boardLink()}" class="back">&larr; Projects</a><div class="pagehead"><h1>${client ? 'New quote' : `New ${STREAM_NAME[stream].toLowerCase()} piece`}</h1>
         <span class="spacer"></span><a href="#/new">Change kind of project</a></div>`}
-    ${project ? '<div class="stages" id="stages" role="group" aria-label="Project phase"></div>' : ''}
-    <div class="cols">
+    ${project ? '<div id="nowStrip" hidden></div><div class="stages" id="stages" role="group" aria-label="Project phase"></div>' : ''}
+    <div class="cols ${folded ? 'folded' : ''}" id="cols">
       <form class="card" id="form" autocomplete="off">
+        ${foldable ? `<button type="button" class="foldbar" id="foldBar" aria-expanded="${!folded}" aria-controls="form">
+          <span><b>${client ? 'Quote details' : 'Piece details'}</b><span class="muted" id="foldSum"></span></span><span class="foldword">${folded ? 'Show' : 'Hide'}</span></button>` : ''}
         ${client ? `<fieldset><h2>Client</h2><div class="grid">
           ${inp('Name', 'client_name')}${inp('Email', 'client_email', 'email')}${inp('Phone', 'client_phone', 'tel')}
           ${sel('State (sets the sales tax)', 'client_state', [['', 'Not set'], ...STATES], 'w3')}
@@ -1153,6 +1296,9 @@ function showEditor(project, newStream = 'client') {
             <label class="f"><span>Board width (in)</span><input type="number" min="0" step="any" data-lumber="width" value="${esc(d.lumber.width)}"></label>
           </div>
           <p id="lumberOut" style="margin:12px 0 0"></p>
+          ${project ? `<div class="shopmini"><h3>Shopping list</h3><ul class="tasks" id="shopMini"></ul>
+            <form class="addtask" id="shopAdd" autocomplete="off"><input placeholder="Add something to buy" aria-label="Add to this project's shopping list"><button class="btn small">Add</button></form>
+            <p class="muted hint">Also on the To-do list tab and the Shopping list for every project.</p></div>` : ''}
         </div>
         ${project ? '<div class="card" id="purchasesCard"></div><div class="card" id="statusCard"></div>' : ''}
         ${project ? '<p class="noprint" style="text-align:right"><button class="link" id="delete" style="color:var(--bad)">Delete this project</button></p>' : ''}
@@ -1224,9 +1370,50 @@ function showEditor(project, newStream = 'client') {
     });
     renderStages();
     renderStatusCard();
+    $('#foldBar')?.addEventListener('click', () => {
+      const open = $('#cols').classList.toggle('folded') === false;
+      if (open) quoteOpen.add(project.id); else quoteOpen.delete(project.id);
+      $('#foldBar').setAttribute('aria-expanded', String(open));
+      $('#foldBar .foldword').textContent = open ? 'Hide' : 'Show';
+    });
+    const shopForm = $('#shopAdd');
+    shopForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const input = shopForm.querySelector('input'), text = input.value.trim();
+      if (!text) return;
+      project.data.todo ??= defaultTodo(project);
+      project.data.todo.lumber.push(newTask(text));
+      todoChanged(project, { what: 'added', text, list: 'lumber' });
+      input.value = '';
+      renderShopMini(project);
+    });
+    $('#shopMini').addEventListener('click', e => {
+      const li = (e.target as Element).closest<HTMLElement>('li.task'), t = li && project.data.todo?.lumber.find(x => x.id === li.dataset.id);
+      if (!t) return;
+      if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
+      t.done_at = t.done_at ? null : new Date().toISOString();
+      if (t.done_at) delete t.auto;
+      todoChanged(project, { what: t.done_at ? 'done' : 'undone', text: t.text, list: 'lumber' });
+      renderShopMini(project);
+    });
   }
   renderPanel();
-  if (project) renderPurchasesCard(project);
+  if (project) { renderPurchasesCard(project); renderNow(project); }
+}
+const quoteOpen = new Set();   // projects whose folded quote form was opened
+
+// The project's own shopping list, under the lumber calculator: what's left to buy, plus what was bought this week.
+function renderShopMini(p) {
+  const ul = $('#shopMini');
+  if (!ul) return;
+  const since = new Date(Date.now() - SHOPPING_KEEP_DAYS * 86400000).toISOString();
+  const lumber = p.data.todo?.lumber || [];
+  for (const t of lumber) if (t.auto && !t.done_at) t.text = lumberLine(p);
+  const shown = lumber.filter(t => !t.done_at || t.done_at >= since);
+  ul.innerHTML = shown.map(t => `<li class="task ${t.done_at ? 'done' : ''}" data-id="${esc(t.id)}">
+      <input type="checkbox" ${t.done_at ? 'checked' : ''} aria-label="${esc(t.text)}"><span class="text">${esc(t.text)}</span>
+      ${t.done_at ? `<span class="when">Bought ${esc(fmtDate(t.done_at))}</span>` : ''}</li>`).join('')
+    || '<li class="none muted">Nothing to buy.</li>';
 }
 
 function changed() {
@@ -1299,6 +1486,10 @@ const lumberSummary = (data, n) =>
 
 function renderLumber(calc) {
   const d = ed.data, n = calc.lumber;
+  const sum = $('#foldSum');
+  if (sum) sum.textContent = [TYPES[d.spec.type]?.name, d.spec.species, [d.spec.length, d.spec.width, d.spec.height].every(x => num(x)) ? `${+d.spec.length} \u00d7 ${+d.spec.width} \u00d7 ${+d.spec.height} in` : '',
+    `${ed.stream === 'gallery' ? 'cost' : calc.agreed ? 'agreed' : ed.stream === 'client' ? 'quote' : 'retail'} ${money(ed.stream === 'gallery' ? calc.cost : calc.total)}`].filter(Boolean).join(' \u00b7 ');
+  if (ed.project) renderShopMini(ed.project);
   $('[data-lumber="bf"]').placeholder = `Estimate: ${calc.board_feet}`;
   $('[data-lumber="quarters"]').value = n.quarters;
   $('#lumberOut').innerHTML = n.feet
@@ -1332,7 +1523,7 @@ async function createProject() {
 function renderStatusCard() {
   const p = ed.project, client = isClient(p);
   // A product run is finished when it ships, so its last step says so (and moves it to the Shipped phase).
-  const next = p.status === 'in_progress' && isProduct(p) ? ['complete', 'Mark shipped'] : (client ? NEXT_STEP : OWN_NEXT_STEP)[p.status];
+  const next = nextStepOf(p);
   $('#statusPill').className = `pill ${p.status}`;
   $('#statusPill').textContent = STATUS_NAME[p.status];
   const card = $('#statusCard');
@@ -1352,6 +1543,7 @@ function renderStatusCard() {
       ${STREAMS.map(([k, n]) => `<option value="${k}" ${k === streamOf(p) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <ul class="history">${p.history.map(h => `<li><span>${'frozen' in h ? (h.frozen ? `Frozen${h.note ? `: ${esc(h.note)}` : ''}` : 'Unfrozen') : h.stage ? `Phase: ${STAGE_NAME[h.stage]}` : STATUS_NAME[h.status]}</span><span>${esc(fmtDate(h.at))}</span></li>`).join('')}</ul>`;
   card.querySelectorAll('[data-status]').forEach(b => b.addEventListener('click', () => setStatus(p, b.dataset.status)));
+  renderNow(p);
   $('#statusSelect').addEventListener('change', e => setStatus(p, e.target.value));
   $('#streamSelect').addEventListener('change', e => setStream(p, e.target.value));
 }
@@ -1418,6 +1610,7 @@ function renderStages() {
     p.updated_at = new Date().toISOString();
     persist();
     renderStages();
+    renderNow(p);
   }));
 }
 
@@ -1450,6 +1643,18 @@ async function setStatus(p, status) {
   p.status = status;
   p.updated_at = new Date().toISOString();
   p.history.push({ status, at: p.updated_at });
+  // The to-do list follows along: a quote marked sent ticks "Send the quote", and an accepted one asks
+  // whether the deposit is in.
+  const tick = text => {
+    const t = p.data.todo?.items.find(x => !x.done_at && x.text === text);
+    if (!t) return false;
+    t.done_at = p.updated_at;
+    p.data.todo.log.push({ at: p.updated_at, what: 'done', text, list: 'items' });
+    return true;
+  };
+  if (isClient(p) && status !== 'draft' && status !== 'declined') tick('Send the quote');
+  if (isClient(p) && status === 'accepted' && p.data.todo?.items.some(x => !x.done_at && x.text === 'Collect deposit')
+    && confirm(`Has the deposit for ${projectName(p)} come in?\n\nOK ticks "Collect deposit" on its to-do list.`)) tick('Collect deposit');
   if (isProduct(p) && (status === 'complete') !== (stageOf(p) === 'shipped')) {
     p.stage = status === 'complete' ? 'shipped' : 'packaging';
     p.history.push({ stage: p.stage, at: p.updated_at });
@@ -1734,10 +1939,7 @@ function showAllTodos() {
 function showTodo(p) {
   if (!p.data.todo) { p.data.todo = defaultTodo(p); todoChanged(p); }
   const todo = p.data.todo;
-  view.innerHTML = `${backLink('#/tasks', 'Tasks')}
-    <div class="pagehead"><h1>${esc(projectName(p))}</h1><span class="pill ${p.status}">${STATUS_NAME[p.status]}</span>
-      <span class="spacer"></span><a class="btn" href="#/p/${p.id}">Open project</a></div>
-    ${isFrozen(p) ? `<p class="note frozen">This project is frozen. Its list is kept as it is until you unfreeze it.</p>` : ''}
+  view.innerHTML = `${projectHeader(p, 'todo', '')}
     <div class="cols">
       <div class="card">
         <h2>To-do list</h2>
@@ -1748,7 +1950,7 @@ function showTodo(p) {
       <aside>
         <div class="card">
           <h2>Lumber store shopping list</h2>
-          <form class="addtask" data-list="lumber" autocomplete="off"><textarea rows="1" enterkeyhint="done" placeholder="Add something to buy" aria-label="New shopping list item"></textarea><button class="btn primary">Add</button></form>
+          <form class="addtask" data-list="lumber" id="lumberAdd" autocomplete="off"><textarea rows="1" enterkeyhint="done" placeholder="Add something to buy" aria-label="New shopping list item"></textarea><button class="btn primary">Add</button></form>
           <ul class="tasks" data-list="lumber"></ul>
           <p class="muted hint">Paste a list (one item per line) to add every item at once.</p>
         </div>
@@ -1853,6 +2055,7 @@ function showTodo(p) {
       // Tapping the checkbox or the task's text checks it off (or back on).
       if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
       toggle(list, li.dataset.id);
+      refreshTabCount();
     });
     // From the keyboard: Alt + up / down arrow moves the focused task.
     ul.addEventListener('keydown', e => {
@@ -1867,7 +2070,11 @@ function showTodo(p) {
       ($(`li[data-id="${li.dataset.id}"] input`, ul) as HTMLElement)?.focus();
     });
   });
+  // The count on the To-do list tab follows what's ticked or added.
+  const refreshTabCount = () => { const tab = $('.projtabs a.on small'), n = todoLeft(p); if (tab) tab.textContent = n ? String(n) : ''; };
+  view.addEventListener('submit', () => setTimeout(refreshTabCount));
   redraw();
+  if (focusShopping) { focusShopping = false; setTimeout(() => { const box = $('#lumberAdd textarea') as HTMLElement; box?.scrollIntoView({ block: 'center' }); box?.focus(); }, 50); }
 }
 
 // The two tabs at the top of the Tasks page.
@@ -1947,8 +2154,19 @@ function showShopping() {
     <p class="muted hint">Species and sizes are read from how each item is written, such as "2 &times; 8/4 walnut, 7&quot; wide, 10 ft" or "2 sheets 3/4&quot; birch ply, 4x8". To add items, use By project or the project's own list.</p>`;
   };
   // The page is drawn into its own box, so its handlers go away with it when another page is shown.
-  view.innerHTML = '<div id="shopping"></div>';
+  view.innerHTML = '<div id="shopping"></div><div id="scanNudge" class="scannudge" hidden></div>';
   const box = $('#shopping');
+  // Ticking things off at the store brings up a button to scan the receipt for them, with the project picked.
+  const boughtFor = new Set<number>();
+  const nudge = () => {
+    const el = $('#scanNudge'), ids = [...boughtFor].filter(id => store.projects.some(x => x.id === id));
+    el.hidden = !ids.length;
+    if (!ids.length) return;
+    const names = ids.map(id => projectName(store.projects.find(x => x.id === id)));
+    el.innerHTML = `<span>Bought ${names.length === 1 ? `for <b>${esc(names[0])}</b>` : `for ${names.length} projects`}?</span>
+      <a class="btn primary small" href="#/receipt/${ids.at(-1)}">Scan the receipt</a>`;
+  };
+  box.addEventListener('click', () => setTimeout(nudge));
   draw();
   const projectOf = el => store.projects.find(p => p.id === Number(el.closest('[data-project]')?.dataset.project));
   const add = (p, texts) => {
@@ -1971,7 +2189,7 @@ function showShopping() {
     const t = p.data.todo.lumber.find(x => x.id === li.dataset.id);
     if (!t) return;
     t.done_at = t.done_at ? null : new Date().toISOString();
-    if (t.done_at) delete t.auto;
+    if (t.done_at) { delete t.auto; boughtFor.add(p.id); }
     todoChanged(p, { what: t.done_at ? 'done' : 'undone', text: t.text, list: 'lumber' });
     draw();
   });
@@ -2268,6 +2486,7 @@ function showBatch(p) {
   ed = { project: p, stream: streamOf(p), data: p.data, dirty: false };
   view.innerHTML = `
     ${projectHeader(p, 'details', '<span class="muted">Changes save automatically</span>')}
+    <div id="nowStrip" hidden></div>
     <div class="stages" id="stages" role="group" aria-label="Project phase"></div>
     <div class="cols">
       <div>
@@ -2603,7 +2822,7 @@ function showReceipt(projectId) {
   if (projectId) scanProjectId = projectId;
   const from = store.projects.find(p => p.id === projectId);
   view.innerHTML = `
-    ${from ? `<a href="#/p/${from.id}/summary" class="back">&larr; ${esc(projectName(from))}</a>` : backLink(boardLink(), 'Projects')}
+    ${from && !sectionOf(prevHash) ? `<a href="#/p/${from.id}/summary" class="back">&larr; ${esc(projectName(from))}</a>` : backLink(boardLink(), 'Projects')}
     <div class="pagehead"><h1>Scan a receipt</h1><span class="spacer"></span><a class="btn small" href="#/receipts">All receipts</a></div>
     <div class="card receipt">
       <div class="actions">
