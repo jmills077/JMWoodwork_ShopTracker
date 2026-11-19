@@ -1597,21 +1597,72 @@ function renderStages() {
       ${rest.length ? `<details ${phaseDatesOpen ? 'open' : ''}><summary>Other phase dates${rest.some(({ key }) => stageDue(p, key)) ? '' : ' (none set)'}</summary>
         ${rest.map(({ key, i }) => dateRow(key, i, STAGE_NAME[key])).join('')}</details>` : ''}
     </div>`;
-  el.innerHTML = `<div class="stagegrid" style="--steps:${stages.length}">${grid}</div><div class="phasem">${phone}</div>`;
+  el.innerHTML = `<div class="stagegrid" style="--steps:${stages.length}">${grid}</div><div class="phasem">${phone}</div>
+    ${phaseDateError.p === p ? `<p class="phase-err" role="alert">${esc(phaseDateError.text)}</p>` : ''}`;
+  // Each date box only offers days that keep the phases in order.
+  el.querySelectorAll('input[data-due]').forEach(input => {
+    const { min, max } = phaseDateBounds(p, input.dataset.due);
+    if (min) input.min = min;
+    if (max) input.max = max;
+  });
   el.querySelector('details')?.addEventListener('toggle', e => { phaseDatesOpen = e.target.open; });
   el.querySelectorAll('button[data-stage]').forEach(b => b.addEventListener('click', () => {
     setStage(p, b.dataset.stage);
     renderStages();
     renderStatusCard();
   }));
-  el.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
-    if (input.dataset.due === last) p.data.due_date = input.value;
-    else (p.data.stage_due ??= {})[input.dataset.due] = input.value;
+  el.querySelectorAll('input').forEach(input => onDatePicked(input, () => {
+    const key = input.dataset.due;
+    if (!setPhaseDue(p, key, input.value)) { input.value = stageDue(p, key); renderStages(); return; }
     p.updated_at = new Date().toISOString();
     persist();
     renderStages();
     renderNow(p);
+    el.dispatchEvent(new Event('phasedate'));
   }));
+}
+
+// An iPhone fills an empty date box with today's date, and says it changed, the moment its calendar
+// opens. Acting on that straight away (redrawing the box) would close the calendar before a day is
+// picked, so on touch screens wait until the calendar is closed and act on the day it ends up on.
+const touchScreen = () => window.matchMedia('(pointer: coarse)').matches;
+function onDatePicked(input, done) {
+  let waiting = false;
+  input.addEventListener('change', () => {
+    if (!touchScreen() || document.activeElement !== input) return done();
+    if (waiting) return;
+    waiting = true;
+    input.addEventListener('blur', () => { waiting = false; done(); }, { once: true });
+  });
+}
+
+// Phase due dates run in order: a phase can't be due before the one ahead of it, or after the one
+// that follows. Two phases due the same day is fine.
+const datedPhases = p => stagesFor(p).map(([key]) => key).filter(key => key !== 'ideation' && key !== 'shipped');
+const dueLabelOf = (p, key) => key === lastPhase(p) ? (isProduct(p) ? 'Ship by' : 'Delivery due') : `${STAGE_NAME[key]} due`;
+function phaseDateBounds(p, key) {
+  const keys = datedPhases(p), i = keys.indexOf(key);
+  const before = keys.slice(0, i).map(k => ({ key: k, due: stageDue(p, k) })).filter(x => x.due);
+  const after = keys.slice(i + 1).map(k => ({ key: k, due: stageDue(p, k) })).filter(x => x.due);
+  const lo = before.reduce((a, x) => (!a || x.due > a.due ? x : a), null);
+  const hi = after.reduce((a, x) => (!a || x.due < a.due ? x : a), null);
+  return { min: lo?.due || '', max: hi?.due || '', lo, hi };
+}
+let phaseDateError = { p: null, text: '' };
+// Sets a phase's due date (the last phase's is the project's due date) unless it would put the phases
+// out of order. Says why when it won't.
+function setPhaseDue(p, key, value) {
+  const { lo, hi } = phaseDateBounds(p, key);
+  const clash = value && lo && value < lo.due ? `can't be before ${dueLabelOf(p, lo.key)} (${fmtDate(lo.due)})`
+    : value && hi && value > hi.due ? `can't be after ${dueLabelOf(p, hi.key)} (${fmtDate(hi.due)})` : '';
+  if (clash) {
+    phaseDateError = { p, text: `${dueLabelOf(p, key)} ${clash}. Pick another day, or move that date first.` };
+    return false;
+  }
+  phaseDateError = { p: null, text: '' };
+  if (key === lastPhase(p)) p.data.due_date = value;
+  else (p.data.stage_due ??= {})[key] = value;
+  return true;
 }
 
 function setStage(p, stage) {
@@ -2558,7 +2609,11 @@ function showBatch(p) {
     touch();
     renderUnits();
   });
-  $('#shipBy').addEventListener('change', e => { p.data.due_date = e.target.value; b.ship_manual = true; touch(); renderStages(); });
+  onDatePicked($('#shipBy'), () => {
+    const input = $('#shipBy');
+    if (setPhaseDue(p, lastPhase(p), input.value)) { b.ship_manual = true; touch(); } else input.value = p.data.due_date || '';
+    renderStages();
+  });
   $('#batchNotes').addEventListener('input', e => { p.data.notes = e.target.value; touch(); });
   $('#delete').addEventListener('click', () => {
     if (!confirm(`Delete ${projectName(p)}? This cannot be undone.`)) return;
@@ -2567,7 +2622,7 @@ function showBatch(p) {
     location.hash = boardLink();
   });
   // The phase strip's last date is the ship-by date too, so keep the two in step.
-  $('#stages').addEventListener('change', () => { $('#shipBy').value = p.data.due_date || ''; b.ship_manual = true; });
+  $('#stages').addEventListener('phasedate', () => { $('#shipBy').value = p.data.due_date || ''; b.ship_manual = true; });
   ed.redraw = () => { $('#shipBy').value = p.data.due_date || ''; renderUnits(); renderStages(); renderStatusCard(); $('#projTitle').textContent = projectName(p); };
   renderUnits();
   renderStages();

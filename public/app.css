@@ -49,6 +49,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .stagegrid button:hover { border-color: var(--accent); }
 .stagegrid button.done { background: #f3e2d4; color: var(--ink); }
 .stagegrid button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.phase-err { margin: 8px 2px 0; padding: 8px 10px; border-radius: 8px; background: #fbe9e7; color: var(--bad); font-size: 13px; font-weight: 600; }
 /* Phone: a compact stepper instead of the phase grid. */
 .phasem { display: none; }
 @media (max-width: 600px) {
