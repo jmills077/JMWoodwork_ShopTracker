@@ -255,6 +255,15 @@ function settingsChanged() {
 // ---------- helpers ----------
 const $ = (sel, el = document) => el.querySelector(sel);
 const view = $('#view');
+// The Reset button in an iPhone's date picker puts a date box back to the date it was drawn with (its
+// value attribute), not to empty. So once a date box is on the page, its date is moved from the
+// attribute to the box itself, leaving nothing for Reset to bring back.
+function clearDateDefaults(root) {
+  const boxes = root.matches?.('input[type=date][value]') ? [root] : [...(root.querySelectorAll?.('input[type=date][value]') || [])];
+  for (const box of boxes) { const date = box.value; box.removeAttribute('value'); box.value = date; }
+}
+new MutationObserver(changes => changes.forEach(c => c.addedNodes.forEach(clearDateDefaults)))
+  .observe(document.body, { childList: true, subtree: true });
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
 const hrs = n => `${+num(n).toFixed(2)} h`;
@@ -1628,12 +1637,15 @@ function renderStages() {
 const touchScreen = () => window.matchMedia('(pointer: coarse)').matches;
 function onDatePicked(input, done) {
   let waiting = false;
-  input.addEventListener('change', () => {
-    if (!touchScreen() || document.activeElement !== input) return done();
+  const picked = e => {
+    if (!touchScreen() || document.activeElement !== input) return e.type === 'change' && done();
     if (waiting) return;
     waiting = true;
     input.addEventListener('blur', () => { waiting = false; done(); }, { once: true });
-  });
+  };
+  input.addEventListener('change', picked);
+  // A phone's Reset button can clear the box without a change event, so listen for that too.
+  input.addEventListener('input', picked);
 }
 
 // Phase due dates run in order: a phase can't be due before the one ahead of it, or after the one
