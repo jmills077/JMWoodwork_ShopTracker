@@ -658,3 +658,91 @@ nav.tabbar { display: none; }
 }
 @media print { nav.tabbar { display: none !important; } }
 @media (max-width: 600px) { .pagehead .wideonly { display: none; } }   /* the tab bar and the + in the header do these on a phone */
+
+/* ---------- project hub ---------- */
+.projtabs a small { font-size: 12px; font-weight: 700; color: var(--accent); margin-left: 5px; }
+.sidem { display: none; }
+/* The Now strip: what a project under way needs today. */
+#nowStrip { margin-bottom: 14px; }
+.card.now { border-left: 4px solid var(--accent); }
+.nowtop { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.nowdue { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.nowdue b { font-size: 17px; }
+.nowdue.soon b, .nowdue.soon span:last-child { color: #a35a00; }
+.nowdue.late b, .nowdue.late span:last-child { color: var(--bad); font-weight: 600; }
+.nowtop .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+ul.nowtasks { margin: 10px 0 0; }
+ul.nowtasks li.task.done .text { text-decoration: line-through; color: var(--muted); }
+.nownone { margin: 10px 0 0; font-size: 14px; }
+.nowlinks { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
+.nowlinks .spacer { flex: 1; }
+.stages.flash { animation: flash 1.6s ease-out; border-radius: var(--radius); }
+@keyframes flash { 0%, 30% { box-shadow: 0 0 0 4px rgba(166, 58, 43, .35); } 100% { box-shadow: 0 0 0 4px rgba(166, 58, 43, 0); } }
+/* The quote form folds up once a job is under way. */
+.foldbar { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.foldbar > span:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.foldbar .muted { font-size: 13px; }
+.foldbar .foldword { color: var(--accent); font-weight: 600; font-size: 14px; text-decoration: underline; flex: none; }
+.cols:not(.folded) .foldbar { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.cols.folded #form fieldset, .cols.folded #panel { display: none; }
+/* The project's shopping list beside the lumber calculator. */
+.shopmini { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.shopmini h3 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.shopmini form.addtask { margin-top: 8px; }
+.shopmini .hint { margin: 6px 0 0; }
+
+/* ---------- shortcuts ---------- */
+button.card.stat { font: inherit; color: inherit; text-align: left; cursor: pointer; display: block; width: 100%; }
+button.card.stat:hover:not(:disabled) { border-color: var(--accent); }
+button.card.stat:disabled { cursor: default; }
+button.card.stat[aria-expanded="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+#statList { margin: -8px 0 20px; }
+.statlist ul { list-style: none; margin: 0; padding: 0; }
+.statlist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.statlist li:last-child { border-bottom: 0; }
+.statlist li .muted { grid-column: 1; grid-row: 2; font-size: 13px; }
+.statlist li .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+.lanehead .lprod { margin-left: auto; }
+.scannudge { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 30; display: flex; align-items: center; gap: 12px;
+  background: #2e2320; color: #fffaf0; padding: 10px 12px 10px 16px; border-radius: 12px; box-shadow: 0 8px 24px rgba(46, 35, 32, .3); white-space: nowrap; max-width: calc(100vw - 24px); }
+.scannudge[hidden] { display: none; }
+.scannudge span { overflow: hidden; text-overflow: ellipsis; }
+.needdates { margin-top: 16px; }
+.needdates p { margin: 0 0 8px; font-size: 14px; }
+.needdates ul { list-style: none; margin: 0; padding: 0; }
+.needdates li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+/* Quick find */
+header.top .hicon.find { display: inline-flex; background: none; border: 0; cursor: pointer; }
+.finder { position: fixed; inset: 0; z-index: 60; background: rgba(46, 35, 32, .35); display: flex; justify-content: center; align-items: flex-start;
+  padding: calc(max(10px, env(safe-area-inset-top)) + 54px) 12px 12px; }
+.finder[hidden] { display: none; }
+.findbox { width: min(560px, 100%); background: var(--card); border-radius: 12px; box-shadow: 0 16px 40px rgba(46, 35, 32, .3); overflow: hidden; }
+.findbox input { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 14px 16px; font-size: 17px; background: transparent; outline: none; }
+#findResults { list-style: none; margin: 0; padding: 4px 0; max-height: 60vh; overflow-y: auto; }
+#findResults a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 10px; padding: 9px 16px; color: inherit; text-decoration: none; }
+#findResults a:hover, #findResults a.first { background: #f6eedf; }
+#findResults a .muted { font-size: 13px; grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#findResults a .pill { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+.findhead { padding: 8px 16px 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.findnone { padding: 12px 16px; font-size: 14px; }
+
+@media (max-width: 600px) {
+  /* The project's tabs: one row that swipes sideways, pinned under the status bar while you scroll. */
+  .projtabs { position: sticky; top: 0; z-index: 20; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; border-bottom: 0;
+    margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))) 14px; padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-left)) 8px;
+    background: rgba(250, 245, 236, .96); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .projtabs::-webkit-scrollbar { display: none; }
+  .projtabs a { flex: none; display: inline-flex; align-items: center; min-height: 36px; margin: 0; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--card); color: var(--ink); font-size: 14px; white-space: nowrap; }
+  .projtabs a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .projtabs a.on small { color: inherit; }
+  .projtabs .spacer, .projtabs .side { display: none; }
+  .sidem { display: flex; justify-content: flex-end; margin: -6px 0 12px; }
+  .nowlinks .spacer { display: none; }
+  .nowlinks > a:first-child { flex: 1 0 100%; }
+  .nowtop .actions { flex: 1 0 100%; }
+  .nowtop .actions .btn.primary { flex: 1; text-align: center; }
+  .scannudge { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .stats button.card.stat { padding: 9px 12px; }
+}
+.projheadwrap { display: contents; }   /* lets the phone tab row stay pinned for the whole page */

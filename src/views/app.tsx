@@ -18,6 +18,9 @@ export const AppPage = ({ state }: { state: unknown }) => (
         <a href="#/settings" data-nav="settings">Settings</a>
       </nav>
       <span id="syncState"></span>
+      <button type="button" class="hicon find" id="findBtn" aria-label="Find a project" title="Find a project (press /)">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM15.5 15.5 20 20"/></svg>
+      </button>
       <div class="bellwrap" id="bellWrap" hidden>
         <button type="button" class="bell" id="bell" aria-haspopup="true" aria-expanded="false" aria-label="New orders">
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg>
@@ -38,6 +41,12 @@ export const AppPage = ({ state }: { state: unknown }) => (
       <a href="#/tasks/shopping" data-nav="shopping"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h3l2.4 10.5h10.2L21 7H7M10 19.5a1 1 0 1 0 0 .1M18 19.5a1 1 0 1 0 0 .1"/></svg>Shopping</a>
       <a href="#/receipt" data-nav="receipts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4zM12 16.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>Receipts</a>
     </nav>
+    <div class="finder" id="finder" hidden>
+      <div class="findbox" role="dialog" aria-label="Find a project">
+        <input type="search" id="findInput" placeholder="Find a project, client or quote number" autocomplete="off" enterkeyhint="go" />
+        <ul id="findResults"></ul>
+      </div>
+    </div>
     <main id="view"></main>
     <div id="toast" role="status"></div>
     <script id="initialState" type="application/json" dangerouslySetInnerHTML={{ __html: embed(state) }} />
