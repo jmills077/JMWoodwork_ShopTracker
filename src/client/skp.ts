@@ -15,12 +15,12 @@
 // A cut list can also come from a CSV (OpenCutList's export, or any table with name, quantity,
 // length, width and thickness columns), and readPieceLine reads one typed line like "Shelf 3/4 x 10 x 30 (2)".
 
-export interface Piece { part: string; qty: number; t: number | null; w: number | null; l: number | null; species?: string }
+export interface Piece { part: string; qty: number; t: number | null; w: number | null; l: number | null; species?: string; material?: string }
 export interface CutRead { pieces: Piece[]; note: string }
 
 const ascii = (b: Uint8Array, i: number, n: number) => String.fromCharCode(...b.subarray(i, i + n));
 
-export function readSkp(buf: ArrayBuffer): CutRead {
+export async function readSkp(buf: ArrayBuffer): Promise<CutRead> {
   const b = new Uint8Array(buf), dv = new DataView(buf), n = b.length;
   const u16 = (i: number) => i >= 0 && i + 2 <= n ? dv.getUint16(i, true) : -1;
   const u32 = (i: number) => i >= 0 && i + 4 <= n ? dv.getUint32(i, true) : -1;
@@ -42,6 +42,10 @@ export function readSkp(buf: ArrayBuffer): CutRead {
   const tooNew = () => new Error(`This model was saved by SketchUp ${version.split('.')[0] || '?'}, and its parts couldn't be read. `
     + 'In SketchUp, use File > Save As and pick "SketchUp 2017" as the version, then drop that copy in. '
     + 'Or export a CSV from OpenCutList and drop that in instead.');
+
+  // SketchUp 2021 and later: the rest of the file is a zip holding model.dat.
+  const zipped = await unzipEntry(b, 'model.dat');
+  if (zipped) return readVff(zipped, tooNew);
 
   const strings: number[] = [];
   for (let i = 0; i < n - 2; i++) if (b[i] === 0xff && b[i + 1] === 0xfe && b[i + 2] === 0xff) strings.push(i);
@@ -109,12 +113,10 @@ export function readSkp(buf: ArrayBuffer): CutRead {
     const d = owner(x.at);
     if (d === null) top.push(x); else d?.kids.push(x);
   }
-  if (!top.length) throw new Error('No components or groups were found in this model. Make each part a component (select it, right-click, Make Component) and save again.');
-
   // Match the object numbers the instances point at to the definitions, in file order.
   const refs = [...new Set(insts.map(x => x.ref))].sort((a, c) => a - c);
   if (refs.length > defs.length) throw tooNew();
-  const byRef = new Map<number, typeof defs[number]>();
+  const byRef = new Map<number, Def>();
   if (refs.length === defs.length) refs.forEach((r, k) => byRef.set(r, defs[k]));
   else {
     // Roughly how many archive objects a definition takes: about 6.5 per vertex (its edges, faces,
@@ -135,41 +137,136 @@ export function readSkp(buf: ArrayBuffer): CutRead {
     for (let j = R - 1; j >= 0; j--) { byRef.set(refs[j], defs[i]); i = from[j][i]; }
   }
 
-  // Walk the model from the top: every part with geometry of its own is a piece, counted once per copy.
-  const box = new Map<object, number[]>();
-  const sizeOf = (d: typeof defs[number]) => {
-    if (!box.has(d)) box.set(d, [0, 1, 2].map(k => Math.max(...d.verts.map(v => v[k])) - Math.min(...d.verts.map(v => v[k]))));
+  const loose = verts.some(x => owner(x.at) === null);
+  return gather(top, ref => byRef.get(ref), loose, tooNew);
+}
+
+interface Inst { ref: number; m: number[]; mat?: string }
+interface Def { name: string; verts: number[][]; kids: Inst[] }
+
+// Walks the model from the top: every part with geometry of its own is a piece, counted once per copy
+// (nested components multiply out). Same-named parts of the same size are one line; parts SketchUp
+// named itself (Component#12, Group#3) are just "Part", so same-size pieces come together.
+function gather(top: Inst[], defOf: (ref: number) => Def | undefined, loose: boolean, fail: () => Error): CutRead {
+  if (!top.length) throw new Error('No components or groups were found in this model. Make each part a component (select it, right-click, Make Component) and save again.');
+  const box = new Map<Def, number[]>();
+  const sizeOf = (d: Def) => {
+    if (!box.has(d)) box.set(d, [0, 1, 2].map(k => {
+      let lo = Infinity, hi = -Infinity;
+      for (const v of d.verts) { if (v[k] < lo) lo = v[k]; if (v[k] > hi) hi = v[k]; }
+      return hi - lo;
+    }));
     return box.get(d)!;
   };
   const found = new Map<string, Piece>();
-  let unnamed = 0;
-  const names = new Map<object, string>();
-  const walk = (x: { ref: number; m: number[] }, scale: number[], depth: number) => {
-    const d = byRef.get(x.ref);
-    if (!d || depth > 12) return;
+  const walk = (x: Inst, scale: number[], mat: string, depth: number) => {
+    const d = defOf(x.ref);
+    if (!d || depth > 16) return;
     const w = Math.abs(x.m[12]) || 1;
     const s = [0, 3, 6].map((k, a) => scale[a] * Math.hypot(x.m[k], x.m[k + 1], x.m[k + 2]) / w);
+    const material = x.mat || mat;
     if (d.verts.length > 1) {
       const dims = sizeOf(d).map((v, a) => Math.round(v * s[a] * 32) / 32).sort((p, q) => p - q);
       if (dims[2] > 0) {
-        if (!names.has(d)) names.set(d, d.name && !/^Group#\d+$/.test(d.name) ? d.name.replace(/#\d+$/, '') : `Part ${++unnamed}`);
-        const part = names.get(d)!, key = `${part}|${dims.join('x')}`;
+        const part = !d.name || /^(Component|Group)#\d+$/.test(d.name) ? 'Part' : d.name.replace(/\s*#\d+$/, '');
+        const key = `${part}|${dims.join('x')}|${material}`;
         const p = found.get(key);
         if (p) p.qty++;
-        else found.set(key, { part, qty: 1, t: dims[0], w: dims[1], l: dims[2] });
+        else found.set(key, { part, qty: 1, t: dims[0], w: dims[1], l: dims[2], ...(material ? { material } : {}) });
       }
     }
-    for (const k of d.kids) walk(k, s, depth + 1);
+    for (const k of d.kids) walk(k, s, material, depth + 1);
   };
-  for (const x of top) walk(x, [1, 1, 1], 0);
+  for (const x of top) walk(x, [1, 1, 1], '', 0);
   const pieces = [...found.values()];
-  if (!pieces.length) throw tooNew();
-  const loose = verts.filter(x => owner(x.at) === null).length;
+  if (!pieces.length) throw fail();
   return {
     pieces,
     note: `Read ${pieces.reduce((q, p) => q + p.qty, 0)} pieces from ${top.length} components in the model`
       + (loose ? '. Some loose geometry that isn\'t a component or group was left out' : '') + '.',
   };
+}
+
+// ---------- SketchUp 2021 and later ----------
+// After the same two header strings, a newer .skp is a zip. Its model.dat is a tree of records:
+// a 2-byte tag, a 4-byte length, then the value (or more records). Entity ids are little-endian
+// numbers of 1 to 4 bytes. The tags below are the ones SketchUp 2026 writes.
+const T = {
+  defsWrap: 0x1f9, defList: 0x1770, defItems: 0x1771, def: 0x157c, defName: 0x157e,
+  model: 0x1f6, ents: 0x1388, head: 0x7d0, idBox: 0x5dc, id: 0x5de, mat: 0x7d1,
+  verts: 0x1389, vert: 0x9c4, point: 0x9c5, insts: 0x138c, inst: 0x1964, xform: 0x1966, ref: 0x1967,
+  groups: 0x138d, group: 0x1d4c, matsWrap: 0x1f7, matsA: 0x30d4, matsB: 0x30d5, material: 0x32c8, matName: 0x32cc,
+};
+
+async function unzipEntry(b: Uint8Array, name: string): Promise<Uint8Array | null> {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let eocd = -1;
+  for (let i = b.length - 22; i >= Math.max(0, b.length - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) return null;
+  const count = dv.getUint16(eocd + 10, true);
+  // The zip's offsets count from where the zip starts inside the .skp.
+  const cdSize = dv.getUint32(eocd + 12, true), base = eocd - cdSize - dv.getUint32(eocd + 16, true);
+  let p = eocd - cdSize;
+  for (let k = 0; k < count && dv.getUint32(p, true) === 0x02014b50; k++) {
+    const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true), extra = dv.getUint16(p + 30, true), note = dv.getUint16(p + 32, true);
+    const local = base + dv.getUint32(p + 42, true);
+    if (new TextDecoder().decode(b.subarray(p + 46, p + 46 + nameLen)) === name) {
+      const at = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+      const data = b.subarray(at, at + size);
+      if (method === 0) return data;
+      const out = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(out).arrayBuffer());
+    }
+    p += 46 + nameLen + extra + note;
+  }
+  return null;
+}
+
+function readVff(b: Uint8Array, fail: () => Error): CutRead {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), n = b.length;
+  type Rec = [number, number, number];   // tag, start, end of the value
+  const kids = (r: Rec): Rec[] => {
+    const out: Rec[] = [];
+    for (let i = r[1]; i + 6 <= r[2];) {
+      const len = dv.getUint32(i + 2, true);
+      if (i + 6 + len > r[2]) break;
+      out.push([dv.getUint16(i, true), i + 6, i + 6 + len]);
+      i += 6 + len;
+    }
+    return out;
+  };
+  const all = (r: Rec | undefined, tag: number) => r ? kids(r).filter(k => k[0] === tag) : [];
+  const one = (r: Rec | undefined, ...path: number[]) => { for (const t of path) r = all(r, t)[0]; return r; };
+  const num = (r: Rec | undefined) => { let v = 0; if (r) for (let i = r[2] - 1; i >= r[1]; i--) v = v * 256 + b[i]; return r ? v : -1; };
+  const text = (r: Rec | undefined) => r ? new TextDecoder().decode(b.subarray(r[1], r[2])) : '';
+  const root = kids([0, 0, n])[0];
+  if (!root) throw fail();
+
+  const mats = new Map<number, string>();
+  for (const m of all(one(root, T.matsWrap, T.matsA, T.matsB), T.material)) mats.set(num(one(m, T.idBox, T.id)), text(one(m, T.matName)));
+
+  const instsOf = (e: Rec | undefined): Inst[] => {
+    const list = [...all(one(e, T.insts), T.inst), ...all(one(e, T.groups), T.group).flatMap(g => all(g, T.inst))];
+    return list.map(i => {
+      const x = one(i, T.xform), m: number[] = [];
+      for (let k = 0; k < 13; k++) m.push(x && x[2] - x[1] >= 104 ? dv.getFloat64(x[1] + 8 * k, true) : k % 4 === 0 ? 1 : 0);
+      const mat = mats.get(num(one(i, T.head, T.mat)));
+      return { ref: num(one(i, T.ref)), m, ...(mat ? { mat } : {}) };
+    });
+  };
+  const defs = new Map<number, Def>();
+  for (const d of all(one(root, T.defsWrap, T.defList, T.defItems), T.def)) {
+    const e = one(d, T.ents), verts: number[][] = [];
+    for (const v of all(one(e, T.verts), T.vert)) {
+      const p = one(v, T.point);
+      if (p && p[2] - p[1] === 24) verts.push([dv.getFloat64(p[1], true), dv.getFloat64(p[1] + 8, true), dv.getFloat64(p[1] + 16, true)]);
+    }
+    defs.set(num(one(e, T.head, T.idBox, T.id)), { name: text(one(d, T.defName)).trim(), verts, kids: instsOf(e) });
+  }
+  const model = one(root, T.model, T.ents);
+  if (!model || !defs.size) throw fail();
+  return gather(instsOf(model), ref => defs.get(ref), all(one(model, T.verts), T.vert).length > 0, fail);
 }
 
 // ---------- inches ----------

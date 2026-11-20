@@ -3723,7 +3723,7 @@ function wireCutList(p) {
     if (!review) { box.innerHTML = ''; return; }
     const n = review.pieces.filter(x => x.on).reduce((q, x) => q + (x.qty || 0), 0), has = list().items.length;
     box.innerHTML = `<div class="cutcheck">
-      <p><b>${esc(review.file)}</b>: ${esc(review.note)} Untick anything that isn't cut from lumber, and fix any counts (a copy kept off to the side in the model counts too).</p>
+      <p><b>${esc(review.file)}</b>: ${esc(review.note)} Untick anything that isn't cut from lumber, and fix any counts (a copy kept off to the side in the model counts too).${review.pieces.some(x => !x.on) ? ' Flat shapes with no thickness start unticked.' : ''}</p>
       <ul>${review.pieces.map((x, i) => `<li class="${x.on ? '' : 'off'}">
         <input type="checkbox" data-i="${i}" ${x.on ? 'checked' : ''} aria-label="Include ${esc(x.part)}">
         <input type="number" min="0" step="1" inputmode="numeric" data-q="${i}" value="${x.qty}" aria-label="How many ${esc(x.part)}">
@@ -3766,9 +3766,21 @@ function wireCutList(p) {
   const readFile = async (file: File) => {
     try {
       const isCsv = /\.(csv|txt|tsv)$/i.test(file.name) || /^text\//.test(file.type);
-      const got = isCsv ? readCutCsv(await file.text()) : readSkp(await file.arrayBuffer());
-      // Anything that looks like SketchUp's sample person is left unticked.
-      review = { file: file.name, note: got.note, pieces: got.pieces.sort(cutOrder).map(x => ({ ...x, on: !/^(chris|susan|steve|person|scale figure)\b/i.test(x.part) })) };
+      const got = isCsv ? readCutCsv(await file.text()) : await readSkp(await file.arrayBuffer());
+      // A SketchUp material counts as the species only when it names one from Settings (models are often
+      // coloured by section instead); pieces then come together by name and size.
+      const known = store.settings.species.map(sp => sp.name);
+      const speciesOf = m => known.find(k => m && m.toLowerCase().replace(/[_\s]+/g, ' ').includes(k.toLowerCase())) || '';
+      const merged = new Map();
+      for (const x of got.pieces) {
+        const sp = x.species || speciesOf(x.material), key = [x.part, x.t, x.w, x.l, sp].join('|');
+        if (merged.has(key)) merged.get(key).qty += x.qty;
+        else merged.set(key, { part: x.part, qty: x.qty, t: x.t, w: x.w, l: x.l, species: sp });
+      }
+      // Left unticked: flat shapes with no thickness (glass, panels drawn as a face, the floor) and
+      // anything that looks like a scale figure.
+      review = { file: file.name, note: got.note, pieces: [...merged.values()].sort(cutOrder)
+        .map(x => ({ ...x, on: !(x.l && x.t < 1 / 32) && !/^(chris|susan|steve|sumele|bryce|person|scale figure)\b/i.test(x.part) })) };
       drawReview();
       $('#cutReview').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } catch (err) {
