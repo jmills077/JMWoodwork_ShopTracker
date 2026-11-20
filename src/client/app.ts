@@ -498,6 +498,7 @@ function route() {
   }
   else if (project && parts[2] === 'quote' && isClient(project)) showQuote(project);
   else if (project && parts[2] === 'design') showDesign(project);
+  else if (project && parts[2] === 'cuts') showCuts(project);
   else if (project && parts[2] === 'todo') showTodo(project);
   else if (project && parts[2] === 'dates') { phaseDatesOpen = true; isBatch(project) ? showBatch(project) : showEditor(project); setTimeout(openPhaseDates, 80); }
   else if (project && parts[2] === 'summary') showSummary(project);
@@ -1156,7 +1157,8 @@ function projectHeader(p, tab, side) {
     <nav class="tabs projtabs">
       <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
       <a href="#/p/${p.id}/todo" class="${tab === 'todo' ? 'on' : ''}">To-do list${todoLeft(p) ? ` <small>${todoLeft(p)}</small>` : ''}</a>
-      <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes${cutsLeft(p) ? ` <small title="pieces left to cut">${cutsLeft(p)}</small>` : ''}</a>
+      <a href="#/p/${p.id}/cuts" class="${tab === 'cuts' ? 'on' : ''}">Cut list${cutsLeft(p) ? ` <small title="pieces left to cut">${cutsLeft(p)}</small>` : ''}</a>
+      <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
       ${isClient(p) ? `<a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>` : ''}
       <a href="#/p/${p.id}/summary" class="${tab === 'summary' ? 'on' : ''}">Summary</a>
       <span class="spacer"></span><span class="side">${side}</span>
@@ -3622,7 +3624,6 @@ function showDesign(p) {
           <textarea class="brief" id="brief" placeholder="The current picture of what the client wants: how the piece will be used, style and references, the space it's going into, must-haves, budget and timing.">${esc(design.brief)}</textarea>
           <div class="links" id="briefLinks">${linksHtml(design.brief)}</div>
         </div>
-        ${cutListCard()}
         <div class="card" id="entries">
           <div class="actions"><h2 style="margin:0">Calls &amp; due diligence</h2><span class="spacer" style="flex:1"></span>
             <button class="btn primary small" data-act="add">+ Add note</button></div>
@@ -3639,7 +3640,6 @@ function showDesign(p) {
           </div>`).join('')}</div>
         </div>
       </div>`;
-    wireCutList(p);
     $('#brief').addEventListener('input', e => { design.brief = e.target.value; $('#briefLinks').innerHTML = linksHtml(design.brief); touch(); });
     const entries = $('#entries');
     entries.addEventListener('input', e => {
@@ -3667,7 +3667,7 @@ function showDesign(p) {
 }
 
 // ---------- cut list ----------
-// The pieces of lumber to cut for a project, as a checklist on its Design notes page, kept in its data as
+// The pieces of lumber to cut for a project, as a checklist on its own Cut list tab (#/p/<id>/cuts), kept in its data as
 // data.cutlist = { items, source }. Each item is { id, part, qty, t, w, l, species, done_at } with sizes
 // in inches (thickness <= width <= length), or just a part with no sizes for a line typed without them.
 // The list can be filled from a SketchUp model (.skp) or an OpenCutList CSV dropped onto the card: the
@@ -3682,6 +3682,12 @@ const cutListCard = () => `<div class="card cutlist" id="cutlist">
   <p class="muted hint">Sizes are thickness &times; width &times; length in inches, as cut. Tap a piece once it's cut. Paste several lines to add them all.</p>
 </div>`;
 
+function showCuts(p) {
+  view.innerHTML = `${projectHeader(p, 'cuts', '<span class="muted">Changes save automatically</span>')}
+    <div class="design">${cutListCard()}</div>`;
+  wireCutList(p);
+}
+
 const bdFt = x => x.t && x.w && x.l ? x.t * x.w * x.l * (x.qty || 1) / 144 : 0;
 const cutDims = x => x.l ? `${fmtInches(x.t)} × ${fmtInches(x.w)} × ${fmtInches(x.l)}` : '';
 // Thickest stock first, then widest and longest, so a board can be milled once for every piece from it.
@@ -3691,7 +3697,7 @@ function wireCutList(p) {
   const list = () => (p.data.cutlist ??= { items: [], source: null });
   const species = p.data.spec?.species || '';
   const touch = () => { p.updated_at = new Date().toISOString(); persist(); };
-  const tabCount = () => { const tab = $('.projtabs a.on'); if (tab) tab.innerHTML = `Design notes${cutsLeft(p) ? ` <small title="pieces left to cut">${cutsLeft(p)}</small>` : ''}`; };
+  const tabCount = () => { const tab = $('.projtabs a.on'); if (tab) tab.innerHTML = `Cut list${cutsLeft(p) ? ` <small title="pieces left to cut">${cutsLeft(p)}</small>` : ''}`; };
   const toItem = (x: Piece) => ({ id: newTask('').id, part: x.part, qty: x.qty || 1, t: x.t, w: x.w, l: x.l, species: x.species || '', done_at: null });
 
   const draw = () => {
