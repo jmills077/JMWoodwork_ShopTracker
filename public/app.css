@@ -747,3 +747,31 @@ header.top .hicon.find { display: inline-flex; background: none; border: 0; curs
   .stats button.card.stat { padding: 9px 12px; }
 }
 .projheadwrap { display: contents; }   /* lets the phone tab row stay pinned for the whole page */
+
+/* Cut list (Design notes page) */
+.cutlist .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cutsum { font-size: 13px; }
+.cutdrop { display: flex; flex-direction: column; gap: 2px; margin: 12px 0; padding: 14px 16px; border: 2px dashed #dccfbb; border-radius: 10px; background: #fffdf8; cursor: pointer; text-align: center; }
+.cutdrop span { font-size: 13px; }
+.cutdrop.over { border-color: var(--accent); background: #f6efe3; }
+.cutcheck { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 12px; background: #fffdf8; }
+.cutcheck.bad { border-color: var(--bad); }
+.cutcheck p { margin: 0 0 8px; font-size: 14px; }
+.cutcheck ul { list-style: none; margin: 0 0 10px; padding: 0; }
+.cutcheck li { display: grid; grid-template-columns: 22px 56px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.cutcheck li.off .nm, .cutcheck li.off .dims { color: var(--muted); text-decoration: line-through; }
+.cutcheck li input[type=checkbox] { width: 20px; height: 20px; margin: 0; accent-color: var(--good); }
+.cutcheck li input[type=number] { width: 56px; padding: 4px 6px; font-size: 16px; min-height: 0; height: 34px; }
+.cutcheck .dims { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cutcheck .actions .btn[disabled] { opacity: .5; }
+ul.cuts li.cuthead { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 14px 4px 4px; border-bottom: 1px solid var(--line); }
+ul.cuts li.cuthead:first-child { padding-top: 4px; }
+li.cut .qty { display: inline; font-variant-numeric: tabular-nums; }
+li.cut .dims { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink, inherit); margin-left: 4px; }
+li.cut .sp, .cutcheck .sp { font-size: 12px; color: var(--muted); margin-left: 4px; }
+@media (max-width: 600px) {
+  .cutcheck li { grid-template-columns: 22px 52px minmax(0, 1fr); }
+  .cutcheck li .dims { grid-column: 3; margin-top: -4px; color: var(--muted); }
+  li.cut .dims { display: block; margin-left: 0; }
+}
+@media (max-width: 600px) { li.cut .when { font-size: 11px; white-space: normal; max-width: 64px; text-align: right; } }

@@ -1,6 +1,7 @@
 // Shop Tracker in the browser: every page is drawn here from the shop's data, which the server
 // embeds in the page and saves to the database. See README.md for how the pieces fit together.
 import { workbook, type Cell, type Sheet } from './xlsx';
+import { readSkp, readCutCsv, readPieceLine, fmtInches, type Piece } from './skp';
 
 // ---------- estimating model ----------
 // Baseline hours per phase at a reference size (inches, L x W x H). Hours are
@@ -1155,7 +1156,7 @@ function projectHeader(p, tab, side) {
     <nav class="tabs projtabs">
       <a href="#/p/${p.id}" class="${tab === 'details' ? 'on' : ''}">Details</a>
       <a href="#/p/${p.id}/todo" class="${tab === 'todo' ? 'on' : ''}">To-do list${todoLeft(p) ? ` <small>${todoLeft(p)}</small>` : ''}</a>
-      <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes</a>
+      <a href="#/p/${p.id}/design" class="${tab === 'design' ? 'on' : ''}">Design notes${cutsLeft(p) ? ` <small title="pieces left to cut">${cutsLeft(p)}</small>` : ''}</a>
       ${isClient(p) ? `<a href="#/p/${p.id}/quote" class="${tab === 'quote' ? 'on' : ''}">Client quote</a>` : ''}
       <a href="#/p/${p.id}/summary" class="${tab === 'summary' ? 'on' : ''}">Summary</a>
       <span class="spacer"></span><span class="side">${side}</span>
@@ -1164,6 +1165,7 @@ function projectHeader(p, tab, side) {
   </div>`;
 }
 const todoLeft = p => (p.data.todo?.items || []).filter(t => !t.done_at).length;
+const cutsLeft = p => (p.data.cutlist?.items || []).filter(t => !t.done_at).reduce((n, t) => n + (t.qty || 1), 0);
 
 // ---------- the Now strip ----------
 // At the top of a project that's under way: the next status step, the next date it's due, its next few
@@ -3620,6 +3622,7 @@ function showDesign(p) {
           <textarea class="brief" id="brief" placeholder="The current picture of what the client wants: how the piece will be used, style and references, the space it's going into, must-haves, budget and timing.">${esc(design.brief)}</textarea>
           <div class="links" id="briefLinks">${linksHtml(design.brief)}</div>
         </div>
+        ${cutListCard()}
         <div class="card" id="entries">
           <div class="actions"><h2 style="margin:0">Calls &amp; due diligence</h2><span class="spacer" style="flex:1"></span>
             <button class="btn primary small" data-act="add">+ Add note</button></div>
@@ -3636,6 +3639,7 @@ function showDesign(p) {
           </div>`).join('')}</div>
         </div>
       </div>`;
+    wireCutList(p);
     $('#brief').addEventListener('input', e => { design.brief = e.target.value; $('#briefLinks').innerHTML = linksHtml(design.brief); touch(); });
     const entries = $('#entries');
     entries.addEventListener('input', e => {
@@ -3660,6 +3664,175 @@ function showDesign(p) {
     });
   };
   render();
+}
+
+// ---------- cut list ----------
+// The pieces of lumber to cut for a project, as a checklist on its Design notes page, kept in its data as
+// data.cutlist = { items, source }. Each item is { id, part, qty, t, w, l, species, done_at } with sizes
+// in inches (thickness <= width <= length), or just a part with no sizes for a line typed without them.
+// The list can be filled from a SketchUp model (.skp) or an OpenCutList CSV dropped onto the card: the
+// file is read here in the browser (see skp.ts), shown for a check, then added. Pieces can also be typed.
+const cutListCard = () => `<div class="card cutlist" id="cutlist">
+  <div class="actions"><h2 style="margin:0">Cut list</h2><span class="spacer" style="flex:1"></span><span class="muted cutsum" id="cutSum"></span></div>
+  <label class="cutdrop" id="cutDrop"><input type="file" id="cutFile" hidden>
+    <b>Add from SketchUp</b><span class="muted">Drop a .skp model here, or tap to pick one. An OpenCutList CSV works too.</span></label>
+  <div id="cutReview"></div>
+  <form class="addtask" id="cutAdd" autocomplete="off"><textarea rows="1" enterkeyhint="done" placeholder="Add a piece, e.g. Shelf 3/4 x 10 x 30 (2)" aria-label="New piece to cut"></textarea><button class="btn primary">Add</button></form>
+  <ul class="tasks cuts" id="cutItems"></ul>
+  <p class="muted hint">Sizes are thickness &times; width &times; length in inches, as cut. Tap a piece once it's cut. Paste several lines to add them all.</p>
+</div>`;
+
+const bdFt = x => x.t && x.w && x.l ? x.t * x.w * x.l * (x.qty || 1) / 144 : 0;
+const cutDims = x => x.l ? `${fmtInches(x.t)} × ${fmtInches(x.w)} × ${fmtInches(x.l)}` : '';
+// Thickest stock first, then widest and longest, so a board can be milled once for every piece from it.
+const cutOrder = (a, b) => (b.l ? 1 : 0) - (a.l ? 1 : 0) || (b.t || 0) - (a.t || 0) || (b.w || 0) - (a.w || 0) || (b.l || 0) - (a.l || 0);
+
+function wireCutList(p) {
+  const list = () => (p.data.cutlist ??= { items: [], source: null });
+  const species = p.data.spec?.species || '';
+  const touch = () => { p.updated_at = new Date().toISOString(); persist(); };
+  const tabCount = () => { const tab = $('.projtabs a.on'); if (tab) tab.innerHTML = `Design notes${cutsLeft(p) ? ` <small title="pieces left to cut">${cutsLeft(p)}</small>` : ''}`; };
+  const toItem = (x: Piece) => ({ id: newTask('').id, part: x.part, qty: x.qty || 1, t: x.t, w: x.w, l: x.l, species: x.species || '', done_at: null });
+
+  const draw = () => {
+    const items = [...(p.data.cutlist?.items || [])].sort(cutOrder);
+    let last = null;
+    $('#cutItems').innerHTML = items.length ? items.map(x => {
+      const group = x.l ? `${fmtInches(x.t)}″ thick` : 'Other';
+      const head = group !== last ? `<li class="cuthead">${esc(group)}</li>` : '';
+      last = group;
+      const sp = x.species || species;
+      return `${head}<li class="task cut ${x.done_at ? 'done' : ''}" data-id="${esc(x.id)}">
+        <input type="checkbox" ${x.done_at ? 'checked' : ''} aria-label="${esc(`${x.qty} ${x.part}`)}">
+        <span class="text"><b class="qty">${x.qty}×</b> ${esc(x.part)}${x.l ? ` <span class="dims">${cutDims(x)}${sp ? ` <small class="sp">${esc(sp)}</small>` : ''}</span>` : ''}</span>
+        ${x.done_at ? `<span class="when">Cut ${esc(fmtDate(x.done_at))}</span>` : ''}
+        <button type="button" class="x" aria-label="Remove ${esc(x.part)}" title="Remove">&times;</button>
+      </li>`;
+    }).join('') : '<li class="none muted">No pieces yet. Drop in a SketchUp model or type one above.</li>';
+    const all = p.data.cutlist?.items || [], pieces = all.reduce((n, x) => n + (x.qty || 1), 0);
+    const cut = all.filter(x => x.done_at).reduce((n, x) => n + (x.qty || 1), 0);
+    const bf = all.filter(x => !x.done_at).reduce((n, x) => n + bdFt(x), 0);
+    $('#cutSum').textContent = pieces ? `${cut} of ${pieces} cut${bf ? ` · ${bf.toFixed(1)} bd ft to go` : ''}` : '';
+    tabCount();
+  };
+
+  // A model or CSV that's been read, waiting to be checked and added.
+  let review = null;
+  const drawReview = () => {
+    const box = $('#cutReview');
+    if (!review) { box.innerHTML = ''; return; }
+    const n = review.pieces.filter(x => x.on).reduce((q, x) => q + (x.qty || 0), 0), has = list().items.length;
+    box.innerHTML = `<div class="cutcheck">
+      <p><b>${esc(review.file)}</b>: ${esc(review.note)} Untick anything that isn't cut from lumber, and fix any counts (a copy kept off to the side in the model counts too).</p>
+      <ul>${review.pieces.map((x, i) => `<li class="${x.on ? '' : 'off'}">
+        <input type="checkbox" data-i="${i}" ${x.on ? 'checked' : ''} aria-label="Include ${esc(x.part)}">
+        <input type="number" min="0" step="1" inputmode="numeric" data-q="${i}" value="${x.qty}" aria-label="How many ${esc(x.part)}">
+        <span class="nm">${esc(x.part)}${x.species ? ` <small class="sp">${esc(x.species)}</small>` : ''}</span><span class="dims">${cutDims(x)}</span></li>`).join('')}</ul>
+      <div class="actions"><button type="button" class="btn primary" data-cut="add" ${n ? '' : 'disabled'}>Add ${n} piece${n === 1 ? '' : 's'}</button>
+        ${has ? `<button type="button" class="btn" data-cut="replace" ${n ? '' : 'disabled'}>Replace the list</button>` : ''}
+        <button type="button" class="link" data-cut="cancel">Cancel</button></div></div>`;
+  };
+  $('#cutReview').addEventListener('change', e => {
+    const el = e.target as HTMLInputElement, i = el.dataset.i ?? el.dataset.q;
+    if (!review || i === undefined) return;
+    const x = review.pieces[i];
+    if (el.dataset.i !== undefined) x.on = el.checked;
+    else { x.qty = Math.max(0, Math.round(+el.value || 0)); x.on = x.qty > 0; ($(`#cutReview [data-i="${i}"]`) as HTMLInputElement).checked = x.on; }
+    // Only the row and the buttons change, so the count box being typed in stays put.
+    el.closest('li').classList.toggle('off', !x.on);
+    const n = review.pieces.filter(y => y.on).reduce((q, y) => q + (y.qty || 0), 0);
+    $('#cutReview [data-cut="add"]').textContent = `Add ${n} piece${n === 1 ? '' : 's'}`;
+    $('#cutReview').querySelectorAll('[data-cut="add"], [data-cut="replace"]').forEach(b => { (b as HTMLButtonElement).disabled = !n; });
+  });
+  $('#cutReview').addEventListener('click', e => {
+    const act = (e.target as HTMLElement).dataset?.cut;
+    if (!act || !review) return;
+    if (act !== 'cancel') {
+      const items = review.pieces.filter(x => x.on && x.qty > 0).map(toItem);
+      const cl = list();
+      if (act === 'replace') {
+        if (cl.items.some(x => x.done_at) && !confirm('Replace the whole cut list, including pieces already checked off?')) return;
+        cl.items = items;
+      } else cl.items.push(...items);
+      cl.source = { file: review.file, at: new Date().toISOString() };
+      touch();
+      toast(`Added ${items.reduce((q, x) => q + x.qty, 0)} pieces to the cut list.`);
+    }
+    review = null;
+    drawReview();
+    draw();
+  });
+
+  const readFile = async (file: File) => {
+    try {
+      const isCsv = /\.(csv|txt|tsv)$/i.test(file.name) || /^text\//.test(file.type);
+      const got = isCsv ? readCutCsv(await file.text()) : readSkp(await file.arrayBuffer());
+      // Anything that looks like SketchUp's sample person is left unticked.
+      review = { file: file.name, note: got.note, pieces: got.pieces.sort(cutOrder).map(x => ({ ...x, on: !/^(chris|susan|steve|person|scale figure)\b/i.test(x.part) })) };
+      drawReview();
+      $('#cutReview').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } catch (err) {
+      review = null;
+      $('#cutReview').innerHTML = `<div class="cutcheck bad"><p><b>${esc(file.name)}</b>: ${esc(err.message || String(err))}</p>
+        <div class="actions"><button type="button" class="link" data-cut="cancel">OK</button></div></div>`;
+      $('#cutReview [data-cut]').addEventListener('click', () => { $('#cutReview').innerHTML = ''; });
+    }
+  };
+  const drop = $('#cutDrop'), picker = $('#cutFile') as HTMLInputElement;
+  picker.addEventListener('change', () => { if (picker.files?.[0]) readFile(picker.files[0]); picker.value = ''; });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) readFile(file);
+  });
+
+  // Typed or pasted pieces: one per line.
+  const form = $('#cutAdd'), box = form.querySelector('textarea');
+  const fit = () => { box.style.height = 'auto'; box.style.height = `${box.scrollHeight + 2}px`; };
+  const addLines = lines => {
+    const items = lines.map(readPieceLine).map(x => toItem({ ...x, species: '' }));
+    if (!items.length) return false;
+    list().items.push(...items);
+    touch();
+    draw();
+    if (items.length > 1) toast(`Added ${items.length} lines to the cut list.`);
+    return true;
+  };
+  box.addEventListener('paste', e => {
+    const lines = splitPasted(e.clipboardData?.getData('text/plain') || '');
+    if (lines.length < 2) return;
+    e.preventDefault();
+    addLines(lines);
+  });
+  box.addEventListener('input', fit);
+  box.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const lines = /\n/.test(box.value) ? splitPasted(box.value) : [box.value.replace(/\s+/g, ' ').trim()].filter(Boolean);
+    if (!addLines(lines)) return box.focus();
+    box.value = '';
+    fit();
+    box.focus();
+  });
+
+  $('#cutItems').addEventListener('click', e => {
+    const li = (e.target as Element).closest<HTMLElement>('li.cut'), cl = p.data.cutlist;
+    const x = li && cl?.items.find(t => t.id === li.dataset.id);
+    if (!x) return;
+    if ((e.target as Element).closest('.x')) {
+      if (!confirm(`Remove ${x.qty} × ${x.part} from the cut list?`)) return;
+      cl.items = cl.items.filter(t => t !== x);
+    } else {
+      if ((e.target as Element).matches('input[type=checkbox]')) e.preventDefault();
+      x.done_at = x.done_at ? null : new Date().toISOString();
+    }
+    touch();
+    draw();
+  });
+  draw();
 }
 
 // ---------- client-facing quote ----------
