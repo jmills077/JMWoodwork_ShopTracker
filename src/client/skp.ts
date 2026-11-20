@@ -146,7 +146,7 @@ interface Def { name: string; verts: number[][]; kids: Inst[] }
 
 // Walks the model from the top: every part with geometry of its own is a piece, counted once per copy
 // (nested components multiply out). Same-named parts of the same size are one line; parts SketchUp
-// named itself (Component#12, Group#3) are just "Part", so same-size pieces come together.
+// named itself (anything with "Component" in it, Group#3) are just "Part", so same-size pieces come together.
 function gather(top: Inst[], defOf: (ref: number) => Def | undefined, loose: boolean, fail: () => Error): CutRead {
   if (!top.length) throw new Error('No components or groups were found in this model. Make each part a component (select it, right-click, Make Component) and save again.');
   const box = new Map<Def, number[]>();
@@ -169,7 +169,8 @@ function gather(top: Inst[], defOf: (ref: number) => Def | undefined, loose: boo
       const dims = sizeOf(d).map((v, a) => Math.round(v * s[a] * 32) / 32).sort((p, q) => p - q);
       if (dims[2] > 0) {
         // A copy given its own name in Entity Info (how groups are named) wins over a name SketchUp made up.
-        const own = (n: string) => n && !/^(Component|Group)#\d+$/.test(n) ? n.replace(/\s*#\d+$/, '') : '';
+        // Anything with "component" in it (Component, Component#4, Drawer Component) counts as unnamed.
+        const own = (n: string) => n && !/component/i.test(n) && !/^Group#\d+$/.test(n) ? n.replace(/\s*#\d+$/, '') : '';
         const part = own(d.name) || own(x.name || '') || 'Part';
         const key = `${part}|${dims.join('x')}|${material}`;
         const p = found.get(key);

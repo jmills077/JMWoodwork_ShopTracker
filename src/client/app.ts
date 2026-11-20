@@ -3718,7 +3718,7 @@ function wireCutList(p) {
 
   // A model or CSV that's been read, waiting to be checked and added.
   let review = null;
-  // "Named parts only" (remembered on this device): parts SketchUp named itself (Component#12) are left
+  // "Named parts only" (remembered on this device): parts SketchUp named itself (Component#12, or anything with "Component" in it) are left
   // out, so a model full of extra bits gives just the parts that were named.
   const shownPieces = () => review.pieces.map((x, i) => ({ x, i })).filter(({ x }) => !review.namedOnly || x.named);
   const reviewTotal = () => shownPieces().filter(({ x }) => x.on).reduce((q, { x }) => q + (x.qty || 0), 0);
@@ -3730,7 +3730,7 @@ function wireCutList(p) {
     box.innerHTML = `<div class="cutcheck">
       <p><b>${esc(review.file)}</b>: ${esc(review.note)} Untick anything that isn't cut from lumber, and fix any counts (a copy kept off to the side in the model counts too).${review.pieces.some(x => !x.on) ? ' Flat shapes with no thickness start unticked.' : ''}</p>
       ${unnamed ? `<label class="cutnamed"><input type="checkbox" data-named ${review.namedOnly ? 'checked' : ''}>
-        <span><b>Only include parts I named</b> <span class="muted">${review.namedOnly ? `${unnamed} unnamed piece${unnamed === 1 ? '' : 's'} (Component#&hellip;, Group#&hellip;) left out` : `leaves out ${unnamed} unnamed piece${unnamed === 1 ? '' : 's'} (Component#&hellip;, Group#&hellip;)`}</span></span></label>` : ''}
+        <span><b>Only include parts I named</b> <span class="muted">${review.namedOnly ? `${unnamed} unnamed piece${unnamed === 1 ? '' : 's'} (names with &ldquo;Component&rdquo;, Group#&hellip;) left out` : `leaves out ${unnamed} unnamed piece${unnamed === 1 ? '' : 's'} (names with &ldquo;Component&rdquo;, Group#&hellip;)`}</span></span></label>` : ''}
       <ul>${shown.map(({ x, i }) => `<li class="${x.on ? '' : 'off'}">
         <input type="checkbox" data-i="${i}" ${x.on ? 'checked' : ''} aria-label="Include ${esc(x.part)}">
         <input type="number" min="0" step="1" inputmode="numeric" data-q="${i}" value="${x.qty}" aria-label="How many ${esc(x.part)}">
