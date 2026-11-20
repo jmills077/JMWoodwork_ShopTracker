@@ -141,7 +141,7 @@ export async function readSkp(buf: ArrayBuffer): Promise<CutRead> {
   return gather(top, ref => byRef.get(ref), loose, tooNew);
 }
 
-interface Inst { ref: number; m: number[]; mat?: string }
+interface Inst { ref: number; m: number[]; mat?: string; name?: string }
 interface Def { name: string; verts: number[][]; kids: Inst[] }
 
 // Walks the model from the top: every part with geometry of its own is a piece, counted once per copy
@@ -168,7 +168,9 @@ function gather(top: Inst[], defOf: (ref: number) => Def | undefined, loose: boo
     if (d.verts.length > 1) {
       const dims = sizeOf(d).map((v, a) => Math.round(v * s[a] * 32) / 32).sort((p, q) => p - q);
       if (dims[2] > 0) {
-        const part = !d.name || /^(Component|Group)#\d+$/.test(d.name) ? 'Part' : d.name.replace(/\s*#\d+$/, '');
+        // A copy given its own name in Entity Info (how groups are named) wins over a name SketchUp made up.
+        const own = (n: string) => n && !/^(Component|Group)#\d+$/.test(n) ? n.replace(/\s*#\d+$/, '') : '';
+        const part = own(d.name) || own(x.name || '') || 'Part';
         const key = `${part}|${dims.join('x')}|${material}`;
         const p = found.get(key);
         if (p) p.qty++;
@@ -194,7 +196,7 @@ function gather(top: Inst[], defOf: (ref: number) => Def | undefined, loose: boo
 const T = {
   defsWrap: 0x1f9, defList: 0x1770, defItems: 0x1771, def: 0x157c, defName: 0x157e,
   model: 0x1f6, ents: 0x1388, head: 0x7d0, idBox: 0x5dc, id: 0x5de, mat: 0x7d1,
-  verts: 0x1389, vert: 0x9c4, point: 0x9c5, insts: 0x138c, inst: 0x1964, xform: 0x1966, ref: 0x1967,
+  verts: 0x1389, vert: 0x9c4, point: 0x9c5, insts: 0x138c, inst: 0x1964, instName: 0x1965, xform: 0x1966, ref: 0x1967,
   groups: 0x138d, group: 0x1d4c, matsWrap: 0x1f7, matsA: 0x30d4, matsB: 0x30d5, material: 0x32c8, matName: 0x32cc,
 };
 
@@ -252,7 +254,8 @@ function readVff(b: Uint8Array, fail: () => Error): CutRead {
       const x = one(i, T.xform), m: number[] = [];
       for (let k = 0; k < 13; k++) m.push(x && x[2] - x[1] >= 104 ? dv.getFloat64(x[1] + 8 * k, true) : k % 4 === 0 ? 1 : 0);
       const mat = mats.get(num(one(i, T.head, T.mat)));
-      return { ref: num(one(i, T.ref)), m, ...(mat ? { mat } : {}) };
+      const name = text(one(i, T.instName)).trim();
+      return { ref: num(one(i, T.ref)), m, ...(mat ? { mat } : {}), ...(name ? { name } : {}) };
     });
   };
   const defs = new Map<number, Def>();

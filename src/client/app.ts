@@ -3718,29 +3718,43 @@ function wireCutList(p) {
 
   // A model or CSV that's been read, waiting to be checked and added.
   let review = null;
+  // "Named parts only" (remembered on this device): parts SketchUp named itself (Component#12) are left
+  // out, so a model full of extra bits gives just the parts that were named.
+  const shownPieces = () => review.pieces.map((x, i) => ({ x, i })).filter(({ x }) => !review.namedOnly || x.named);
+  const reviewTotal = () => shownPieces().filter(({ x }) => x.on).reduce((q, { x }) => q + (x.qty || 0), 0);
   const drawReview = () => {
     const box = $('#cutReview');
     if (!review) { box.innerHTML = ''; return; }
-    const n = review.pieces.filter(x => x.on).reduce((q, x) => q + (x.qty || 0), 0), has = list().items.length;
+    const n = reviewTotal(), has = list().items.length, shown = shownPieces();
+    const unnamed = review.pieces.filter(x => !x.named).reduce((q, x) => q + x.qty, 0);
     box.innerHTML = `<div class="cutcheck">
       <p><b>${esc(review.file)}</b>: ${esc(review.note)} Untick anything that isn't cut from lumber, and fix any counts (a copy kept off to the side in the model counts too).${review.pieces.some(x => !x.on) ? ' Flat shapes with no thickness start unticked.' : ''}</p>
-      <ul>${review.pieces.map((x, i) => `<li class="${x.on ? '' : 'off'}">
+      ${unnamed ? `<label class="cutnamed"><input type="checkbox" data-named ${review.namedOnly ? 'checked' : ''}>
+        <span><b>Only include parts I named</b> <span class="muted">${review.namedOnly ? `${unnamed} unnamed piece${unnamed === 1 ? '' : 's'} (Component#&hellip;, Group#&hellip;) left out` : `leaves out ${unnamed} unnamed piece${unnamed === 1 ? '' : 's'} (Component#&hellip;, Group#&hellip;)`}</span></span></label>` : ''}
+      <ul>${shown.map(({ x, i }) => `<li class="${x.on ? '' : 'off'}">
         <input type="checkbox" data-i="${i}" ${x.on ? 'checked' : ''} aria-label="Include ${esc(x.part)}">
         <input type="number" min="0" step="1" inputmode="numeric" data-q="${i}" value="${x.qty}" aria-label="How many ${esc(x.part)}">
-        <span class="nm">${esc(x.part)}${x.species ? ` <small class="sp">${esc(x.species)}</small>` : ''}</span><span class="dims">${cutDims(x)}</span></li>`).join('')}</ul>
+        <span class="nm">${esc(x.part)}${x.species ? ` <small class="sp">${esc(x.species)}</small>` : ''}</span><span class="dims">${cutDims(x)}</span></li>`).join('')
+        || '<li class="none muted">No parts in this model have names of their own. Untick the box above to see them all, or name the parts in SketchUp (Entity Info &gt; Definition) and drop it in again.</li>'}</ul>
       <div class="actions"><button type="button" class="btn primary" data-cut="add" ${n ? '' : 'disabled'}>Add ${n} piece${n === 1 ? '' : 's'}</button>
         ${has ? `<button type="button" class="btn" data-cut="replace" ${n ? '' : 'disabled'}>Replace the list</button>` : ''}
         <button type="button" class="link" data-cut="cancel">Cancel</button></div></div>`;
   };
   $('#cutReview').addEventListener('change', e => {
     const el = e.target as HTMLInputElement, i = el.dataset.i ?? el.dataset.q;
+    if (review && el.dataset.named !== undefined) {
+      review.namedOnly = el.checked;
+      try { localStorage.setItem('cutNamedOnly', el.checked ? '1' : ''); } catch {}
+      drawReview();
+      return;
+    }
     if (!review || i === undefined) return;
     const x = review.pieces[i];
     if (el.dataset.i !== undefined) x.on = el.checked;
     else { x.qty = Math.max(0, Math.round(+el.value || 0)); x.on = x.qty > 0; ($(`#cutReview [data-i="${i}"]`) as HTMLInputElement).checked = x.on; }
     // Only the row and the buttons change, so the count box being typed in stays put.
     el.closest('li').classList.toggle('off', !x.on);
-    const n = review.pieces.filter(y => y.on).reduce((q, y) => q + (y.qty || 0), 0);
+    const n = reviewTotal();
     $('#cutReview [data-cut="add"]').textContent = `Add ${n} piece${n === 1 ? '' : 's'}`;
     $('#cutReview').querySelectorAll('[data-cut="add"], [data-cut="replace"]').forEach(b => { (b as HTMLButtonElement).disabled = !n; });
   });
@@ -3748,7 +3762,7 @@ function wireCutList(p) {
     const act = (e.target as HTMLElement).dataset?.cut;
     if (!act || !review) return;
     if (act !== 'cancel') {
-      const items = review.pieces.filter(x => x.on && x.qty > 0).map(toItem);
+      const items = shownPieces().map(({ x }) => x).filter(x => x.on && x.qty > 0).map(toItem);
       const cl = list();
       if (act === 'replace') {
         if (cl.items.some(x => x.done_at) && !confirm('Replace the whole cut list, including pieces already checked off?')) return;
@@ -3779,8 +3793,10 @@ function wireCutList(p) {
       }
       // Left unticked: flat shapes with no thickness (glass, panels drawn as a face, the floor) and
       // anything that looks like a scale figure.
-      review = { file: file.name, note: got.note, pieces: [...merged.values()].sort(cutOrder)
-        .map(x => ({ ...x, on: !(x.l && x.t < 1 / 32) && !/^(chris|susan|steve|sumele|bryce|person|scale figure)\b/i.test(x.part) })) };
+      let namedOnly = false;
+      try { namedOnly = !!localStorage.getItem('cutNamedOnly'); } catch {}
+      review = { file: file.name, note: got.note, namedOnly, pieces: [...merged.values()].sort(cutOrder)
+        .map(x => ({ ...x, named: isCsv || x.part !== 'Part', on: !(x.l && x.t < 1 / 32) && !/^(chris|susan|steve|sumele|bryce|person|scale figure)\b/i.test(x.part) })) };
       drawReview();
       $('#cutReview').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } catch (err) {
