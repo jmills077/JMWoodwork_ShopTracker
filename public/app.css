@@ -686,6 +686,18 @@ ul.nowtasks li.task.done .text { text-decoration: line-through; color: var(--mut
 .foldbar .foldword { color: var(--accent); font-weight: 600; font-size: 14px; text-decoration: underline; flex: none; }
 .cols:not(.folded) .foldbar { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .cols.folded #form fieldset, .cols.folded #panel { display: none; }
+/* On a wide screen, a folded quote leaves its column nearly empty, so the bar runs across the top and the
+   day-to-day cards share both columns: lumber & shopping, then status on the left; purchases on the right. */
+@media (min-width: 901px) {
+  .cols.folded { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto 1fr; }
+  .cols.folded > aside { display: contents; }
+  .cols.folded #form { grid-column: 1 / -1; grid-row: 1; padding: 14px 18px; }
+  .cols.folded #lumberCard { grid-column: 1; grid-row: 2; }
+  .cols.folded #statusCard { grid-column: 1; grid-row: 3; }
+  .cols.folded #purchasesCard { grid-column: 2; grid-row: 2 / span 2; }
+  .cols.folded > aside > .card { margin-top: 0; }
+  .cols.folded > aside > p { grid-column: 1 / -1; margin: 0; }
+}
 /* The project's shopping list beside the lumber calculator. */
 .shopmini { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .shopmini h3 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
