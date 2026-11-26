@@ -4147,10 +4147,15 @@ const markStuckBands = () => {
   const lanes = [...document.querySelectorAll<HTMLElement>('.lane')];
   const head = lanes[0]?.querySelector<HTMLElement>('.lanehead');
   const top = head ? parseFloat(getComputedStyle(head).top) || 0 : 0;
+  // Header red (the stylesheet's color) while the header is still under the status bar, otherwise solid page color.
+  const cover = statusCover.getBoundingClientRect().height;
+  const header = document.querySelector<HTMLElement>('header.top');
   let color = '';
   if (top > 0 && lanes.length && lanes[0].getBoundingClientRect().top < top) {
     const current = lanes.find(l => { const r = l.getBoundingClientRect(); return r.top <= top + 0.5 && r.bottom > top + 0.5; });
     color = current ? getComputedStyle(current).getPropertyValue('--lane') : getComputedStyle(document.body).backgroundColor;
+  } else if (cover > 0 && (!header || header.getBoundingClientRect().bottom <= cover)) {
+    color = getComputedStyle(document.body).backgroundColor;
   }
   statusCover.style.background = color;
   lanes.forEach(l => {
@@ -4160,9 +4165,11 @@ const markStuckBands = () => {
 };
 window.addEventListener('scroll', () => { if (!stuckFrame) stuckFrame = requestAnimationFrame(markStuckBands); }, { passive: true });
 window.addEventListener('hashchange', () => requestAnimationFrame(markStuckBands));
+window.addEventListener('resize', () => requestAnimationFrame(markStuckBands));
 
 backfillTodos();
 route();
+requestAnimationFrame(markStuckBands);
 loadPrices();
 loadNewOrders();
 loadShopProducts().then(loadShopOrders);
