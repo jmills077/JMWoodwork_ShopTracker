@@ -381,11 +381,19 @@ li.task.lifted { opacity: 1; background: #fff; border-radius: 8px; box-shadow: 0
 
 /* phones, and the home-screen app (manifest.webmanifest). The header runs under the iPhone's
    status bar there, so it pads itself by the screen's safe areas. */
+/* A solid bar behind the status bar (see markStuckBands in app.ts). It is header red while the header is at the
+   top of the screen, the stream's color while a stream band is pinned there, and the page color otherwise.
+   Since iOS 26 the iPhone draws a frosted fade under the status bar that reaches a little way down the page
+   and takes its tint from a solid bar like this one. Without it the fade came out cream and washed out the
+   red header and its buttons. */
+#statusCover { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 30; pointer-events: none; background: #a63a2b; }
+@media print { #statusCover { display: none; } }
 header.top { padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
 main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
 #toast { bottom: max(20px, env(safe-area-inset-bottom)); }
 @media (max-width: 600px) {
-  header.top { gap: 6px 12px; padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); }
+  /* The header's buttons sit a little further below the status bar than the safe area alone, clear of that fade. */
+  header.top { gap: 6px 12px; padding: calc(env(safe-area-inset-top, 0px) + 12px) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); }
   header.top .brand { flex: 1; }
   header.top nav { order: 3; flex: 1 0 100%; justify-content: space-between; gap: 2px; }
   header.top nav a { padding: 7px 8px; font-size: 14px; white-space: nowrap; }
@@ -440,9 +448,6 @@ main { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
     padding: 10px max(14px, env(safe-area-inset-left)); border-radius: 0; }
   .lanehead h2 { font-size: 15px; }
   .lanehead.stuck { box-shadow: 0 3px 8px rgba(46, 35, 32, .18); }
-  /* A solid bar behind the status bar, colored for the stream at the top of the screen (see markStuckBands),
-     so cards and the outgoing band slide underneath it instead of showing behind the clock. */
-  #statusCover { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 30; pointer-events: none; }
   .lanehead .lopen { display: none; }
   .stats { margin-bottom: 14px; }
   .stats .card { padding: 9px 12px; }
@@ -567,7 +572,7 @@ ul.purchases .link { text-decoration: none; color: var(--muted); font-size: 18px
 .bellall { display: block; margin-top: 10px; font-size: 13px; }
 @media (max-width: 600px) {
   .bellwrap { position: static; }
-  .bellpanel { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 44px); left: 8px; right: 8px; width: auto; max-height: 75vh; }
+  .bellpanel { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 56px); left: 8px; right: 8px; width: auto; max-height: 75vh; }
 }
 /* A project's summary: profit and loss, then every receipt with its photo. */
 .pl-sec { margin: 14px 0 2px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
@@ -727,7 +732,7 @@ button.card.stat[aria-expanded="true"] { border-color: var(--accent); box-shadow
 /* Quick find */
 header.top .hicon.find { display: inline-flex; background: none; border: 0; cursor: pointer; }
 .finder { position: fixed; inset: 0; z-index: 60; background: rgba(46, 35, 32, .35); display: flex; justify-content: center; align-items: flex-start;
-  padding: calc(max(10px, env(safe-area-inset-top)) + 54px) 12px 12px; }
+  padding: calc(env(safe-area-inset-top, 0px) + 66px) 12px 12px; }
 .finder[hidden] { display: none; }
 .findbox { width: min(560px, 100%); background: var(--card); border-radius: 12px; box-shadow: 0 16px 40px rgba(46, 35, 32, .3); overflow: hidden; }
 .findbox input { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 14px 16px; font-size: 17px; background: transparent; outline: none; }
@@ -742,7 +747,7 @@ header.top .hicon.find { display: inline-flex; background: none; border: 0; curs
 @media (max-width: 600px) {
   /* The project's tabs: one row that swipes sideways, pinned under the status bar while you scroll. */
   .projtabs { position: sticky; top: 0; z-index: 20; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; border-bottom: 0;
-    margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))) 14px; padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-left)) 8px;
+    margin: 0 calc(-1 * max(12px, env(safe-area-inset-left))) 14px; padding: calc(env(safe-area-inset-top, 0px) + 12px) max(12px, env(safe-area-inset-left)) 8px;
     background: rgba(250, 245, 236, .96); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
   .projtabs::-webkit-scrollbar { display: none; }
   .projtabs a { flex: none; display: inline-flex; align-items: center; min-height: 36px; margin: 0; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px;
